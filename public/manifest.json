@@ -1,0 +1,72 @@
+{
+    "name": "Shopkeeper PWA",
+    "short_name": "Shopkeeper",
+    "description": "Offline-first shop management app",
+    "theme_color": "#007bff",
+    "background_color": "#ffffff",
+    "display": "standalone",
+    "orientation": "any",
+    "scope": "/",
+    "start_url": "/",
+    "id": "/",
+    "icons": [
+        {
+            "src": "/icons/android/android-launchericon-192-192.png",
+            "type": "image/png",
+            "sizes": "192x192",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icons/ios/256.png",
+            "type": "image/png",
+            "sizes": "256x256",
+            "purpose": "any"
+        },
+        {
+            "src": "/icons/android/android-launchericon-512-512.png",
+            "type": "image/png",
+            "sizes": "512x512",
+            "purpose": "any maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "/icons/ios/512.png",
+            "type": "image/png",
+            "sizes": "512x512",
+            "form_factor": "wide"
+        },
+        {
+            "src": "/icons/ios/512.png",
+            "type": "image/png",
+            "sizes": "512x512",
+            "form_factor": "narrow"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "New Sale",
+            "short_name": "Sale",
+            "description": "Create a new sale",
+            "url": "/sales/new",
+            "icons": [
+                {
+                    "src": "/icons/ios/192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        },
+        {
+            "name": "Add Product",
+            "short_name": "Product",
+            "description": "Add a new product",
+            "url": "/products/add",
+            "icons": [
+                {
+                    "src": "/icons/ios/192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        }
+    ]
+}

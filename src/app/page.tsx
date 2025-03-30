@@ -1,103 +1,275 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  Button,
+  Card,
+  Container,
+  Group,
+  Stack,
+  Text,
+  Title,
+  Badge,
+  SimpleGrid,
+  rem,
+  ThemeIcon,
+  Paper,
+} from "@mantine/core";
+import {
+  IconDownload,
+  IconPackage,
+  IconShoppingCart,
+  IconChartBar,
+  IconCloudUpload,
+  IconPlus,
+  IconShare,
+  IconWifi,
+  IconWifiOff,
+} from "@tabler/icons-react";
+
+// BeforeInstallPromptEvent type definition
+type BeforeInstallPromptEvent = Event & {
+  readonly platforms: string[];
+  readonly userChoice: Promise<{
+    outcome: "accepted" | "dismissed";
+    platform: string;
+  }>;
+  prompt(): Promise<void>;
+};
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncStatus, setSyncStatus] = useState<"synced" | "pending" | "error">(
+    "synced"
+  );
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  useEffect(() => {
+    // Check if already installed
+    const checkInstalled = () => {
+      const isStandalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        window.matchMedia("(display-mode: fullscreen)").matches ||
+        window.matchMedia("(display-mode: minimal-ui)").matches ||
+        (window.navigator as { standalone?: boolean }).standalone === true;
+
+      setIsInstalled(isStandalone);
+    };
+
+    checkInstalled();
+
+    // Listen for beforeinstallprompt event
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      // Stash the event so it can be triggered later
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+
+    // Listen for app installed event
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      console.log("PWA was installed");
+    };
+
+    // Listen for online/offline events
+    const handleOnlineStatus = () => {
+      setIsOnline(navigator.onLine);
+      if (navigator.onLine) {
+        // When coming back online, set sync status to pending
+        // In a real app, you would trigger a sync here
+        setSyncStatus("pending");
+        setTimeout(() => setSyncStatus("synced"), 2000); // Simulate sync completion
+      }
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    window.addEventListener("online", handleOnlineStatus);
+    window.addEventListener("offline", handleOnlineStatus);
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+      window.removeEventListener("online", handleOnlineStatus);
+      window.removeEventListener("offline", handleOnlineStatus);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+
+    // Show the install prompt
+    deferredPrompt.prompt();
+
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === "accepted") {
+      console.log("User accepted the install prompt");
+      setIsInstalled(true);
+    } else {
+      console.log("User dismissed the install prompt");
+    }
+
+    // Clear the saved prompt as it can't be used again
+    setDeferredPrompt(null);
+  };
+
+  // Mock data for dashboard
+  const stats = [
+    { label: "Products", value: "124", icon: IconPackage, color: "green" },
+    {
+      label: "Sales Today",
+      value: "12",
+      icon: IconShoppingCart,
+      color: "blue",
+    },
+    { label: "Revenue", value: "$1,240", icon: IconChartBar, color: "violet" },
+  ];
+
+  return (
+    <Container size="md" py="md">
+      <Stack gap="md">
+        <Group justify="space-between" align="center">
+          <Title order={2}>ShopKeeper Dashboard</Title>
+          <Badge
+            color={isOnline ? "green" : "red"}
+            leftSection={
+              isOnline ? <IconWifi size={12} /> : <IconWifiOff size={12} />
+            }
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+            {isOnline ? "Online" : "Offline"}
+          </Badge>
+        </Group>
+
+        {syncStatus === "pending" && (
+          <Paper withBorder p="xs" bg="yellow.0">
+            <Group>
+              <IconCloudUpload size={16} />
+              <Text size="sm">Syncing data with server...</Text>
+            </Group>
+          </Paper>
+        )}
+
+        {!isInstalled && (
+          <Card withBorder p="md" radius="md" bg="blue.0">
+            <Stack gap="md">
+              <Text fw={500} size="lg">
+                Install ShopKeeper on your device
+              </Text>
+              <Text size="sm">
+                Install this app on your home screen for quick access and
+                offline use!
+              </Text>
+              <Group justify="flex-end">
+                <Button
+                  leftSection={<IconDownload size={20} />}
+                  onClick={handleInstall}
+                  disabled={!deferredPrompt}
+                >
+                  Install Now
+                </Button>
+              </Group>
+            </Stack>
+          </Card>
+        )}
+
+        {/* Stats Cards */}
+        <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md">
+          {stats.map((stat) => (
+            <Card key={stat.label} withBorder p="md" radius="md">
+              <Group justify="space-between" align="flex-start">
+                <div>
+                  <Text size="xs" c="dimmed">
+                    {stat.label}
+                  </Text>
+                  <Text fw={700} size="xl">
+                    {stat.value}
+                  </Text>
+                </div>
+                <ThemeIcon
+                  color={stat.color}
+                  variant="light"
+                  size="lg"
+                  radius="md"
+                >
+                  <stat.icon style={{ width: rem(20), height: rem(20) }} />
+                </ThemeIcon>
+              </Group>
+            </Card>
+          ))}
+        </SimpleGrid>
+
+        {/* Quick Actions */}
+        <Card withBorder shadow="sm" p="lg" radius="md">
+          <Stack gap="md">
+            <Text fw={500} size="lg">
+              Quick Actions
+            </Text>
+
+            <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md">
+              <Button
+                component="a"
+                href="/sales/new"
+                leftSection={<IconPlus size={20} />}
+                variant="filled"
+                color="blue"
+                fullWidth
+              >
+                New Sale
+              </Button>
+
+              <Button
+                component="a"
+                href="/products/add"
+                leftSection={<IconPlus size={20} />}
+                variant="filled"
+                color="green"
+                fullWidth
+              >
+                Add Product
+              </Button>
+
+              <Button
+                component="a"
+                href="/reports"
+                leftSection={<IconChartBar size={20} />}
+                variant="outline"
+                fullWidth
+              >
+                View Reports
+              </Button>
+
+              <Button
+                component="a"
+                href="#"
+                leftSection={<IconShare size={20} />}
+                variant="outline"
+                fullWidth
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (navigator.share) {
+                    navigator.share({
+                      title: "ShopKeeper Reports",
+                      text: "Check out my shop reports",
+                      url: window.location.origin + "/reports",
+                    });
+                  }
+                }}
+              >
+                Share Reports
+              </Button>
+            </SimpleGrid>
+          </Stack>
+        </Card>
+      </Stack>
+    </Container>
   );
 }

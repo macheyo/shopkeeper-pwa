@@ -1,0 +1,23 @@
+{
+    "name": "Minimal Installable PWA",
+    "short_name": "MinPWA",
+    "description": "A minimal PWA that is guaranteed to be installable",
+    "start_url": "/minimal-installable-pwa.html",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#007bff",
+    "icons": [
+        {
+            "src": "/icons/android/android-launchericon-192-192.png",
+            "type": "image/png",
+            "sizes": "192x192",
+            "purpose": "any"
+        },
+        {
+            "src": "/icons/android/android-launchericon-512-512.png",
+            "type": "image/png",
+            "sizes": "512x512",
+            "purpose": "any"
+        }
+    ]
+}

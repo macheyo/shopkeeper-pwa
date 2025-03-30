@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA Debug</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#007bff">
+  <link rel="apple-touch-icon" href="/icons/ios/180.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/ios/180.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="/icons/ios/167.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ShopKeeper">
+  
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #007bff;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    #status {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+    }
+  </style>
+</head>
+<body>
+  <h1>PWA Debug</h1>
+  
+  <div class="card">
+    <h2>PWA Installation Status</h2>
+    <p id="installStatus">Checking installation status...</p>
+    <button id="installButton" disabled>Install App</button>
+    <button id="checkManifest">Check Manifest</button>
+    <button id="checkServiceWorker">Check Service Worker</button>
+    <button id="unregisterServiceWorkers">Unregister Service Workers</button>
+    <button id="clearStorage">Clear Storage</button>
+  </div>
+
+  <div class="card">
+    <h2>Manifest</h2>
+    <pre id="manifestContent">Loading...</pre>
+  </div>
+
+  <div class="card">
+    <h2>Service Worker</h2>
+    <pre id="serviceWorkerContent">Loading...</pre>
+  </div>
+
+  <div id="status"></div>
+
+  <script>
+    // Variables
+    let deferredPrompt;
+    const installButton = document.getElementById('installButton');
+    const installStatus = document.getElementById('installStatus');
+    const checkManifestButton = document.getElementById('checkManifest');
+    const checkServiceWorkerButton = document.getElementById('checkServiceWorker');
+    const unregisterServiceWorkersButton = document.getElementById('unregisterServiceWorkers');
+    const clearStorageButton = document.getElementById('clearStorage');
+    const manifestContent = document.getElementById('manifestContent');
+    const serviceWorkerContent = document.getElementById('serviceWorkerContent');
+    const statusDiv = document.getElementById('status');
+
+    // Function to log status messages
+    function logStatus(message) {
+      const timestamp = new Date().toLocaleTimeString();
+      statusDiv.innerHTML += `<p><strong>${timestamp}</strong>: ${message}</p>`;
+      console.log(message);
+    }
+
+    // Check if the app is already installed
+    function checkIfInstalled() {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        window.navigator.standalone === true;
+      
+      if (isStandalone) {
+        installStatus.textContent = 'App is already installed!';
+        installButton.disabled = true;
+        logStatus('App is already installed');
+      } else {
+        installStatus.textContent = 'App is not installed yet.';
+        logStatus('App is not installed');
+      }
+    }
+
+    // Check manifest
+    async function checkManifest() {
+      try {
+        const response = await fetch('/manifest.json');
+        if (response.ok) {
+          const manifest = await response.json();
+          manifestContent.textContent = JSON.stringify(manifest, null, 2);
+          logStatus(`Manifest found: ${manifest.name}`);
+          
+          // Check if manifest has all required fields
+          const requiredFields = ['name', 'short_name', 'start_url', 'display', 'icons'];
+          const missingFields = requiredFields.filter(field => !manifest[field]);
+          
+          if (missingFields.length > 0) {
+            logStatus(`Warning: Manifest is missing required fields: ${missingFields.join(', ')}`);
+          } else {
+            logStatus('Manifest has all required fields');
+          }
+          
+          // Check if icons are accessible
+          if (manifest.icons && manifest.icons.length > 0) {
+            for (const icon of manifest.icons) {
+              try {
+                const iconResponse = await fetch(icon.src);
+                if (iconResponse.ok) {
+                  logStatus(`Icon ${icon.src} is accessible`);
+                } else {
+                  logStatus(`Warning: Icon ${icon.src} is not accessible (${iconResponse.status})`);
+                }
+              } catch (error) {
+                logStatus(`Error checking icon ${icon.src}: ${error.message}`);
+              }
+            }
+          }
+        } else {
+          manifestContent.textContent = `Error: ${response.status} ${response.statusText}`;
+          logStatus(`Manifest fetch failed: ${response.status}`);
+        }
+      } catch (error) {
+        manifestContent.textContent = `Error: ${error.message}`;
+        logStatus(`Manifest error: ${error.message}`);
+      }
+    }
+
+    // Check service worker
+    async function checkServiceWorker() {
+      if ('serviceWorker' in navigator) {
+        try {
+          // Check if service worker is registered
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          if (registrations.length > 0) {
+            let swInfo = '';
+            for (const registration of registrations) {
+              swInfo += `Scope: ${registration.scope}\n`;
+              swInfo += `State: ${registration.active ? 'active' : 'inactive'}\n`;
+              swInfo += `Updating: ${registration.installing ? 'yes' : 'no'}\n`;
+              swInfo += `URL: ${registration.active ? registration.active.scriptURL : 'N/A'}\n\n`;
+            }
+            serviceWorkerContent.textContent = swInfo;
+            logStatus(`Service worker registered (${registrations.length} registrations)`);
+          } else {
+            serviceWorkerContent.textContent = 'No service worker registrations found';
+            logStatus('No service worker registrations found');
+          }
+          
+          // Check if sw-custom.js is accessible
+          const swResponse = await fetch('/sw-custom.js');
+          if (swResponse.ok) {
+            logStatus('sw-custom.js is accessible');
+          } else {
+            logStatus(`Warning: sw-custom.js is not accessible (${swResponse.status})`);
+          }
+        } catch (error) {
+          serviceWorkerContent.textContent = `Error: ${error.message}`;
+          logStatus(`Service worker error: ${error.message}`);
+        }
+      } else {
+        serviceWorkerContent.textContent = 'Service Worker API not supported';
+        logStatus('Service Worker API not supported');
+      }
+    }
+
+    // Unregister all service workers
+    async function unregisterServiceWorkers() {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (const registration of registrations) {
+            await registration.unregister();
+            logStatus(`Unregistered service worker: ${registration.scope}`);
+          }
+          serviceWorkerContent.textContent = 'All service workers unregistered';
+        } catch (error) {
+          logStatus(`Error unregistering service workers: ${error.message}`);
+        }
+      }
+    }
+
+    // Clear storage
+    function clearStorage() {
+      localStorage.clear();
+      sessionStorage.clear();
+      logStatus('Local storage and session storage cleared');
+      
+      if ('caches' in window) {
+        caches.keys().then(cacheNames => {
+          cacheNames.forEach(cacheName => {
+            caches.delete(cacheName);
+            logStatus(`Cache ${cacheName} deleted`);
+          });
+        });
+      }
+    }
+
+    // Handle the installation
+    async function installApp() {
+      if (!deferredPrompt) {
+        logStatus('No installation prompt available');
+        return;
+      }
+
+      logStatus('Showing installation prompt');
+      deferredPrompt.prompt();
+      
+      const { outcome } = await deferredPrompt.userChoice;
+      logStatus(`User ${outcome} the installation prompt`);
+      
+      if (outcome === 'accepted') {
+        installStatus.textContent = 'App is being installed!';
+        installButton.disabled = true;
+      }
+      
+      deferredPrompt = null;
+    }
+
+    // Set up event listeners
+    installButton.addEventListener('click', installApp);
+    checkManifestButton.addEventListener('click', checkManifest);
+    checkServiceWorkerButton.addEventListener('click', checkServiceWorker);
+    unregisterServiceWorkersButton.addEventListener('click', unregisterServiceWorkers);
+    clearStorageButton.addEventListener('click', clearStorage);
+
+    // Check if already installed
+    checkIfInstalled();
+    
+    // Initial checks
+    checkManifest();
+    checkServiceWorker();
+
+    // Listen for beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      
+      // Stash the event so it can be triggered later
+      deferredPrompt = e;
+      
+      // Update UI to show the install button
+      installButton.disabled = false;
+      
+      logStatus('beforeinstallprompt event fired, installation is available');
+    });
+
+    // Listen for appinstalled event
+    window.addEventListener('appinstalled', () => {
+      installStatus.textContent = 'App was installed successfully!';
+      installButton.disabled = true;
+      deferredPrompt = null;
+      logStatus('App was installed successfully');
+    });
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw-custom.js')
+          .then(function(registration) {
+            logStatus(`Service worker registered with scope: ${registration.scope}`);
+          })
+          .catch(function(error) {
+            logStatus(`Service worker registration failed: ${error.message}`);
+          });
+      });
+    }
+  </script>
+</body>
+</html>

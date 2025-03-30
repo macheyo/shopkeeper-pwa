@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browser Capability Check</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#007bff">
+  <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ShopKeeper">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #007bff;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .success {
+      color: green;
+    }
+    .warning {
+      color: orange;
+    }
+    .error {
+      color: red;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #f8f9fa;
+    }
+  </style>
+</head>
+<body>
+  <h1>Browser Capability Check</h1>
+  
+  <div class="card">
+    <h2>Browser Information</h2>
+    <table>
+      <tr>
+        <th>Property</th>
+        <th>Value</th>
+      </tr>
+      <tr>
+        <td>User Agent</td>
+        <td id="userAgent"></td>
+      </tr>
+      <tr>
+        <td>Browser</td>
+        <td id="browser"></td>
+      </tr>
+      <tr>
+        <td>Platform</td>
+        <td id="platform"></td>
+      </tr>
+      <tr>
+        <td>Secure Context</td>
+        <td id="secureContext"></td>
+      </tr>
+      <tr>
+        <td>Service Worker Support</td>
+        <td id="serviceWorkerSupport"></td>
+      </tr>
+      <tr>
+        <td>Web App Manifest Support</td>
+        <td id="manifestSupport"></td>
+      </tr>
+      <tr>
+        <td>BeforeInstallPrompt Support</td>
+        <td id="beforeInstallPromptSupport"></td>
+      </tr>
+      <tr>
+        <td>Display Mode</td>
+        <td id="displayMode"></td>
+      </tr>
+      <tr>
+        <td>Standalone Mode</td>
+        <td id="standaloneMode"></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>PWA Installability Checks</h2>
+    <div id="installabilityChecks"></div>
+  </div>
+
+  <div class="card">
+    <h2>Service Worker Status</h2>
+    <div id="serviceWorkerStatus"></div>
+    <button id="registerSW">Register Test Service Worker</button>
+    <button id="unregisterSW">Unregister All Service Workers</button>
+  </div>
+
+  <script>
+    // Browser Information
+    document.getElementById('userAgent').textContent = navigator.userAgent;
+    document.getElementById('platform').textContent = navigator.platform;
+    
+    // Detect browser
+    const userAgent = navigator.userAgent;
+    let browser = 'Unknown';
+    if (userAgent.indexOf('Chrome') > -1) {
+      browser = 'Chrome';
+    } else if (userAgent.indexOf('Firefox') > -1) {
+      browser = 'Firefox';
+    } else if (userAgent.indexOf('Safari') > -1) {
+      browser = 'Safari';
+    } else if (userAgent.indexOf('Edge') > -1 || userAgent.indexOf('Edg') > -1) {
+      browser = 'Edge';
+    } else if (userAgent.indexOf('MSIE') > -1 || userAgent.indexOf('Trident') > -1) {
+      browser = 'Internet Explorer';
+    }
+    document.getElementById('browser').textContent = browser;
+    
+    // Secure Context
+    const isSecureContext = window.isSecureContext;
+    document.getElementById('secureContext').innerHTML = isSecureContext ? 
+      '<span class="success">Yes</span>' : 
+      '<span class="error">No (PWAs require a secure context)</span>';
+    
+    // Service Worker Support
+    const hasServiceWorkerSupport = 'serviceWorker' in navigator;
+    document.getElementById('serviceWorkerSupport').innerHTML = hasServiceWorkerSupport ? 
+      '<span class="success">Yes</span>' : 
+      '<span class="error">No (PWAs require service worker support)</span>';
+    
+    // Web App Manifest Support
+    const hasManifestSupport = 'onload' in document.createElement('link');
+    document.getElementById('manifestSupport').innerHTML = hasManifestSupport ? 
+      '<span class="success">Yes</span>' : 
+      '<span class="error">No (PWAs require web app manifest support)</span>';
+    
+    // BeforeInstallPrompt Support
+    const hasBeforeInstallPromptSupport = 'BeforeInstallPromptEvent' in window || 'onbeforeinstallprompt' in window;
+    document.getElementById('beforeInstallPromptSupport').innerHTML = hasBeforeInstallPromptSupport ? 
+      '<span class="success">Yes</span>' : 
+      '<span class="warning">No (This event is needed for custom install buttons)</span>';
+    
+    // Display Mode
+    const displayModes = [
+      'fullscreen',
+      'standalone',
+      'minimal-ui',
+      'browser'
+    ];
+    
+    let currentDisplayMode = 'browser';
+    for (const mode of displayModes) {
+      if (window.matchMedia(`(display-mode: ${mode})`).matches) {
+        currentDisplayMode = mode;
+        break;
+      }
+    }
+    
+    document.getElementById('displayMode').textContent = currentDisplayMode;
+    
+    // Standalone Mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+      window.matchMedia('(display-mode: fullscreen)').matches ||
+      window.matchMedia('(display-mode: minimal-ui)').matches ||
+      window.navigator.standalone === true;
+    
+    document.getElementById('standaloneMode').innerHTML = isStandalone ? 
+      '<span class="success">Yes (App is already installed)</span>' : 
+      '<span class="warning">No (App is running in browser mode)</span>';
+    
+    // PWA Installability Checks
+    const installabilityChecks = document.getElementById('installabilityChecks');
+    
+    function addCheck(name, passed, description) {
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <p>
+          <strong>${name}:</strong> 
+          <span class="${passed ? 'success' : 'error'}">${passed ? 'Passed' : 'Failed'}</span>
+          ${description ? ` - ${description}` : ''}
+        </p>
+      `;
+      installabilityChecks.appendChild(div);
+    }
+    
+    // Check if running on HTTPS or localhost
+    const isHttps = location.protocol === 'https:';
+    const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    addCheck('Secure Context', isSecureContext, isSecureContext ? 
+      'Running in a secure context' : 
+      'PWAs require HTTPS (localhost is usually exempt)');
+    
+    // Check if service worker is supported
+    addCheck('Service Worker Support', hasServiceWorkerSupport, hasServiceWorkerSupport ? 
+      'Service workers are supported' : 
+      'Service workers are required for PWAs');
+    
+    // Check if manifest is linked
+    const hasManifestLink = Array.from(document.querySelectorAll('link')).some(link => link.rel === 'manifest');
+    addCheck('Manifest Link', hasManifestLink, hasManifestLink ? 
+      'Manifest is linked in the HTML' : 
+      'No manifest link found in the HTML');
+    
+    // Check if in incognito mode (this is a best guess, not 100% reliable)
+    function isIncognito() {
+      return new Promise((resolve) => {
+        const db = indexedDB.open('test');
+        db.onerror = () => resolve(true);
+        db.onsuccess = () => resolve(false);
+      });
+    }
+    
+    isIncognito().then(isIncognito => {
+      addCheck('Incognito Mode', !isIncognito, isIncognito ? 
+        'Running in incognito mode (PWA installation may be disabled)' : 
+        'Not in incognito mode');
+    });
+    
+    // Service Worker Status
+    const serviceWorkerStatus = document.getElementById('serviceWorkerStatus');
+    const registerSWButton = document.getElementById('registerSW');
+    const unregisterSWButton = document.getElementById('unregisterSW');
+    
+    function updateServiceWorkerStatus() {
+      if (!hasServiceWorkerSupport) {
+        serviceWorkerStatus.innerHTML = '<p class="error">Service Workers are not supported in this browser</p>';
+        return;
+      }
+      
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        if (registrations.length === 0) {
+          serviceWorkerStatus.innerHTML = '<p class="warning">No Service Workers are registered</p>';
+        } else {
+          let html = '<p class="success">Service Workers registered:</p><ul>';
+          registrations.forEach(registration => {
+            html += `<li>Scope: ${registration.scope}, State: ${registration.active ? registration.active.state : 'no active worker'}</li>`;
+          });
+          html += '</ul>';
+          serviceWorkerStatus.innerHTML = html;
+        }
+      }).catch(error => {
+        serviceWorkerStatus.innerHTML = `<p class="error">Error checking Service Worker registrations: ${error}</p>`;
+      });
+    }
+    
+    // Register a test service worker
+    registerSWButton.addEventListener('click', () => {
+      if (!hasServiceWorkerSupport) {
+        alert('Service Workers are not supported in this browser');
+        return;
+      }
+      
+      navigator.serviceWorker.register('/test-sw.js', { scope: '/' })
+        .then(registration => {
+          alert(`Service Worker registered with scope: ${registration.scope}`);
+          updateServiceWorkerStatus();
+        })
+        .catch(error => {
+          alert(`Service Worker registration failed: ${error}`);
+        });
+    });
+    
+    // Unregister all service workers
+    unregisterSWButton.addEventListener('click', () => {
+      if (!hasServiceWorkerSupport) {
+        alert('Service Workers are not supported in this browser');
+        return;
+      }
+      
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        const promises = registrations.map(registration => registration.unregister());
+        return Promise.all(promises);
+      }).then(() => {
+        alert('All Service Workers unregistered');
+        updateServiceWorkerStatus();
+      }).catch(error => {
+        alert(`Error unregistering Service Workers: ${error}`);
+      });
+    });
+    
+    // Initial check
+    updateServiceWorkerStatus();
+    
+    // Listen for beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      
+      addCheck('BeforeInstallPrompt Event', true, 'The beforeinstallprompt event was fired, the app is installable');
+    });
+    
+    // If no beforeinstallprompt event after 3 seconds, add a check
+    setTimeout(() => {
+      if (!document.querySelector('#installabilityChecks p:contains("BeforeInstallPrompt Event")')) {
+        addCheck('BeforeInstallPrompt Event', false, 'The beforeinstallprompt event was not fired, the app may not be installable');
+      }
+    }, 3000);
+  </script>
+  
+  <!-- Create a simple test service worker -->
+  <script>
+    // Create a test service worker file dynamically
+    const testServiceWorkerContent = `
+      // This is a test service worker
+      self.addEventListener('install', (event) => {
+        console.log('[Test Service Worker] Install');
+        self.skipWaiting();
+      });
+      
+      self.addEventListener('activate', (event) => {
+        console.log('[Test Service Worker] Activate');
+        return self.clients.claim();
+      });
+      
+      self.addEventListener('fetch', (event) => {
+        console.log('[Test Service Worker] Fetch', event.request.url);
+        event.respondWith(fetch(event.request));
+      });
+    `;
+    
+    // Create a blob and object URL for the service worker
+    const blob = new Blob([testServiceWorkerContent], { type: 'application/javascript' });
+    const testServiceWorkerURL = URL.createObjectURL(blob);
+    
+    // Create a link to download the service worker
+    const link = document.createElement('a');
+    link.href = testServiceWorkerURL;
+    link.download = 'test-sw.js';
+    
+    // Append the link to the document and click it
+    document.body.appendChild(link);
+    link.click();
+    
+    // Clean up
+    document.body.removeChild(link);
+  </script>
+</body>
+</html>

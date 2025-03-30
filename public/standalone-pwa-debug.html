@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Standalone PWA Debug</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="data:application/json;base64,ewogICAgIm5hbWUiOiAiU3RhbmRhbG9uZSBQV0EiLAogICAgInNob3J0X25hbWUiOiAiUFdBIiwKICAgICJkZXNjcmlwdGlvbiI6ICJBIHN0YW5kYWxvbmUgUFdBIGZvciB0ZXN0aW5nIGluc3RhbGxhdGlvbiIsCiAgICAic3RhcnRfdXJsIjogIi9zdGFuZGFsb25lLXB3YS1kZWJ1Zy5odG1sIiwKICAgICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICAgImJhY2tncm91bmRfY29sb3IiOiAiI2ZmZmZmZiIsCiAgICAidGhlbWVfY29sb3IiOiAiIzAwN2JmZiIsCiAgICAiaWNvbnMiOiBbCiAgICAgICAgewogICAgICAgICAgICAic3JjIjogImRhdGE6aW1hZ2UvcG5nO2Jhc2U2NCxpVkJPUncwS0dnb0FBQUFOU1VoRVVnQUFBQUVBQUFBQkNBWUFBQUFmRmNTSkFBQUFBMUpSRUZVR0pkamdRRUFBQUFKY0VoWmN3QUFBc1FBQUFMRUFTdldOYkFBQUFBMUpSRUZVR0pkamdRRUFBQUFKY0VoWmN3QUFBc1FBQUFMRUFTdldOYkFBQUFBQlpWbEhSQUgvQXdEQUFBQUFDa2xFUVZRWTQyTmdBQUFBQWdBQi8vOEFEd0FBQUFCSlJVNUVya0pnZ2c9PSIsCiAgICAgICAgICAgICJzaXplcyI6ICIxOTJ4MTkyIiwKICAgICAgICAgICAgInR5cGUiOiAiaW1hZ2UvcG5nIiwKICAgICAgICAgICAgInB1cnBvc2UiOiAiYW55IG1hc2thYmxlIgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgICAic3JjIjogImRhdGE6aW1hZ2UvcG5nO2Jhc2U2NCxpVkJPUncwS0dnb0FBQUFOU1VoRVVnQUFBQUVBQUFBQkNBWUFBQUFmRmNTSkFBQUFBMUpSRUZVR0pkamdRRUFBQUFKY0VoWmN3QUFBc1FBQUFMRUFTdldOYkFBQUFBMUpSRUZVR0pkamdRRUFBQUFKY0VoWmN3QUFBc1FBQUFMRUFTdldOYkFBQUFBQlpWbEhSQUgvQXdEQUFBQUFDa2xFUVZRWTQyTmdBQUFBQWdBQi8vOEFEd0FBQUFCSlJVNUVya0pnZ2c9PSIsCiAgICAgICAgICAgICJzaXplcyI6ICI1MTJ4NTEyIiwKICAgICAgICAgICAgInR5cGUiOiAiaW1hZ2UvcG5nIiwKICAgICAgICAgICAgInB1cnBvc2UiOiAiYW55IG1hc2thYmxlIgogICAgICAgIH0KICAgIF0KfQ==">
+  <meta name="theme-color" content="#007bff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Standalone PWA">
+  
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #007bff;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    #status {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+    }
+  </style>
+</head>
+<body>
+  <h1>Standalone PWA Debug</h1>
+  
+  <div class="card">
+    <h2>PWA Installation Status</h2>
+    <p id="installStatus">Checking installation status...</p>
+    <button id="installButton" disabled>Install App</button>
+    <button id="clearStorage">Clear Storage</button>
+  </div>
+
+  <div class="card">
+    <h2>Installation Requirements</h2>
+    <ul id="requirements">
+      <li id="req-https">HTTPS: <span>Checking...</span></li>
+      <li id="req-manifest">Manifest: <span>Checking...</span></li>
+      <li id="req-sw">Service Worker: <span>Checking...</span></li>
+      <li id="req-display">Display Mode: <span>Checking...</span></li>
+      <li id="req-icons">Icons: <span>Checking...</span></li>
+    </ul>
+  </div>
+
+  <div id="status"></div>
+
+  <script>
+    // Variables
+    let deferredPrompt;
+    const installButton = document.getElementById('installButton');
+    const installStatus = document.getElementById('installStatus');
+    const clearStorageButton = document.getElementById('clearStorage');
+    const statusDiv = document.getElementById('status');
+    
+    // Requirements elements
+    const reqHttps = document.getElementById('req-https').querySelector('span');
+    const reqManifest = document.getElementById('req-manifest').querySelector('span');
+    const reqSw = document.getElementById('req-sw').querySelector('span');
+    const reqDisplay = document.getElementById('req-display').querySelector('span');
+    const reqIcons = document.getElementById('req-icons').querySelector('span');
+
+    // Function to log status messages
+    function logStatus(message) {
+      const timestamp = new Date().toLocaleTimeString();
+      statusDiv.innerHTML += `<p><strong>${timestamp}</strong>: ${message}</p>`;
+      console.log(message);
+    }
+
+    // Check if the app is already installed
+    function checkIfInstalled() {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        window.navigator.standalone === true;
+      
+      if (isStandalone) {
+        installStatus.textContent = 'App is already installed!';
+        installButton.disabled = true;
+        logStatus('App is already installed');
+      } else {
+        installStatus.textContent = 'App is not installed yet.';
+        logStatus('App is not installed');
+      }
+    }
+
+    // Check installation requirements
+    function checkRequirements() {
+      // Check HTTPS
+      if (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        reqHttps.textContent = '✅ Secure context';
+        reqHttps.style.color = 'green';
+      } else {
+        reqHttps.textContent = '❌ Not secure (HTTPS required)';
+        reqHttps.style.color = 'red';
+      }
+      
+      // Check manifest
+      if (document.querySelector('link[rel="manifest"]')) {
+        reqManifest.textContent = '✅ Present';
+        reqManifest.style.color = 'green';
+      } else {
+        reqManifest.textContent = '❌ Missing';
+        reqManifest.style.color = 'red';
+      }
+      
+      // Check service worker
+      if ('serviceWorker' in navigator) {
+        reqSw.textContent = '✅ Supported';
+        reqSw.style.color = 'green';
+        
+        // Register a minimal service worker
+        const swBlob = new Blob([
+          `self.addEventListener('install', event => {
+            self.skipWaiting();
+          });
+          self.addEventListener('activate', event => {
+            event.waitUntil(self.clients.claim());
+          });
+          self.addEventListener('fetch', event => {
+            event.respondWith(fetch(event.request));
+          });`
+        ], {type: 'text/javascript'});
+        
+        const swUrl = URL.createObjectURL(swBlob);
+        
+        navigator.serviceWorker.register(swUrl)
+          .then(reg => {
+            logStatus('Service worker registered');
+          })
+          .catch(err => {
+            logStatus('Service worker registration failed: ' + err.message);
+            reqSw.textContent = '❌ Registration failed';
+            reqSw.style.color = 'red';
+          });
+      } else {
+        reqSw.textContent = '❌ Not supported';
+        reqSw.style.color = 'red';
+      }
+      
+      // Check display mode
+      const manifestLink = document.querySelector('link[rel="manifest"]');
+      if (manifestLink) {
+        try {
+          const manifestData = JSON.parse(atob(manifestLink.href.split('base64,')[1]));
+          if (manifestData.display === 'standalone' || manifestData.display === 'fullscreen') {
+            reqDisplay.textContent = '✅ ' + manifestData.display;
+            reqDisplay.style.color = 'green';
+          } else {
+            reqDisplay.textContent = '❌ ' + (manifestData.display || 'missing') + ' (should be standalone or fullscreen)';
+            reqDisplay.style.color = 'red';
+          }
+          
+          // Check icons
+          if (manifestData.icons && manifestData.icons.length > 0) {
+            reqIcons.textContent = '✅ ' + manifestData.icons.length + ' icons';
+            reqIcons.style.color = 'green';
+          } else {
+            reqIcons.textContent = '❌ Missing';
+            reqIcons.style.color = 'red';
+          }
+        } catch (e) {
+          logStatus('Error parsing manifest: ' + e.message);
+          reqDisplay.textContent = '❌ Error parsing manifest';
+          reqDisplay.style.color = 'red';
+          reqIcons.textContent = '❌ Error parsing manifest';
+          reqIcons.style.color = 'red';
+        }
+      } else {
+        reqDisplay.textContent = '❌ No manifest';
+        reqDisplay.style.color = 'red';
+        reqIcons.textContent = '❌ No manifest';
+        reqIcons.style.color = 'red';
+      }
+    }
+
+    // Clear storage
+    function clearStorage() {
+      localStorage.clear();
+      sessionStorage.clear();
+      logStatus('Local storage and session storage cleared');
+      
+      if ('caches' in window) {
+        caches.keys().then(cacheNames => {
+          cacheNames.forEach(cacheName => {
+            caches.delete(cacheName);
+            logStatus(`Cache ${cacheName} deleted`);
+          });
+        });
+      }
+    }
+
+    // Handle the installation
+    async function installApp() {
+      if (!deferredPrompt) {
+        logStatus('No installation prompt available');
+        return;
+      }
+
+      logStatus('Showing installation prompt');
+      deferredPrompt.prompt();
+      
+      const { outcome } = await deferredPrompt.userChoice;
+      logStatus(`User ${outcome} the installation prompt`);
+      
+      if (outcome === 'accepted') {
+        installStatus.textContent = 'App is being installed!';
+        installButton.disabled = true;
+      }
+      
+      deferredPrompt = null;
+    }
+
+    // Set up event listeners
+    installButton.addEventListener('click', installApp);
+    clearStorageButton.addEventListener('click', clearStorage);
+
+    // Check if already installed
+    checkIfInstalled();
+    
+    // Check requirements
+    checkRequirements();
+
+    // Listen for beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      
+      // Stash the event so it can be triggered later
+      deferredPrompt = e;
+      
+      // Update UI to show the install button
+      installButton.disabled = false;
+      
+      logStatus('beforeinstallprompt event fired, installation is available');
+    });
+
+    // Listen for appinstalled event
+    window.addEventListener('appinstalled', () => {
+      installStatus.textContent = 'App was installed successfully!';
+      installButton.disabled = true;
+      deferredPrompt = null;
+      logStatus('App was installed successfully');
+    });
+  </script>
+</body>
+</html>

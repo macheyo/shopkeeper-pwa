@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimal PWA Test</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/minimal-test-manifest.json">
+  <meta name="theme-color" content="#007bff">
+  <link rel="apple-touch-icon" href="/icons/ios/180.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/ios/180.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="/icons/ios/167.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Minimal PWA">
+  
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #007bff;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #status {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+    }
+  </style>
+</head>
+<body>
+  <h1>Minimal PWA Test</h1>
+  
+  <div class="card">
+    <h2>PWA Installation Status</h2>
+    <p id="installStatus">Checking installation status...</p>
+    <button id="installButton" disabled>Install App</button>
+  </div>
+
+  <div id="status"></div>
+
+  <script>
+    // Variables
+    let deferredPrompt;
+    const installButton = document.getElementById('installButton');
+    const installStatus = document.getElementById('installStatus');
+    const statusDiv = document.getElementById('status');
+
+    // Function to log status messages
+    function logStatus(message) {
+      const timestamp = new Date().toLocaleTimeString();
+      statusDiv.innerHTML += `<p><strong>${timestamp}</strong>: ${message}</p>`;
+      console.log(message);
+    }
+
+    // Check if the app is already installed
+    function checkIfInstalled() {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        window.navigator.standalone === true;
+      
+      if (isStandalone) {
+        installStatus.textContent = 'App is already installed!';
+        installButton.disabled = true;
+        logStatus('App is already installed');
+      } else {
+        installStatus.textContent = 'App is not installed yet.';
+        logStatus('App is not installed');
+      }
+    }
+
+    // Handle the installation
+    async function installApp() {
+      if (!deferredPrompt) {
+        logStatus('No installation prompt available');
+        return;
+      }
+
+      logStatus('Showing installation prompt');
+      deferredPrompt.prompt();
+      
+      const { outcome } = await deferredPrompt.userChoice;
+      logStatus(`User ${outcome} the installation prompt`);
+      
+      if (outcome === 'accepted') {
+        installStatus.textContent = 'App is being installed!';
+        installButton.disabled = true;
+      }
+      
+      deferredPrompt = null;
+    }
+
+    // Set up event listeners
+    installButton.addEventListener('click', installApp);
+
+    // Check if already installed
+    checkIfInstalled();
+
+    // Listen for beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      
+      // Stash the event so it can be triggered later
+      deferredPrompt = e;
+      
+      // Update UI to show the install button
+      installButton.disabled = false;
+      
+      logStatus('beforeinstallprompt event fired, installation is available');
+    });
+
+    // Listen for appinstalled event
+    window.addEventListener('appinstalled', () => {
+      installStatus.textContent = 'App was installed successfully!';
+      installButton.disabled = true;
+      deferredPrompt = null;
+      logStatus('App was installed successfully');
+    });
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/minimal-test-sw.js')
+          .then(function(registration) {
+            logStatus(`Service worker registered with scope: ${registration.scope}`);
+          })
+          .catch(function(error) {
+            logStatus(`Service worker registration failed: ${error.message}`);
+          });
+      });
+    }
+  </script>
+</body>
+</html>

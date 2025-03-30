@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA Installation Checker</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1, h2 {
+      color: #007bff;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .success {
+      color: green;
+      font-weight: bold;
+    }
+    .warning {
+      color: orange;
+      font-weight: bold;
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    #logs {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>PWA Installation Checker</h1>
+  
+  <div class="card">
+    <h2>Installation Status</h2>
+    <p id="installStatus">Checking installation status...</p>
+    <button id="installButton" disabled>Install App</button>
+  </div>
+
+  <div class="card">
+    <h2>PWA Requirements</h2>
+    <ul id="requirements">
+      <li id="req-https">HTTPS: <span>Checking...</span></li>
+      <li id="req-manifest">Manifest: <span>Checking...</span></li>
+      <li id="req-sw">Service Worker: <span>Checking...</span></li>
+      <li id="req-icons">Icons: <span>Checking...</span></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Manifest Details</h2>
+    <pre id="manifestContent">Loading...</pre>
+  </div>
+
+  <div class="card">
+    <h2>Service Worker Details</h2>
+    <div id="swDetails">Checking...</div>
+  </div>
+
+  <div class="card">
+    <h2>Debug Actions</h2>
+    <button id="checkManifest">Check Manifest</button>
+    <button id="checkServiceWorker">Check Service Worker</button>
+    <button id="unregisterServiceWorkers">Unregister Service Workers</button>
+    <button id="clearStorage">Clear Storage</button>
+  </div>
+
+  <div class="card">
+    <h2>Logs</h2>
+    <div id="logs"></div>
+  </div>
+
+  <script>
+    // Variables
+    let deferredPrompt;
+    const installButton = document.getElementById('installButton');
+    const installStatus = document.getElementById('installStatus');
+    const reqHttps = document.getElementById('req-https').querySelector('span');
+    const reqManifest = document.getElementById('req-manifest').querySelector('span');
+    const reqSw = document.getElementById('req-sw').querySelector('span');
+    const reqIcons = document.getElementById('req-icons').querySelector('span');
+    const manifestContent = document.getElementById('manifestContent');
+    const swDetails = document.getElementById('swDetails');
+    const logs = document.getElementById('logs');
+    const checkManifestButton = document.getElementById('checkManifest');
+    const checkServiceWorkerButton = document.getElementById('checkServiceWorker');
+    const unregisterServiceWorkersButton = document.getElementById('unregisterServiceWorkers');
+    const clearStorageButton = document.getElementById('clearStorage');
+
+    // Function to log messages
+    function logMessage(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const logEntry = document.createElement('p');
+      logEntry.innerHTML = `<strong>${timestamp}</strong>: ${message}`;
+      
+      if (type === 'error') {
+        logEntry.classList.add('error');
+      } else if (type === 'warning') {
+        logEntry.classList.add('warning');
+      } else if (type === 'success') {
+        logEntry.classList.add('success');
+      }
+      
+      logs.appendChild(logEntry);
+      logs.scrollTop = logs.scrollHeight;
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+
+    // Check if the app is already installed
+    function checkIfInstalled() {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        window.navigator.standalone === true;
+      
+      if (isStandalone) {
+        installStatus.textContent = 'App is already installed!';
+        installStatus.classList.add('success');
+        installButton.disabled = true;
+        logMessage('App is already installed', 'success');
+      } else {
+        installStatus.textContent = 'App is not installed yet.';
+        logMessage('App is not installed', 'info');
+      }
+    }
+
+    // Check PWA requirements
+    function checkRequirements() {
+      // Check HTTPS
+      if (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        reqHttps.textContent = '✅ Secure context';
+        reqHttps.classList.add('success');
+        logMessage('Secure context check passed', 'success');
+      } else {
+        reqHttps.textContent = '❌ Not secure (HTTPS required)';
+        reqHttps.classList.add('error');
+        logMessage('Secure context check failed - HTTPS required', 'error');
+      }
+      
+      // Check manifest
+      const manifestLink = document.querySelector('link[rel="manifest"]');
+      if (manifestLink) {
+        reqManifest.textContent = '✅ Present';
+        reqManifest.classList.add('success');
+        logMessage('Manifest found: ' + manifestLink.href, 'success');
+        
+        // Fetch manifest details
+        fetch(manifestLink.href)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(data => {
+            manifestContent.textContent = JSON.stringify(data, null, 2);
+            
+            // Check icons
+            if (data.icons && data.icons.length > 0) {
+              reqIcons.textContent = `✅ ${data.icons.length} icons found`;
+              reqIcons.classList.add('success');
+              logMessage(`${data.icons.length} icons found in manifest`, 'success');
+              
+              // Check icon accessibility
+              data.icons.forEach(icon => {
+                fetch(icon.src)
+                  .then(response => {
+                    if (!response.ok) {
+                      logMessage(`Icon ${icon.src} is not accessible (${response.status})`, 'error');
+                    } else {
+                      logMessage(`Icon ${icon.src} is accessible`, 'success');
+                    }
+                  })
+                  .catch(error => {
+                    logMessage(`Error checking icon ${icon.src}: ${error.message}`, 'error');
+                  });
+              });
+            } else {
+              reqIcons.textContent = '❌ No icons found in manifest';
+              reqIcons.classList.add('error');
+              logMessage('No icons found in manifest', 'error');
+            }
+          })
+          .catch(error => {
+            manifestContent.textContent = `Error fetching manifest: ${error.message}`;
+            logMessage(`Error fetching manifest: ${error.message}`, 'error');
+          });
+      } else {
+        reqManifest.textContent = '❌ Missing';
+        reqManifest.classList.add('error');
+        manifestContent.textContent = 'No manifest found';
+        logMessage('No manifest found', 'error');
+      }
+      
+      // Check service worker
+      if ('serviceWorker' in navigator) {
+        reqSw.textContent = '✅ Supported';
+        reqSw.classList.add('success');
+        logMessage('Service Worker API is supported', 'success');
+        
+        // Check registrations
+        navigator.serviceWorker.getRegistrations()
+          .then(registrations => {
+            if (registrations.length > 0) {
+              let swInfo = '<ul>';
+              registrations.forEach(registration => {
+                swInfo += `<li>Scope: ${registration.scope}</li>`;
+                swInfo += `<li>State: ${registration.active ? 'active' : 'inactive'}</li>`;
+                swInfo += `<li>Updating: ${registration.installing ? 'yes' : 'no'}</li>`;
+                swInfo += `<li>URL: ${registration.active ? registration.active.scriptURL : 'N/A'}</li>`;
+                
+                logMessage(`Service worker registered with scope: ${registration.scope}`, 'success');
+              });
+              swInfo += '</ul>';
+              swDetails.innerHTML = swInfo;
+            } else {
+              swDetails.textContent = 'No service worker registrations found';
+              logMessage('No service worker registrations found', 'warning');
+            }
+          })
+          .catch(error => {
+            swDetails.textContent = `Error checking service worker: ${error.message}`;
+            logMessage(`Error checking service worker: ${error.message}`, 'error');
+          });
+      } else {
+        reqSw.textContent = '❌ Not supported';
+        reqSw.classList.add('error');
+        swDetails.textContent = 'Service Worker API not supported';
+        logMessage('Service Worker API not supported', 'error');
+      }
+    }
+
+    // Handle the installation
+    async function installApp() {
+      if (!deferredPrompt) {
+        logMessage('No installation prompt available', 'warning');
+        return;
+      }
+
+      logMessage('Showing installation prompt', 'info');
+      deferredPrompt.prompt();
+      
+      try {
+        const { outcome } = await deferredPrompt.userChoice;
+        logMessage(`User ${outcome} the installation prompt`, outcome === 'accepted' ? 'success' : 'info');
+        
+        if (outcome === 'accepted') {
+          installStatus.textContent = 'App is being installed!';
+          installStatus.classList.add('success');
+          installButton.disabled = true;
+        }
+      } catch (error) {
+        logMessage(`Error during installation: ${error.message}`, 'error');
+      }
+      
+      deferredPrompt = null;
+    }
+
+    // Check manifest
+    async function checkManifest() {
+      logMessage('Checking manifest...', 'info');
+      const manifestLink = document.querySelector('link[rel="manifest"]');
+      
+      if (!manifestLink) {
+        logMessage('No manifest link found in the document', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch(manifestLink.href);
+        if (!response.ok) {
+          logMessage(`Manifest fetch failed: ${response.status}`, 'error');
+          return;
+        }
+        
+        const manifest = await response.json();
+        manifestContent.textContent = JSON.stringify(manifest, null, 2);
+        logMessage(`Manifest found: ${manifest.name}`, 'success');
+        
+        // Check required fields
+        const requiredFields = ['name', 'short_name', 'start_url', 'display', 'icons'];
+        const missingFields = requiredFields.filter(field => !manifest[field]);
+        
+        if (missingFields.length > 0) {
+          logMessage(`Manifest is missing required fields: ${missingFields.join(', ')}`, 'warning');
+        } else {
+          logMessage('Manifest has all required fields', 'success');
+        }
+        
+        // Check icons
+        if (manifest.icons && manifest.icons.length > 0) {
+          logMessage(`Found ${manifest.icons.length} icons in manifest`, 'success');
+          
+          for (const icon of manifest.icons) {
+            try {
+              const iconResponse = await fetch(icon.src);
+              if (iconResponse.ok) {
+                logMessage(`Icon ${icon.src} is accessible`, 'success');
+              } else {
+                logMessage(`Icon ${icon.src} is not accessible (${iconResponse.status})`, 'error');
+              }
+            } catch (error) {
+              logMessage(`Error checking icon ${icon.src}: ${error.message}`, 'error');
+            }
+          }
+        } else {
+          logMessage('No icons found in manifest', 'error');
+        }
+      } catch (error) {
+        logMessage(`Error checking manifest: ${error.message}`, 'error');
+      }
+    }
+
+    // Check service worker
+    async function checkServiceWorker() {
+      logMessage('Checking service worker...', 'info');
+      
+      if (!('serviceWorker' in navigator)) {
+        logMessage('Service Worker API not supported', 'error');
+        return;
+      }
+      
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        
+        if (registrations.length > 0) {
+          let swInfo = '<ul>';
+          for (const registration of registrations) {
+            swInfo += `<li>Scope: ${registration.scope}</li>`;
+            swInfo += `<li>State: ${registration.active ? 'active' : 'inactive'}</li>`;
+            swInfo += `<li>Updating: ${registration.installing ? 'yes' : 'no'}</li>`;
+            swInfo += `<li>URL: ${registration.active ? registration.active.scriptURL : 'N/A'}</li>`;
+            
+            logMessage(`Service worker registered with scope: ${registration.scope}`, 'success');
+          }
+          swInfo += '</ul>';
+          swDetails.innerHTML = swInfo;
+        } else {
+          swDetails.textContent = 'No service worker registrations found';
+          logMessage('No service worker registrations found', 'warning');
+        }
+      } catch (error) {
+        logMessage(`Error checking service worker: ${error.message}`, 'error');
+      }
+    }
+
+    // Unregister service workers
+    async function unregisterServiceWorkers() {
+      logMessage('Unregistering service workers...', 'info');
+      
+      if (!('serviceWorker' in navigator)) {
+        logMessage('Service Worker API not supported', 'error');
+        return;
+      }
+      
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        
+        if (registrations.length === 0) {
+          logMessage('No service workers to unregister', 'info');
+          return;
+        }
+        
+        for (const registration of registrations) {
+          await registration.unregister();
+          logMessage(`Unregistered service worker: ${registration.scope}`, 'success');
+        }
+        
+        swDetails.textContent = 'All service workers unregistered';
+      } catch (error) {
+        logMessage(`Error unregistering service workers: ${error.message}`, 'error');
+      }
+    }
+
+    // Clear storage
+    function clearStorage() {
+      logMessage('Clearing storage...', 'info');
+      
+      // Clear localStorage
+      try {
+        localStorage.clear();
+        logMessage('localStorage cleared', 'success');
+      } catch (error) {
+        logMessage(`Error clearing localStorage: ${error.message}`, 'error');
+      }
+      
+      // Clear sessionStorage
+      try {
+        sessionStorage.clear();
+        logMessage('sessionStorage cleared', 'success');
+      } catch (error) {
+        logMessage(`Error clearing sessionStorage: ${error.message}`, 'error');
+      }
+      
+      // Clear caches
+      if ('caches' in window) {
+        caches.keys().then(cacheNames => {
+          cacheNames.forEach(cacheName => {
+            caches.delete(cacheName);
+            logMessage(`Cache ${cacheName} deleted`, 'success');
+          });
+        });
+      } else {
+        logMessage('Cache API not supported', 'warning');
+      }
+    }
+
+    // Set up event listeners
+    installButton.addEventListener('click', installApp);
+    checkManifestButton.addEventListener('click', checkManifest);
+    checkServiceWorkerButton.addEventListener('click', checkServiceWorker);
+    unregisterServiceWorkersButton.addEventListener('click', unregisterServiceWorkers);
+    clearStorageButton.addEventListener('click', clearStorage);
+
+    // Listen for beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      
+      // Stash the event so it can be triggered later
+      deferredPrompt = e;
+      
+      // Update UI to show the install button
+      installButton.disabled = false;
+      
+      logMessage('beforeinstallprompt event fired, installation is available', 'success');
+    });
+
+    // Listen for appinstalled event
+    window.addEventListener('appinstalled', () => {
+      installStatus.textContent = 'App was installed successfully!';
+      installStatus.classList.add('success');
+      installButton.disabled = true;
+      deferredPrompt = null;
+      logMessage('App was installed successfully', 'success');
+    });
+
+    // Initial checks
+    checkIfInstalled();
+    checkRequirements();
+    
+    // Log page load
+    logMessage('PWA Installation Checker loaded', 'info');
+  </script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA Installation Guide</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#007bff">
+  <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ShopKeeper">
+  
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #007bff;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .alert {
+      background-color: #f8d7da;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .info {
+      background-color: #d1ecf1;
+      color: #0c5460;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    ol li, ul li {
+      margin-bottom: 10px;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>PWA Installation Guide</h1>
+  
+  <div class="info">
+    <strong>Note:</strong> This page provides instructions for installing the ShopKeeper PWA on your device.
+  </div>
+  
+  <div class="card">
+    <h2>Why isn't the PWA installable?</h2>
+    <p>There are several reasons why a PWA might not be installable:</p>
+    <ol>
+      <li><strong>Incognito Mode:</strong> Chrome and most browsers do not allow PWA installation in incognito/private browsing mode. If you're in incognito mode, please try again in a regular browsing window.</li>
+      <li><strong>Browser Support:</strong> Not all browsers support PWA installation. Chrome, Edge, and Samsung Internet have the best support for PWAs.</li>
+      <li><strong>Desktop vs. Mobile:</strong> The installation experience differs between desktop and mobile. On desktop, you'll see an install icon in the address bar, while on mobile, you might see an "Add to Home Screen" option in the browser menu.</li>
+      <li><strong>Already Installed:</strong> If you've already installed the PWA, the browser won't show the installation prompt again.</li>
+      <li><strong>Installation Criteria:</strong> Browsers have specific criteria for when they show the installation prompt. These include:
+        <ul>
+          <li>The site must be served over HTTPS (localhost is exempt)</li>
+          <li>The site must have a valid web manifest with required fields</li>
+          <li>The site must register a service worker with a fetch event handler</li>
+          <li>The user must have engaged with the site for a certain amount of time</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+  
+  <div class="card">
+    <h2>Installation Instructions</h2>
+    
+    <h3>Desktop (Chrome/Edge)</h3>
+    <ol>
+      <li>Open the ShopKeeper PWA in a <strong>non-incognito</strong> window</li>
+      <li>Look for the install icon in the address bar (it looks like a computer with a down arrow)</li>
+      <li>Click the install icon and follow the prompts</li>
+    </ol>
+    
+    <h3>Android (Chrome)</h3>
+    <ol>
+      <li>Open the ShopKeeper PWA in Chrome</li>
+      <li>Tap the menu button (three dots) in the top-right corner</li>
+      <li>Tap "Add to Home screen" or "Install app"</li>
+      <li>Follow the prompts to complete the installation</li>
+    </ol>
+    
+    <h3>iOS (Safari)</h3>
+    <ol>
+      <li>Open the ShopKeeper PWA in Safari</li>
+      <li>Tap the share button (square with an arrow) at the bottom of the screen</li>
+      <li>Scroll down and tap "Add to Home Screen"</li>
+      <li>Tap "Add" in the top-right corner</li>
+    </ol>
+  </div>
+  
+  <div class="card">
+    <h2>Troubleshooting</h2>
+    <p>If you're still having trouble installing the PWA, try these steps:</p>
+    <ol>
+      <li><strong>Clear Browser Cache:</strong> Clear your browser cache and cookies, then try again.</li>
+      <li><strong>Update Browser:</strong> Make sure you're using the latest version of your browser.</li>
+      <li><strong>Try Another Browser:</strong> If one browser doesn't work, try another (Chrome, Edge, or Firefox).</li>
+      <li><strong>Check for Extensions:</strong> Some browser extensions might interfere with PWA installation. Try disabling extensions and try again.</li>
+      <li><strong>Restart Browser:</strong> Sometimes simply restarting the browser can fix issues.</li>
+    </ol>
+  </div>
+  
+  <div class="card">
+    <h2>Manual Installation</h2>
+    <p>If the automatic installation doesn't work, you can try these manual methods:</p>
+    
+    <h3>Chrome</h3>
+    <ol>
+      <li>Open Chrome and navigate to <code>chrome://apps</code></li>
+      <li>Click on the "Install ShopKeeper" button if available</li>
+    </ol>
+    
+    <h3>Edge</h3>
+    <ol>
+      <li>Open Edge and navigate to <code>edge://apps</code></li>
+      <li>Look for ShopKeeper and click "Install" if available</li>
+    </ol>
+  </div>
+  
+  <script>
+    // Listen for beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent Chrome 67 and earlier from automatically showing the prompt
+      e.preventDefault();
+      
+      // Create a custom install button
+      const installButton = document.createElement('button');
+      installButton.textContent = 'Install ShopKeeper PWA';
+      installButton.style.display = 'block';
+      installButton.style.margin = '20px auto';
+      installButton.style.padding = '10px 20px';
+      installButton.style.backgroundColor = '#007bff';
+      installButton.style.color = 'white';
+      installButton.style.border = 'none';
+      installButton.style.borderRadius = '4px';
+      installButton.style.cursor = 'pointer';
+      installButton.style.fontSize = '16px';
+      
+      // Add the button to the page
+      document.body.insertBefore(installButton, document.body.firstChild);
+      
+      // Add success message
+      const successMessage = document.createElement('div');
+      successMessage.className = 'success';
+      successMessage.innerHTML = '<strong>Good news!</strong> This PWA is installable on your device. Click the button below to install it.';
+      document.body.insertBefore(successMessage, installButton);
+      
+      // Add event listener to the button
+      installButton.addEventListener('click', async () => {
+        // Show the installation prompt
+        e.prompt();
+        
+        // Wait for the user to respond to the prompt
+        const { outcome } = await e.userChoice;
+        console.log(`User response to the install prompt: ${outcome}`);
+        
+        if (outcome === 'accepted') {
+          installButton.textContent = 'Installation successful!';
+          installButton.disabled = true;
+        } else {
+          installButton.textContent = 'Installation cancelled. Try again?';
+        }
+      });
+    });
+    
+    // If no beforeinstallprompt event after 3 seconds, show a message
+    setTimeout(() => {
+      if (!document.querySelector('button')) {
+        const alertMessage = document.createElement('div');
+        alertMessage.className = 'alert';
+        alertMessage.innerHTML = '<strong>Note:</strong> This PWA is not installable in your current browser or environment. Please check the instructions below for troubleshooting.';
+        document.body.insertBefore(alertMessage, document.body.firstChild);
+      }
+    }, 3000);
+  </script>
+</body>
+</html>

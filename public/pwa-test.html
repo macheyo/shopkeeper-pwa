@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA Installation Test</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#007bff">
+  <link rel="icon" href="/icons/icon-192x192.png">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #007bff;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button:hover {
+      background-color: #0069d9;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    .status {
+      font-weight: bold;
+    }
+    .success {
+      color: green;
+    }
+    .warning {
+      color: orange;
+    }
+    .error {
+      color: red;
+    }
+    .info {
+      color: #007bff;
+    }
+  </style>
+</head>
+<body>
+  <h1>PWA Installation Test</h1>
+  
+  <div class="card">
+    <h2>PWA Status</h2>
+    <p>Display Mode: <span id="displayMode" class="status"></span></p>
+    <p>Service Worker: <span id="serviceWorkerStatus" class="status"></span></p>
+    <p>Install Prompt: <span id="installPromptStatus" class="status"></span></p>
+  </div>
+  
+  <div class="card">
+    <h2>Actions</h2>
+    <button id="installButton" disabled>Install App</button>
+    <button id="forceInstallButton">Force Install Test</button>
+    <button id="checkServiceWorker">Check Service Worker</button>
+    <button id="unregisterServiceWorker">Unregister Service Worker</button>
+    <button id="clearStorage">Clear Storage</button>
+    <button id="checkManifest">Check Manifest</button>
+  </div>
+  
+  <div class="card">
+    <h2>Logs</h2>
+    <pre id="logs"></pre>
+  </div>
+
+  <script>
+    // Log function
+    function log(message, type = 'info') {
+      const logsElement = document.getElementById('logs');
+      const timestamp = new Date().toLocaleTimeString();
+      logsElement.innerHTML = `<span class="${type}">[${timestamp}] ${message}</span>\n` + logsElement.innerHTML;
+    }
+
+    // Check display mode
+    function checkDisplayMode() {
+      const displayModeElement = document.getElementById('displayMode');
+      
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        displayModeElement.textContent = 'Standalone';
+        displayModeElement.className = 'status success';
+        log('App is running in standalone mode', 'success');
+      } else if (window.matchMedia('(display-mode: fullscreen)').matches) {
+        displayModeElement.textContent = 'Fullscreen';
+        displayModeElement.className = 'status success';
+        log('App is running in fullscreen mode', 'success');
+      } else if (window.matchMedia('(display-mode: minimal-ui)').matches) {
+        displayModeElement.textContent = 'Minimal UI';
+        displayModeElement.className = 'status success';
+        log('App is running in minimal-ui mode', 'success');
+      } else if ((navigator).standalone === true) {
+        displayModeElement.textContent = 'iOS Standalone';
+        displayModeElement.className = 'status success';
+        log('App is running in iOS standalone mode', 'success');
+      } else {
+        displayModeElement.textContent = 'Browser';
+        displayModeElement.className = 'status warning';
+        log('App is running in browser mode', 'warning');
+      }
+    }
+
+    // Check service worker
+    async function checkServiceWorker() {
+      const serviceWorkerStatusElement = document.getElementById('serviceWorkerStatus');
+      
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          
+          if (registrations.length > 0) {
+            serviceWorkerStatusElement.textContent = `Registered (${registrations.length})`;
+            serviceWorkerStatusElement.className = 'status success';
+            
+            registrations.forEach(reg => {
+              log(`Service Worker registered with scope: ${reg.scope}`, 'success');
+              if (reg.active) {
+                log(`Service Worker state: ${reg.active.state}`, 'info');
+              }
+            });
+          } else {
+            serviceWorkerStatusElement.textContent = 'Not Registered';
+            serviceWorkerStatusElement.className = 'status error';
+            log('No service worker registrations found', 'error');
+          }
+        } catch (error) {
+          serviceWorkerStatusElement.textContent = 'Error';
+          serviceWorkerStatusElement.className = 'status error';
+          log(`Error checking service worker: ${error.message}`, 'error');
+        }
+      } else {
+        serviceWorkerStatusElement.textContent = 'Not Supported';
+        serviceWorkerStatusElement.className = 'status error';
+        log('Service Worker is not supported in this browser', 'error');
+      }
+    }
+
+    // Unregister service workers
+    async function unregisterServiceWorkers() {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          
+          if (registrations.length > 0) {
+            for (const registration of registrations) {
+              await registration.unregister();
+              log(`Unregistered service worker with scope: ${registration.scope}`, 'info');
+            }
+            log('All service workers unregistered', 'success');
+            checkServiceWorker();
+          } else {
+            log('No service workers to unregister', 'warning');
+          }
+        } catch (error) {
+          log(`Error unregistering service workers: ${error.message}`, 'error');
+        }
+      }
+    }
+
+    // Clear storage
+    function clearStorage() {
+      try {
+        localStorage.clear();
+        log('Local storage cleared', 'success');
+        
+        if ('caches' in window) {
+          caches.keys().then(keyList => {
+            return Promise.all(keyList.map(key => {
+              log(`Deleting cache: ${key}`, 'info');
+              return caches.delete(key);
+            }));
+          }).then(() => {
+            log('All caches cleared', 'success');
+          });
+        }
+      } catch (error) {
+        log(`Error clearing storage: ${error.message}`, 'error');
+      }
+    }
+
+    // Handle install
+    let deferredPrompt;
+    const installButton = document.getElementById('installButton');
+    const installPromptStatusElement = document.getElementById('installPromptStatus');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      
+      // Stash the event so it can be triggered later
+      deferredPrompt = e;
+      
+      // Update UI to notify the user they can install the PWA
+      installButton.disabled = false;
+      installPromptStatusElement.textContent = 'Available';
+      installPromptStatusElement.className = 'status success';
+      
+      log('Install prompt available', 'success');
+    });
+
+    installButton.addEventListener('click', async () => {
+      if (!deferredPrompt) {
+        log('No installation prompt available', 'error');
+        return;
+      }
+      
+      // Show the install prompt
+      deferredPrompt.prompt();
+      
+      // Wait for the user to respond to the prompt
+      const { outcome } = await deferredPrompt.userChoice;
+      
+      // We've used the prompt, and can't use it again, throw it away
+      deferredPrompt = null;
+      installButton.disabled = true;
+      
+      if (outcome === 'accepted') {
+        installPromptStatusElement.textContent = 'Accepted';
+        log('User accepted the install prompt', 'success');
+      } else {
+        installPromptStatusElement.textContent = 'Dismissed';
+        log('User dismissed the install prompt', 'warning');
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      // Hide the app-provided install promotion
+      installButton.disabled = true;
+      installPromptStatusElement.textContent = 'Installed';
+      installPromptStatusElement.className = 'status success';
+      
+      // Clear the deferredPrompt
+      deferredPrompt = null;
+      
+      log('PWA was installed', 'success');
+      
+      // Optionally, send analytics event to indicate successful install
+      setTimeout(() => {
+        checkDisplayMode();
+      }, 1000);
+    });
+
+    // Force install test
+    document.getElementById('forceInstallButton').addEventListener('click', () => {
+      log('Force install test initiated', 'info');
+      
+      // Create a custom install button in the UI
+      const customInstallArea = document.createElement('div');
+      customInstallArea.style.position = 'fixed';
+      customInstallArea.style.bottom = '20px';
+      customInstallArea.style.right = '20px';
+      customInstallArea.style.zIndex = '1000';
+      
+      const customInstallButton = document.createElement('button');
+      customInstallButton.textContent = 'Install App';
+      customInstallButton.style.backgroundColor = '#007bff';
+      customInstallButton.style.color = 'white';
+      customInstallButton.style.border = 'none';
+      customInstallButton.style.padding = '10px 15px';
+      customInstallButton.style.borderRadius = '50%';
+      customInstallButton.style.width = '60px';
+      customInstallButton.style.height = '60px';
+      customInstallButton.style.cursor = 'pointer';
+      customInstallButton.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+      
+      customInstallButton.addEventListener('click', () => {
+        log('Custom install button clicked', 'info');
+        // Try to trigger the PWA install prompt component
+        window.dispatchEvent(new Event('pwa-install-prompt'));
+      });
+      
+      customInstallArea.appendChild(customInstallButton);
+      document.body.appendChild(customInstallArea);
+      
+      log('Custom install button added to the page', 'success');
+    });
+    
+    // Check manifest
+    document.getElementById('checkManifest').addEventListener('click', async () => {
+      try {
+        const response = await fetch('/manifest.json');
+        if (response.ok) {
+          const manifest = await response.json();
+          log(`Manifest loaded successfully: ${manifest.name}`, 'success');
+          log(`Icons: ${manifest.icons.length}`, 'info');
+          log(`Display mode: ${manifest.display}`, 'info');
+          log(`Start URL: ${manifest.start_url}`, 'info');
+          
+          // Check if manifest meets installability criteria
+          let issues = [];
+          
+          if (!manifest.name) issues.push('Missing name');
+          if (!manifest.short_name) issues.push('Missing short_name');
+          if (!manifest.icons || manifest.icons.length === 0) issues.push('Missing icons');
+          if (!manifest.start_url) issues.push('Missing start_url');
+          if (!manifest.display || !['fullscreen', 'standalone', 'minimal-ui'].includes(manifest.display)) {
+            issues.push('Invalid display mode');
+          }
+          
+          if (issues.length > 0) {
+            log(`Manifest issues: ${issues.join(', ')}`, 'warning');
+          } else {
+            log('Manifest meets basic installability criteria', 'success');
+          }
+        } else {
+          log(`Failed to load manifest: ${response.status} ${response.statusText}`, 'error');
+        }
+      } catch (error) {
+        log(`Error checking manifest: ${error.message}`, 'error');
+      }
+    });
+
+    // Register event listeners
+    document.getElementById('checkServiceWorker').addEventListener('click', checkServiceWorker);
+    document.getElementById('unregisterServiceWorker').addEventListener('click', unregisterServiceWorkers);
+    document.getElementById('clearStorage').addEventListener('click', clearStorage);
+    
+    // Listen for custom PWA install prompt event
+    window.addEventListener('pwa-install-prompt', () => {
+      log('Custom PWA install prompt event received', 'info');
+      
+      // Create a simulated beforeinstallprompt event
+      const simulatedEvent = {
+        preventDefault: () => {},
+        prompt: async () => {
+          log('Simulated install prompt shown', 'info');
+          return Promise.resolve();
+        },
+        userChoice: Promise.resolve({ outcome: 'accepted', platform: 'web' })
+      };
+      
+      // Update UI
+      installPromptStatusElement.textContent = 'Simulated';
+      installPromptStatusElement.className = 'status info';
+      
+      // Show a custom install dialog
+      const dialog = document.createElement('div');
+      dialog.style.position = 'fixed';
+      dialog.style.top = '50%';
+      dialog.style.left = '50%';
+      dialog.style.transform = 'translate(-50%, -50%)';
+      dialog.style.backgroundColor = 'white';
+      dialog.style.padding = '20px';
+      dialog.style.borderRadius = '8px';
+      dialog.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+      dialog.style.zIndex = '2000';
+      dialog.style.maxWidth = '80%';
+      dialog.style.width = '400px';
+      
+      dialog.innerHTML = `
+        <h3 style="margin-top: 0;">Install ShopKeeper</h3>
+        <p>Would you like to install this app on your device?</p>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+          <button id="cancelInstall" style="padding: 8px 16px; border: 1px solid #ddd; background: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+          <button id="confirmInstall" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Install</button>
+        </div>
+      `;
+      
+      document.body.appendChild(dialog);
+      
+      // Handle dialog buttons
+      document.getElementById('cancelInstall').addEventListener('click', () => {
+        log('User cancelled simulated install', 'warning');
+        document.body.removeChild(dialog);
+      });
+      
+      document.getElementById('confirmInstall').addEventListener('click', () => {
+        log('User accepted simulated install', 'success');
+        document.body.removeChild(dialog);
+        
+        // Show installation success message
+        const successMessage = document.createElement('div');
+        successMessage.style.position = 'fixed';
+        successMessage.style.bottom = '20px';
+        successMessage.style.left = '50%';
+        successMessage.style.transform = 'translateX(-50%)';
+        successMessage.style.backgroundColor = '#4CAF50';
+        successMessage.style.color = 'white';
+        successMessage.style.padding = '10px 20px';
+        successMessage.style.borderRadius = '4px';
+        successMessage.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+        successMessage.style.zIndex = '2000';
+        successMessage.textContent = 'App installed successfully!';
+        
+        document.body.appendChild(successMessage);
+        
+        // Remove success message after 3 seconds
+        setTimeout(() => {
+          document.body.removeChild(successMessage);
+        }, 3000);
+        
+        // Trigger appinstalled event
+        window.dispatchEvent(new Event('appinstalled'));
+      });
+    });
+
+    // Initialize
+    window.addEventListener('load', () => {
+      log('Page loaded', 'info');
+      checkDisplayMode();
+      checkServiceWorker();
+      
+      // Check if already installed
+      if (window.matchMedia('(display-mode: standalone)').matches || 
+          window.matchMedia('(display-mode: fullscreen)').matches || 
+          window.matchMedia('(display-mode: minimal-ui)').matches || 
+          (navigator).standalone === true) {
+        installPromptStatusElement.textContent = 'Already Installed';
+        installPromptStatusElement.className = 'status success';
+      } else {
+        installPromptStatusElement.textContent = 'Not Available';
+        installPromptStatusElement.className = 'status warning';
+      }
+      
+      // Register service worker if needed
+      if ('serviceWorker' in navigator) {
+        log('Service Worker API is supported', 'info');
+        
+        // Check if already controlled
+        if (navigator.serviceWorker.controller) {
+          log(`Already controlled by a service worker: ${navigator.serviceWorker.controller.scriptURL}`, 'info');
+        } else {
+          log('Not currently controlled by a service worker', 'warning');
+        }
+        
+        // Force register regardless of controller status
+        navigator.serviceWorker.register('/sw.js', { 
+          scope: '/',
+          updateViaCache: 'none',
+          type: 'classic'
+        })
+          .then(registration => {
+            log(`Service worker registered with scope: ${registration.scope}`, 'success');
+            
+            // Log the state of the service worker
+            if (registration.installing) {
+              log('Service worker installing', 'info');
+            } else if (registration.waiting) {
+              log('Service worker waiting', 'info');
+            } else if (registration.active) {
+              log('Service worker active', 'success');
+            }
+            
+            // Force update
+            registration.update()
+              .then(() => log('Service worker update triggered', 'info'))
+              .catch(err => log(`Service worker update error: ${err.message}`, 'error'));
+              
+            // Check again after a short delay
+            setTimeout(() => {
+              checkServiceWorker();
+            }, 1000);
+          })
+          .catch(error => {
+            log(`Service worker registration failed: ${error.message}`, 'error');
+            log(`Error details: ${error.toString()}`, 'error');
+            
+            // Try with a different approach
+            log('Trying alternative registration approach...', 'info');
+            navigator.serviceWorker.register('/sw.js')
+              .then(reg => log('Alternative registration successful', 'success'))
+              .catch(err => log(`Alternative registration failed: ${err.message}`, 'error'));
+          });
+      } else {
+        log('Service Worker API is not supported in this browser', 'error');
+      }
+    });
+  </script>
+</body>
+</html>
