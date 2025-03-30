@@ -1,10 +1,11 @@
 "use client";
 
 import React from "react";
-import { Title, Button, Group, Text, Paper, Box } from "@mantine/core";
+import { Title, Group, Text, Paper, Box } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import CollapsibleFab from "@/components/CollapsibleFab";
 
 const ProductManager = dynamic(() => import("@/components/ProductManager"), {
   ssr: false,
@@ -18,13 +19,12 @@ export default function ProductsPage() {
       <Box mb="xl">
         <Group justify="space-between" align="center">
           <Title order={2}>Products</Title>
-          <Button
-            leftSection={<IconPlus size={16} />}
+          <CollapsibleFab
+            icon={<IconPlus size={16} />}
+            text="Add Product"
             onClick={() => router.push("/products/add")}
             color="green"
-          >
-            Add Product
-          </Button>
+          />
         </Group>
         <Text c="dimmed" mt="xs">
           Manage your inventory, add new products, and update prices

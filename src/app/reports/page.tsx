@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import {
   Title,
-  Button,
   Group,
   Text,
   Paper,
@@ -14,6 +13,7 @@ import {
   Card,
   Badge,
   Textarea,
+  Button,
 } from "@mantine/core";
 import {
   IconSend,
@@ -22,6 +22,7 @@ import {
   IconCheck,
   IconBrandWhatsapp, // Changed from IconWhatsapp to IconBrandWhatsapp
 } from "@tabler/icons-react";
+import CollapsibleFab from "@/components/CollapsibleFab";
 // Removed unused useRouter import
 import {
   generateDailyReport,
@@ -127,14 +128,12 @@ export default function ReportsPage() {
       <Box mb="xl">
         <Group justify="space-between" align="center">
           <Title order={2}>Reports</Title>
-          <Button
-            variant="light"
-            leftSection={<IconRefresh size={16} />}
+          <CollapsibleFab
+            icon={<IconRefresh size={16} />}
+            text="Generate Report"
             onClick={handleGenerateReport}
-            loading={loading}
-          >
-            Generate Report
-          </Button>
+            color="blue"
+          />
         </Group>
         <Text c="dimmed" mt="xs">
           Generate and send daily sales reports via WhatsApp

@@ -1,9 +1,10 @@
 "use client";
 
-import { Title, Button, Group, Text, Paper, Box } from "@mantine/core";
+import { Title, Group, Text, Paper, Box } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import SalesList from "@/components/SalesList";
+import CollapsibleFab from "@/components/CollapsibleFab";
 
 export default function SalesPage() {
   const router = useRouter();
@@ -13,13 +14,12 @@ export default function SalesPage() {
       <Box mb="xl">
         <Group justify="space-between" align="center">
           <Title order={2}>Sales</Title>
-          <Button
-            leftSection={<IconPlus size={16} />}
+          <CollapsibleFab
+            icon={<IconPlus size={16} />}
+            text="New Sale"
             onClick={() => router.push("/sales/new")}
             color="blue"
-          >
-            New Sale
-          </Button>
+          />
         </Group>
         <Text c="dimmed" mt="xs">
           Record and manage your sales transactions
