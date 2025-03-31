@@ -423,45 +423,49 @@ export default function NewSalePage() {
       {cartItems.length > 0 && (
         <Paper shadow="md" p="lg" withBorder mb="lg">
           <Title order={3} mb="md">
-            Cart Items
+            Cart Items ({cartItems.length})
           </Title>
-          <Table striped withTableBorder mb="md">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Product</Table.Th>
-                <Table.Th>Quantity</Table.Th>
-                <Table.Th>Price</Table.Th>
-                <Table.Th>Total</Table.Th>
-                <Table.Th>Action</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {cartItems.map((item, index) => (
-                <Table.Tr key={`${item.productId}_${index}`}>
-                  <Table.Td>{item.productName}</Table.Td>
-                  <Table.Td>{item.qty}</Table.Td>
-                  <Table.Td>{formatMoney(item.price)}</Table.Td>
-                  <Table.Td>{formatMoney(item.total)}</Table.Td>
-                  <Table.Td>
-                    <ActionIcon
-                      color="red"
-                      onClick={() => handleRemoveFromCart(index)}
-                    >
-                      <IconTrash size="1.125rem" />
-                    </ActionIcon>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-            <Table.Tfoot>
-              <Table.Tr>
-                <Table.Th colSpan={3} style={{ textAlign: "right" }}>
-                  Total:
-                </Table.Th>
-                <Table.Th colSpan={2}>{formatMoney(totalPrice)}</Table.Th>
-              </Table.Tr>
-            </Table.Tfoot>
-          </Table>
+
+          {/* Mobile-friendly cart items list */}
+          <Stack gap="md" mb="lg">
+            {cartItems.map((item, index) => (
+              <Card key={`${item.productId}_${index}`} withBorder p="sm">
+                <Group justify="space-between" mb="xs">
+                  <Text fw={700}>{item.productName}</Text>
+                  <ActionIcon
+                    color="red"
+                    variant="light"
+                    onClick={() => handleRemoveFromCart(index)}
+                  >
+                    <IconTrash size="1.125rem" />
+                  </ActionIcon>
+                </Group>
+                <Group justify="space-between" mb="xs">
+                  <Text size="sm">Quantity:</Text>
+                  <Text fw={500}>{item.qty}</Text>
+                </Group>
+                <Group justify="space-between" mb="xs">
+                  <Text size="sm">Price:</Text>
+                  <Text>{formatMoney(item.price)}</Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm">Total:</Text>
+                  <Text fw={700}>{formatMoney(item.total)}</Text>
+                </Group>
+              </Card>
+            ))}
+          </Stack>
+
+          <Card withBorder p="md" mb="md">
+            <Group justify="space-between">
+              <Text fw={700} size="lg">
+                Total:
+              </Text>
+              <Text fw={700} size="lg">
+                {formatMoney(totalPrice)}
+              </Text>
+            </Group>
+          </Card>
 
           {/* Payment Section */}
           <Divider label="Payment" labelPosition="center" size="md" my="lg" />
@@ -475,6 +479,25 @@ export default function NewSalePage() {
             onChange={(value) => {
               setCashReceivedMoney(value);
               form.setFieldValue("cashReceived", value.amount);
+
+              // Show expected amount in base currency when currency changes
+              if (value.currency !== totalPrice.currency) {
+                // Calculate equivalent in base currency
+                const valueInBaseCurrency =
+                  value.currency === BASE_CURRENCY
+                    ? totalPrice.amount
+                    : totalPrice.amount / totalPrice.exchangeRate;
+
+                // Calculate expected amount in selected currency
+                const expectedAmount = valueInBaseCurrency * value.exchangeRate;
+
+                // Update the amount to the expected amount
+                setCashReceivedMoney({
+                  ...value,
+                  amount: expectedAmount,
+                });
+                form.setFieldValue("cashReceived", expectedAmount);
+              }
             }}
           />
 
@@ -670,7 +693,7 @@ export default function NewSalePage() {
                   style={{ flex: 2 }}
                   h={60}
                 >
-                  Add to Cart
+                  Cart
                 </Button>
               </Group>
             </Stack>
