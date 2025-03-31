@@ -132,7 +132,7 @@ export default function ReportsPage() {
             icon={<IconRefresh size={16} />}
             text="Generate Report"
             onClick={handleGenerateReport}
-            color="blue"
+            color="violet"
           />
         </Group>
         <Text c="dimmed" mt="xs">
@@ -170,7 +170,7 @@ export default function ReportsPage() {
         <Stack gap="md">
           <Group>
             <Text fw={500}>Pending Sales:</Text>
-            <Badge color="blue" size="lg">
+            <Badge color="violet" size="lg">
               {pendingSales.length}
             </Badge>
           </Group>
@@ -216,6 +216,7 @@ export default function ReportsPage() {
                 variant="light"
                 onClick={handleGenerateReport}
                 loading={loading}
+                color="violet"
               >
                 Generate Now
               </Button>

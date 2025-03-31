@@ -97,6 +97,16 @@ export default function MoneyInput({
     }
   };
 
+  // Handle input focus to select all text
+  const handleInputFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+    event.target.select();
+  };
+
+  // Handle input click to select all text
+  const handleInputClick = (event: React.MouseEvent<HTMLInputElement>) => {
+    event.currentTarget.select();
+  };
+
   return (
     <Stack gap="xs">
       {label && (
@@ -129,6 +139,8 @@ export default function MoneyInput({
             thousandSeparator=","
             decimalScale={2}
             fixedDecimalScale
+            onFocus={handleInputFocus}
+            onClick={handleInputClick}
             {...props}
           />
 
