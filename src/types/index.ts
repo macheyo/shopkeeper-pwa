@@ -1,3 +1,5 @@
+import { Money } from "./money";
+
 // Define the structure for a Product document stored in PouchDB
 // Explicitly include _id and _rev for clarity, though they come from PouchDB.Core.Document
 export interface ProductDoc extends PouchDB.Core.Document<object> {
@@ -6,7 +8,7 @@ export interface ProductDoc extends PouchDB.Core.Document<object> {
   type: "product";
   code: string; // unique
   name: string;
-  price: number;
+  price: Money; // Using Money type instead of number
   barcode?: string; // optional
   createdAt: string; // ISO 8601 format
   updatedAt: string; // ISO 8601 format
@@ -20,10 +22,10 @@ export interface SaleDoc extends PouchDB.Core.Document<object> {
   type: "sale";
   productId: string; // Corresponds to ProductDoc._id
   qty: number;
-  price: number; // Price at the time of sale
-  total: number;
-  cashReceived?: number; // Optional for non-cash or later payment
-  change?: number; // Optional
+  price: Money; // Price at the time of sale using Money type
+  total: Money; // Total using Money type
+  cashReceived?: Money; // Optional for non-cash or later payment
+  change?: Money; // Optional
   timestamp: string; // ISO 8601 format
   status: "pending" | "synced" | "failed"; // Sync status
 }

@@ -1,5 +1,6 @@
 import { salesDB, productsDB } from "./databases";
 import { SaleDoc, ProductDoc } from "@/types";
+import { Money } from "@/types/money";
 
 /**
  * Generates a URL-encoded daily sales report string for WhatsApp.
@@ -72,9 +73,9 @@ export async function generateDailyReport(): Promise<string> {
     const aggregatedSales: {
       [productId: string]: {
         qty: number;
-        total: number;
+        total: Money;
         code: string;
-        price: number;
+        price: Money;
       };
     } = {};
 
@@ -84,28 +85,32 @@ export async function generateDailyReport(): Promise<string> {
         if (!aggregatedSales[sale.productId]) {
           aggregatedSales[sale.productId] = {
             qty: 0,
-            total: 0,
+            total: {
+              amount: 0,
+              currency: sale.total.currency,
+              exchangeRate: sale.total.exchangeRate,
+            },
             code: product.code,
             price: product.price,
           };
         }
         aggregatedSales[sale.productId].qty += sale.qty;
-        aggregatedSales[sale.productId].total += sale.total;
-        totalSalesValue += sale.total;
+        aggregatedSales[sale.productId].total.amount += sale.total.amount;
+        totalSalesValue += sale.total.amount;
       } else {
         console.warn(
           `Product details not found for productId: ${sale.productId} in sale ${sale._id}`
         );
         // Optionally include a line in the report indicating missing product data
-        report += `UNKNOWN_PRODUCT (ID: ${sale.productId}) x${sale.qty} = ${sale.total}\n`;
-        totalSalesValue += sale.total;
+        report += `UNKNOWN_PRODUCT (ID: ${sale.productId}) x${sale.qty} = ${sale.total.amount}\n`;
+        totalSalesValue += sale.total.amount;
       }
     }
 
     // Add aggregated sales to the report
     for (const productId in aggregatedSales) {
       const saleSummary = aggregatedSales[productId];
-      report += `${saleSummary.code} x${saleSummary.qty} @${saleSummary.price} = ${saleSummary.total}\n`;
+      report += `${saleSummary.code} x${saleSummary.qty} @${saleSummary.price.amount} = ${saleSummary.total.amount}\n`;
     }
 
     // TODO: Add Cash Received / Change summary if needed, requires fetching more sale details or storing it differently

@@ -28,6 +28,8 @@ import {
 import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
 import { ProductDoc } from "@/types";
+import { formatMoney, createMoney, BASE_CURRENCY } from "@/types/money";
+import MoneyInput from "@/components/MoneyInput";
 import dynamic from "next/dynamic";
 
 const BarcodeScanner = dynamic(() => import("@/components/BarcodeScanner"), {
@@ -58,11 +60,42 @@ export default function NewSalePage() {
     },
   });
 
+  // State for cash received money input
+  const [cashReceivedMoney, setCashReceivedMoney] = useState({
+    amount: 0,
+    currency: BASE_CURRENCY,
+    exchangeRate: 1,
+  });
+
   // Calculate derived values
   const totalPrice = selectedProduct
-    ? selectedProduct.price * form.values.quantity
-    : 0;
-  const change = form.values.cashReceived - totalPrice;
+    ? {
+        ...selectedProduct.price,
+        amount: selectedProduct.price.amount * form.values.quantity,
+      }
+    : createMoney(0);
+
+  // Update cash received money when product is selected
+  useEffect(() => {
+    if (selectedProduct) {
+      setCashReceivedMoney({
+        amount: selectedProduct.price.amount * form.values.quantity,
+        currency: selectedProduct.price.currency,
+        exchangeRate: selectedProduct.price.exchangeRate,
+      });
+      form.setFieldValue(
+        "cashReceived",
+        selectedProduct.price.amount * form.values.quantity
+      );
+    }
+  }, [selectedProduct, form.values.quantity]);
+
+  const change = selectedProduct
+    ? {
+        ...selectedProduct.price,
+        amount: form.values.cashReceived - totalPrice.amount,
+      }
+    : createMoney(0);
 
   // Fetch all products on mount
   useEffect(() => {
@@ -111,7 +144,7 @@ export default function NewSalePage() {
     // Reset quantity to 1 when selecting a new product
     form.setFieldValue("quantity", 1);
     // Set cash received to the product price as a starting point
-    form.setFieldValue("cashReceived", product.price);
+    form.setFieldValue("cashReceived", product.price.amount);
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
@@ -172,7 +205,7 @@ export default function NewSalePage() {
         qty: form.values.quantity,
         price: selectedProduct.price,
         total: totalPrice,
-        cashReceived: form.values.cashReceived,
+        cashReceived: cashReceivedMoney,
         change: change,
         timestamp: now.toISOString(),
         status: "pending", // Will be synced later via WhatsApp
@@ -304,7 +337,7 @@ export default function NewSalePage() {
                         <Text size="md">Code: {product.code}</Text>
                       </div>
                       <Text fw={700} size="xl">
-                        {product.price}
+                        {formatMoney(product.price)}
                       </Text>
                     </Group>
                   </Card>
@@ -340,7 +373,7 @@ export default function NewSalePage() {
                 Unit Price:
               </Text>
               <Text fw={700} size="xl">
-                {selectedProduct.price}
+                {formatMoney(selectedProduct.price)}
               </Text>
             </Group>
           </Card>
@@ -363,16 +396,20 @@ export default function NewSalePage() {
                   Total Price:
                 </Text>
                 <Text fw={700} size="xl">
-                  {totalPrice}
+                  {formatMoney(totalPrice)}
                 </Text>
               </Group>
 
-              <NumberInput
+              <MoneyInput
                 label="Cash Received"
                 description="Amount of cash given by customer"
                 min={0}
                 size="xl"
-                {...form.getInputProps("cashReceived")}
+                value={cashReceivedMoney}
+                onChange={(value) => {
+                  setCashReceivedMoney(value);
+                  form.setFieldValue("cashReceived", value.amount);
+                }}
               />
 
               {form.values.cashReceived > 0 && (
@@ -380,8 +417,12 @@ export default function NewSalePage() {
                   <Text fw={700} size="xl">
                     Change:
                   </Text>
-                  <Text fw={700} c={change >= 0 ? "green" : "red"} size="xl">
-                    {change}
+                  <Text
+                    fw={700}
+                    c={change.amount >= 0 ? "green" : "red"}
+                    size="xl"
+                  >
+                    {formatMoney(change)}
                   </Text>
                 </Group>
               )}
@@ -402,7 +443,9 @@ export default function NewSalePage() {
                   onClick={handleSaveSale}
                   loading={loading}
                   disabled={
-                    !selectedProduct || form.values.quantity <= 0 || change < 0
+                    !selectedProduct ||
+                    form.values.quantity <= 0 ||
+                    change.amount < 0
                   }
                   size="xl"
                   style={{ flex: 2 }}

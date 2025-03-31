@@ -14,17 +14,8 @@ import {
 } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { getProductsDB } from "@/lib/databases";
-
-// Product type
-interface ProductDoc {
-  _id?: string;
-  _rev?: string;
-  type: string;
-  name: string;
-  code: string;
-  price: string;
-  barcode?: string;
-}
+import { ProductDoc } from "@/types";
+import { formatMoney, createMoney, BASE_CURRENCY } from "@/types/money";
 
 // Mock data for fallback
 const mockProducts: ProductDoc[] = [
@@ -34,8 +25,10 @@ const mockProducts: ProductDoc[] = [
     type: "product",
     name: "Product 1",
     code: "P001",
-    price: "$10.99",
+    price: createMoney(10.99, BASE_CURRENCY, 1),
     barcode: "123456789",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     _id: "product-2",
@@ -43,8 +36,10 @@ const mockProducts: ProductDoc[] = [
     type: "product",
     name: "Product 2",
     code: "P002",
-    price: "$24.99",
+    price: createMoney(24.99, BASE_CURRENCY, 1),
     barcode: "987654321",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     _id: "product-3",
@@ -52,7 +47,9 @@ const mockProducts: ProductDoc[] = [
     type: "product",
     name: "Product 3",
     code: "P003",
-    price: "$5.99",
+    price: createMoney(5.99, BASE_CURRENCY, 1),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 ];
 
@@ -197,7 +194,7 @@ export default function ProductManager() {
                 >
                   <Table.Td>{product.code}</Table.Td>
                   <Table.Td>{product.name}</Table.Td>
-                  <Table.Td>{product.price}</Table.Td>
+                  <Table.Td>{formatMoney(product.price)}</Table.Td>
                   <Table.Td>{product.barcode || "N/A"}</Table.Td>
                   <Table.Td>
                     <Button
@@ -236,7 +233,7 @@ export default function ProductManager() {
                     {product.name}
                   </Text>
                   <Text fw={700} size="lg">
-                    {product.price}
+                    {formatMoney(product.price)}
                   </Text>
                 </Group>
                 <Text size="md" mb="xs">

@@ -6,7 +6,6 @@ import {
   Button,
   Group,
   TextInput,
-  NumberInput,
   Paper,
   Stack,
   Text,
@@ -14,6 +13,8 @@ import {
   Divider,
   Alert,
 } from "@mantine/core";
+import { BASE_CURRENCY } from "@/types/money";
+import MoneyInput from "@/components/MoneyInput";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
@@ -32,16 +33,19 @@ export default function AddProductPage() {
   const [success, setSuccess] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
+  const [moneyValue, setMoneyValue] = useState({
+    amount: 0,
+    currency: BASE_CURRENCY,
+    exchangeRate: 1,
+  });
+
   const form = useForm({
     initialValues: {
-      code: "",
       name: "",
       price: 0,
       barcode: "",
     },
     validate: {
-      code: (value: string) =>
-        value.trim().length > 0 ? null : "Product code is required",
       name: (value: string) =>
         value.trim().length > 0 ? null : "Product name is required",
       price: (value: number) =>
@@ -57,29 +61,23 @@ export default function AddProductPage() {
     try {
       const productsDB = await getProductsDB();
 
-      // Check if product code already exists
-      const existingProducts = await productsDB.find({
-        selector: { code: values.code, type: "product" },
-      });
-
-      if (existingProducts.docs.length > 0) {
-        setError(
-          `Product code "${values.code}" already exists. Please use a unique code.`
-        );
-        setLoading(false);
-        return;
-      }
+      // Generate a unique product code
+      const timestamp = Date.now();
+      const randomPart = Math.floor(Math.random() * 1000)
+        .toString()
+        .padStart(3, "0");
+      const generatedCode = `P${timestamp.toString().slice(-6)}${randomPart}`;
 
       // Create new product document
       const now = new Date().toISOString();
-      const productId = `prod_${Date.now()}`;
+      const productId = `prod_${timestamp}`;
 
       await productsDB.put({
         _id: productId,
         type: "product",
-        code: values.code.toUpperCase(), // Store codes in uppercase for consistency
+        code: generatedCode.toUpperCase(), // Store codes in uppercase for consistency
         name: values.name,
-        price: values.price,
+        price: moneyValue,
         barcode: values.barcode || undefined, // Don't store empty strings
         createdAt: now,
         updatedAt: now,
@@ -158,15 +156,6 @@ export default function AddProductPage() {
         <form onSubmit={form.onSubmit(handleSubmit)}>
           <Stack gap="lg">
             <TextInput
-              label="Product Code"
-              description="A unique identifier for this product (e.g., RIC500)"
-              placeholder="Enter product code"
-              required
-              size="lg"
-              {...form.getInputProps("code")}
-            />
-
-            <TextInput
               label="Product Name"
               description="The name of the product"
               placeholder="Enter product name"
@@ -175,14 +164,15 @@ export default function AddProductPage() {
               {...form.getInputProps("name")}
             />
 
-            <NumberInput
+            <MoneyInput
               label="Price"
               description="The selling price of the product"
               placeholder="0"
               min={0}
               required
               size="lg"
-              {...form.getInputProps("price")}
+              value={moneyValue}
+              onChange={setMoneyValue}
             />
 
             <Divider
@@ -239,7 +229,7 @@ export default function AddProductPage() {
                 style={{ flex: 2 }}
                 h={60}
               >
-                Save Product
+                Save
               </Button>
             </Group>
           </Stack>

@@ -14,6 +14,7 @@ import {
 import { IconAlertCircle, IconPlus } from "@tabler/icons-react";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
 import { SaleDoc, ProductDoc } from "@/types";
+import { formatMoney } from "@/types/money";
 import { useRouter } from "next/navigation";
 
 export default function SalesList() {
@@ -211,8 +212,8 @@ export default function SalesList() {
                   <Table.Td>{formatDate(sale.timestamp)}</Table.Td>
                   <Table.Td>{getProductName(sale.productId)}</Table.Td>
                   <Table.Td>{sale.qty}</Table.Td>
-                  <Table.Td>{sale.price}</Table.Td>
-                  <Table.Td>{sale.total}</Table.Td>
+                  <Table.Td>{formatMoney(sale.price)}</Table.Td>
+                  <Table.Td>{formatMoney(sale.total)}</Table.Td>
                   <Table.Td>
                     <Badge
                       color={sale.status === "synced" ? "green" : "blue"}
