@@ -1,6 +1,6 @@
 import { salesDB, productsDB } from "./databases";
 import { SaleDoc, ProductDoc } from "@/types";
-import { Money } from "@/types/money";
+import { Money, formatMoney } from "@/types/money";
 
 /**
  * Generates a URL-encoded daily sales report string for WhatsApp.
@@ -102,7 +102,9 @@ export async function generateDailyReport(): Promise<string> {
           `Product details not found for productId: ${sale.productId} in sale ${sale._id}`
         );
         // Optionally include a line in the report indicating missing product data
-        report += `UNKNOWN_PRODUCT (ID: ${sale.productId}) x${sale.qty} = ${sale.total.amount}\n`;
+        report += `UNKNOWN_PRODUCT (ID: ${sale.productId}) x${
+          sale.qty
+        } = ${formatMoney(sale.total)}\n`;
         totalSalesValue += sale.total.amount;
       }
     }
@@ -110,11 +112,17 @@ export async function generateDailyReport(): Promise<string> {
     // Add aggregated sales to the report
     for (const productId in aggregatedSales) {
       const saleSummary = aggregatedSales[productId];
-      report += `${saleSummary.code} x${saleSummary.qty} @${saleSummary.price.amount} = ${saleSummary.total.amount}\n`;
+      report += `${saleSummary.code} x${saleSummary.qty} @${formatMoney(
+        saleSummary.price
+      )} = ${formatMoney(saleSummary.total)}\n`;
     }
 
     // TODO: Add Cash Received / Change summary if needed, requires fetching more sale details or storing it differently
-    report += `TOTAL: ${totalSalesValue}`;
+    report += `TOTAL: ${formatMoney({
+      amount: totalSalesValue,
+      currency: "THC",
+      exchangeRate: 1,
+    })}`;
 
     console.log("Generated Report:", report);
     return encodeURIComponent(report);

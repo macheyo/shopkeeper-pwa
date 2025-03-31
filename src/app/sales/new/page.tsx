@@ -90,12 +90,61 @@ export default function NewSalePage() {
     }
   }, [selectedProduct, form.values.quantity]);
 
-  const change = selectedProduct
-    ? {
-        ...selectedProduct.price,
-        amount: form.values.cashReceived - totalPrice.amount,
-      }
-    : createMoney(0);
+  // Convert cash received to product currency for comparison
+  const convertCashToProductCurrency = () => {
+    if (!selectedProduct) return 0;
+
+    // If currencies match, no conversion needed
+    if (cashReceivedMoney.currency === totalPrice.currency) {
+      return cashReceivedMoney.amount;
+    }
+
+    // Convert to base currency first (if not already in base currency)
+    const valueInBaseCurrency =
+      cashReceivedMoney.currency === BASE_CURRENCY
+        ? cashReceivedMoney.amount
+        : cashReceivedMoney.amount / cashReceivedMoney.exchangeRate;
+
+    // Then convert from base currency to product currency
+    return valueInBaseCurrency * totalPrice.exchangeRate;
+  };
+
+  // Check if payment is sufficient
+  const isPaymentSufficient = () => {
+    if (!selectedProduct) return false;
+
+    // Convert cash received to product currency for comparison
+    const cashReceivedInProductCurrency = convertCashToProductCurrency();
+
+    // Check if payment is sufficient
+    return cashReceivedInProductCurrency >= totalPrice.amount;
+  };
+
+  // Calculate change in the currency the customer paid with
+  const calculateChange = () => {
+    if (!selectedProduct) {
+      return createMoney(
+        0,
+        cashReceivedMoney.currency,
+        cashReceivedMoney.exchangeRate
+      );
+    }
+
+    // Convert total price to payment currency
+    const totalPriceInPaymentCurrency =
+      totalPrice.currency === cashReceivedMoney.currency
+        ? totalPrice.amount
+        : (totalPrice.amount / totalPrice.exchangeRate) *
+          cashReceivedMoney.exchangeRate;
+
+    // Calculate change in payment currency
+    return {
+      ...cashReceivedMoney,
+      amount: cashReceivedMoney.amount - totalPriceInPaymentCurrency,
+    };
+  };
+
+  const change = calculateChange();
 
   // Fetch all products on mount
   useEffect(() => {
@@ -402,7 +451,7 @@ export default function NewSalePage() {
 
               <MoneyInput
                 label="Cash Received"
-                description="Amount of cash given by customer"
+                description="Amount of cash given by customer (can be in any currency)"
                 min={0}
                 size="xl"
                 value={cashReceivedMoney}
@@ -413,18 +462,34 @@ export default function NewSalePage() {
               />
 
               {form.values.cashReceived > 0 && (
-                <Group justify="space-between">
-                  <Text fw={700} size="xl">
-                    Change:
-                  </Text>
-                  <Text
-                    fw={700}
-                    c={change.amount >= 0 ? "green" : "red"}
-                    size="xl"
-                  >
-                    {formatMoney(change)}
-                  </Text>
-                </Group>
+                <>
+                  {cashReceivedMoney.currency !== totalPrice.currency && (
+                    <Group justify="space-between">
+                      <Text fw={500} size="lg">
+                        Equivalent in {totalPrice.currency}:
+                      </Text>
+                      <Text fw={500} size="lg">
+                        {formatMoney({
+                          ...totalPrice,
+                          amount: convertCashToProductCurrency(),
+                        })}
+                      </Text>
+                    </Group>
+                  )}
+
+                  <Group justify="space-between">
+                    <Text fw={700} size="xl">
+                      Change ({cashReceivedMoney.currency}):
+                    </Text>
+                    <Text
+                      fw={700}
+                      c={isPaymentSufficient() ? "green" : "red"}
+                      size="xl"
+                    >
+                      {formatMoney(change)}
+                    </Text>
+                  </Group>
+                </>
               )}
 
               <Group mt="lg">
@@ -445,13 +510,13 @@ export default function NewSalePage() {
                   disabled={
                     !selectedProduct ||
                     form.values.quantity <= 0 ||
-                    change.amount < 0
+                    !isPaymentSufficient()
                   }
                   size="xl"
                   style={{ flex: 2 }}
                   h={60}
                 >
-                  Complete Sale
+                  Done
                 </Button>
               </Group>
             </Stack>
