@@ -15,6 +15,9 @@ import {
   Stack,
   Card,
   Badge,
+  ActionIcon,
+  Modal,
+  Table,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -24,11 +27,14 @@ import {
   IconShoppingCart,
   IconAlertCircle,
   IconCheck,
+  IconPlus,
+  IconTrash,
+  IconReceipt,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
-import { ProductDoc } from "@/types";
-import { formatMoney, createMoney, BASE_CURRENCY } from "@/types/money";
+import { ProductDoc, SaleItem } from "@/types";
+import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
 import dynamic from "next/dynamic";
 
@@ -48,6 +54,15 @@ export default function NewSalePage() {
     null
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const [cartItems, setCartItems] = useState<SaleItem[]>([]);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<{
+    items: SaleItem[];
+    totalAmount: Money;
+    cashReceived: Money;
+    change: Money;
+    timestamp: string;
+  } | null>(null);
 
   const form = useForm({
     initialValues: {
@@ -67,32 +82,57 @@ export default function NewSalePage() {
     exchangeRate: 1,
   });
 
-  // Calculate derived values
-  const totalPrice = selectedProduct
-    ? {
-        ...selectedProduct.price,
-        amount: selectedProduct.price.amount * form.values.quantity,
-      }
-    : createMoney(0);
-
-  // Update cash received money when product is selected
-  useEffect(() => {
-    if (selectedProduct) {
-      setCashReceivedMoney({
-        amount: selectedProduct.price.amount * form.values.quantity,
-        currency: selectedProduct.price.currency,
-        exchangeRate: selectedProduct.price.exchangeRate,
-      });
-      form.setFieldValue(
-        "cashReceived",
-        selectedProduct.price.amount * form.values.quantity
-      );
+  // Calculate total price for all items in the cart
+  const calculateTotalPrice = () => {
+    if (cartItems.length === 0) {
+      return createMoney(0);
     }
-  }, [selectedProduct, form.values.quantity]);
+
+    // Start with the first item's currency
+    const baseCurrency = cartItems[0].total.currency;
+    const baseExchangeRate = cartItems[0].total.exchangeRate;
+
+    let totalAmount = 0;
+
+    // Convert all items to the base currency and sum them up
+    cartItems.forEach((item) => {
+      if (item.total.currency === baseCurrency) {
+        totalAmount += item.total.amount;
+      } else {
+        // Convert to base currency
+        const valueInBaseCurrency =
+          item.total.currency === BASE_CURRENCY
+            ? item.total.amount
+            : item.total.amount / item.total.exchangeRate;
+
+        totalAmount += valueInBaseCurrency * baseExchangeRate;
+      }
+    });
+
+    return {
+      amount: totalAmount,
+      currency: baseCurrency,
+      exchangeRate: baseExchangeRate,
+    };
+  };
+
+  const totalPrice = calculateTotalPrice();
+
+  // Update cash received money when cart changes
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      setCashReceivedMoney({
+        amount: totalPrice.amount,
+        currency: totalPrice.currency,
+        exchangeRate: totalPrice.exchangeRate,
+      });
+      form.setFieldValue("cashReceived", totalPrice.amount);
+    }
+  }, [cartItems, totalPrice.amount]);
 
   // Convert cash received to product currency for comparison
   const convertCashToProductCurrency = () => {
-    if (!selectedProduct) return 0;
+    if (cartItems.length === 0) return 0;
 
     // If currencies match, no conversion needed
     if (cashReceivedMoney.currency === totalPrice.currency) {
@@ -111,7 +151,7 @@ export default function NewSalePage() {
 
   // Check if payment is sufficient
   const isPaymentSufficient = () => {
-    if (!selectedProduct) return false;
+    if (cartItems.length === 0) return false;
 
     // Convert cash received to product currency for comparison
     const cashReceivedInProductCurrency = convertCashToProductCurrency();
@@ -122,7 +162,7 @@ export default function NewSalePage() {
 
   // Calculate change in the currency the customer paid with
   const calculateChange = () => {
-    if (!selectedProduct) {
+    if (cartItems.length === 0) {
       return createMoney(
         0,
         cashReceivedMoney.currency,
@@ -192,8 +232,6 @@ export default function NewSalePage() {
     setSelectedProduct(product);
     // Reset quantity to 1 when selecting a new product
     form.setFieldValue("quantity", 1);
-    // Set cash received to the product price as a starting point
-    form.setFieldValue("cashReceived", product.price.amount);
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
@@ -228,14 +266,50 @@ export default function NewSalePage() {
     }
   };
 
+  const handleAddToCart = () => {
+    if (!selectedProduct) return;
+
+    const quantity = form.values.quantity;
+
+    // Calculate total for this item
+    const itemTotal = {
+      ...selectedProduct.price,
+      amount: selectedProduct.price.amount * quantity,
+    };
+
+    // Create a new sale item
+    const newItem: SaleItem = {
+      productId: selectedProduct._id,
+      productName: selectedProduct.name,
+      productCode: selectedProduct.code,
+      qty: quantity,
+      price: selectedProduct.price,
+      total: itemTotal,
+    };
+
+    // Add to cart
+    setCartItems([...cartItems, newItem]);
+
+    // Reset selection
+    setSelectedProduct(null);
+    form.reset();
+    setSearchTerm("");
+  };
+
+  const handleRemoveFromCart = (index: number) => {
+    const newCartItems = [...cartItems];
+    newCartItems.splice(index, 1);
+    setCartItems(newCartItems);
+  };
+
   const handleSaveSale = async () => {
     if (typeof window === "undefined") {
       setError("Sales can only be recorded in the browser");
       return;
     }
 
-    if (!selectedProduct) {
-      setError("Please select a product first");
+    if (cartItems.length === 0) {
+      setError("Please add at least one product to the cart");
       return;
     }
 
@@ -244,30 +318,35 @@ export default function NewSalePage() {
 
     try {
       const now = new Date();
-      const saleId = `sale_${now.getTime()}_${selectedProduct.code}`;
+      const saleId = `sale_${now.getTime()}`;
 
       const salesDB = await getSalesDB();
       await salesDB.put({
         _id: saleId,
         type: "sale",
-        productId: selectedProduct._id,
-        qty: form.values.quantity,
-        price: selectedProduct.price,
-        total: totalPrice,
+        items: cartItems,
+        totalAmount: totalPrice,
         cashReceived: cashReceivedMoney,
         change: change,
         timestamp: now.toISOString(),
         status: "pending", // Will be synced later via WhatsApp
       });
 
-      setSuccess(true);
-      setSelectedProduct(null);
-      form.reset();
+      // Set receipt data for display
+      setReceiptData({
+        items: cartItems,
+        totalAmount: totalPrice,
+        cashReceived: cashReceivedMoney,
+        change: change,
+        timestamp: now.toISOString(),
+      });
 
-      // Auto-navigate back after success
-      setTimeout(() => {
-        router.push("/sales");
-      }, 1500);
+      setShowReceipt(true);
+      setSuccess(true);
+
+      // Clear cart
+      setCartItems([]);
+      form.reset();
     } catch (err) {
       console.error("Error saving sale:", err);
       setError(
@@ -278,6 +357,24 @@ export default function NewSalePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCloseReceipt = () => {
+    setShowReceipt(false);
+    setReceiptData(null);
+    router.push("/sales");
+  };
+
+  // Format date for receipt
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   return (
@@ -309,7 +406,7 @@ export default function NewSalePage() {
         </Alert>
       )}
 
-      {success && (
+      {success && !showReceipt && (
         <Alert
           icon={<IconCheck size="1.5rem" />}
           title="Success"
@@ -318,90 +415,194 @@ export default function NewSalePage() {
           withCloseButton
           onClose={() => setSuccess(false)}
         >
-          Sale recorded successfully! Redirecting...
+          Sale recorded successfully!
         </Alert>
       )}
 
-      {/* Step 1: Scan or Search */}
-      {!selectedProduct && (
+      {/* Cart Items */}
+      {cartItems.length > 0 && (
         <Paper shadow="md" p="lg" withBorder mb="lg">
-          <Title order={3} mb="md" ta="center">
-            Step 1: Find Product
+          <Title order={3} mb="md">
+            Cart Items
           </Title>
+          <Table striped withTableBorder mb="md">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Product</Table.Th>
+                <Table.Th>Quantity</Table.Th>
+                <Table.Th>Price</Table.Th>
+                <Table.Th>Total</Table.Th>
+                <Table.Th>Action</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {cartItems.map((item, index) => (
+                <Table.Tr key={`${item.productId}_${index}`}>
+                  <Table.Td>{item.productName}</Table.Td>
+                  <Table.Td>{item.qty}</Table.Td>
+                  <Table.Td>{formatMoney(item.price)}</Table.Td>
+                  <Table.Td>{formatMoney(item.total)}</Table.Td>
+                  <Table.Td>
+                    <ActionIcon
+                      color="red"
+                      onClick={() => handleRemoveFromCart(index)}
+                    >
+                      <IconTrash size="1.125rem" />
+                    </ActionIcon>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+            <Table.Tfoot>
+              <Table.Tr>
+                <Table.Th colSpan={3} style={{ textAlign: "right" }}>
+                  Total:
+                </Table.Th>
+                <Table.Th colSpan={2}>{formatMoney(totalPrice)}</Table.Th>
+              </Table.Tr>
+            </Table.Tfoot>
+          </Table>
+
+          {/* Payment Section */}
+          <Divider label="Payment" labelPosition="center" size="md" my="lg" />
+
+          <MoneyInput
+            label="Cash Received"
+            description="Amount of cash given by customer (can be in any currency)"
+            min={0}
+            size="xl"
+            value={cashReceivedMoney}
+            onChange={(value) => {
+              setCashReceivedMoney(value);
+              form.setFieldValue("cashReceived", value.amount);
+            }}
+          />
+
+          {form.values.cashReceived > 0 && (
+            <>
+              {cashReceivedMoney.currency !== totalPrice.currency && (
+                <Group justify="space-between" mt="md">
+                  <Text fw={500} size="lg">
+                    Equivalent in {totalPrice.currency}:
+                  </Text>
+                  <Text fw={500} size="lg">
+                    {formatMoney({
+                      ...totalPrice,
+                      amount: convertCashToProductCurrency(),
+                    })}
+                  </Text>
+                </Group>
+              )}
+
+              <Group justify="space-between" mt="md">
+                <Text fw={700} size="xl">
+                  Change ({cashReceivedMoney.currency}):
+                </Text>
+                <Text
+                  fw={700}
+                  c={isPaymentSufficient() ? "green" : "red"}
+                  size="xl"
+                >
+                  {formatMoney(change)}
+                </Text>
+              </Group>
+            </>
+          )}
 
           <Button
             fullWidth
-            size="xl"
-            mb="lg"
-            leftSection={<IconBarcode size={24} />}
-            onClick={() => setShowScanner(!showScanner)}
             color="blue"
+            leftSection={<IconShoppingCart size={20} />}
+            onClick={handleSaveSale}
+            loading={loading}
+            disabled={!isPaymentSufficient()}
+            size="xl"
+            mt="xl"
             h={60}
           >
-            {showScanner ? "Hide Scanner" : "Scan Barcode"}
+            Complete Sale
           </Button>
-
-          {showScanner && (
-            <Box mb="lg">
-              <Text size="md" fw={500} mb="xs" ta="center">
-                Point camera at barcode
-              </Text>
-              <BarcodeScanner onScan={handleBarcodeScanned} />
-            </Box>
-          )}
-
-          <Divider label="OR" labelPosition="center" my="lg" />
-
-          <TextInput
-            placeholder="Search by name or code"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.currentTarget.value)}
-            size="lg"
-            mb="md"
-            leftSection={<IconSearch size={20} />}
-          />
-
-          <Box style={{ maxHeight: "400px", overflowY: "auto" }}>
-            {filteredProducts.length === 0 ? (
-              <Text c="dimmed" ta="center" py="md" size="lg">
-                No products found
-              </Text>
-            ) : (
-              <Stack gap="md">
-                {filteredProducts.map((product) => (
-                  <Card
-                    key={product._id}
-                    padding="md"
-                    withBorder
-                    style={{
-                      cursor: "pointer",
-                    }}
-                    onClick={() => handleProductSelect(product)}
-                  >
-                    <Group justify="space-between">
-                      <div>
-                        <Text fw={700} size="lg">
-                          {product.name}
-                        </Text>
-                        <Text size="md">Code: {product.code}</Text>
-                      </div>
-                      <Text fw={700} size="xl">
-                        {formatMoney(product.price)}
-                      </Text>
-                    </Group>
-                  </Card>
-                ))}
-              </Stack>
-            )}
-          </Box>
         </Paper>
       )}
 
-      {/* Step 2: Sale Details */}
+      {/* Step 1: Scan or Search */}
+      <Paper shadow="md" p="lg" withBorder mb="lg">
+        <Title order={3} mb="md" ta="center">
+          {cartItems.length > 0 ? "Add Another Product" : "Find Product"}
+        </Title>
+
+        <Button
+          fullWidth
+          size="xl"
+          mb="lg"
+          leftSection={<IconBarcode size={24} />}
+          onClick={() => setShowScanner(!showScanner)}
+          color="blue"
+          h={60}
+        >
+          {showScanner ? "Hide Scanner" : "Scan Barcode"}
+        </Button>
+
+        {showScanner && (
+          <Box mb="lg">
+            <Text size="md" fw={500} mb="xs" ta="center">
+              Point camera at barcode
+            </Text>
+            <BarcodeScanner onScan={handleBarcodeScanned} />
+          </Box>
+        )}
+
+        <Divider label="OR" labelPosition="center" my="lg" />
+
+        <TextInput
+          placeholder="Search by name or code"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.currentTarget.value)}
+          size="lg"
+          mb="md"
+          leftSection={<IconSearch size={20} />}
+        />
+
+        <Box style={{ maxHeight: "400px", overflowY: "auto" }}>
+          {filteredProducts.length === 0 ? (
+            <Text c="dimmed" ta="center" py="md" size="lg">
+              No products found
+            </Text>
+          ) : (
+            <Stack gap="md">
+              {filteredProducts.map((product) => (
+                <Card
+                  key={product._id}
+                  padding="md"
+                  withBorder
+                  style={{
+                    cursor: "pointer",
+                  }}
+                  onClick={() => handleProductSelect(product)}
+                >
+                  <Group justify="space-between">
+                    <div>
+                      <Text fw={700} size="lg">
+                        {product.name}
+                      </Text>
+                      <Text size="md">Code: {product.code}</Text>
+                    </div>
+                    <Text fw={700} size="xl">
+                      {formatMoney(product.price)}
+                    </Text>
+                  </Group>
+                </Card>
+              ))}
+            </Stack>
+          )}
+        </Box>
+      </Paper>
+
+      {/* Step 2: Product Details */}
       {selectedProduct && (
         <Paper shadow="md" p="lg" withBorder>
           <Title order={3} mb="lg" ta="center">
-            Step 2: Complete Sale
+            Product Details
           </Title>
 
           <Card withBorder mb="lg" padding="lg">
@@ -438,59 +639,17 @@ export default function NewSalePage() {
                 {...form.getInputProps("quantity")}
               />
 
-              <Divider label="Payment" labelPosition="center" size="md" />
-
               <Group justify="space-between">
                 <Text fw={700} size="xl">
-                  Total Price:
+                  Total:
                 </Text>
                 <Text fw={700} size="xl">
-                  {formatMoney(totalPrice)}
+                  {formatMoney({
+                    ...selectedProduct.price,
+                    amount: selectedProduct.price.amount * form.values.quantity,
+                  })}
                 </Text>
               </Group>
-
-              <MoneyInput
-                label="Cash Received"
-                description="Amount of cash given by customer (can be in any currency)"
-                min={0}
-                size="xl"
-                value={cashReceivedMoney}
-                onChange={(value) => {
-                  setCashReceivedMoney(value);
-                  form.setFieldValue("cashReceived", value.amount);
-                }}
-              />
-
-              {form.values.cashReceived > 0 && (
-                <>
-                  {cashReceivedMoney.currency !== totalPrice.currency && (
-                    <Group justify="space-between">
-                      <Text fw={500} size="lg">
-                        Equivalent in {totalPrice.currency}:
-                      </Text>
-                      <Text fw={500} size="lg">
-                        {formatMoney({
-                          ...totalPrice,
-                          amount: convertCashToProductCurrency(),
-                        })}
-                      </Text>
-                    </Group>
-                  )}
-
-                  <Group justify="space-between">
-                    <Text fw={700} size="xl">
-                      Change ({cashReceivedMoney.currency}):
-                    </Text>
-                    <Text
-                      fw={700}
-                      c={isPaymentSufficient() ? "green" : "red"}
-                      size="xl"
-                    >
-                      {formatMoney(change)}
-                    </Text>
-                  </Group>
-                </>
-              )}
 
               <Group mt="lg">
                 <Button
@@ -500,29 +659,106 @@ export default function NewSalePage() {
                   size="lg"
                   style={{ flex: 1 }}
                 >
-                  Back
+                  Cancel
                 </Button>
                 <Button
                   color="blue"
-                  leftSection={<IconShoppingCart size={20} />}
-                  onClick={handleSaveSale}
-                  loading={loading}
-                  disabled={
-                    !selectedProduct ||
-                    form.values.quantity <= 0 ||
-                    !isPaymentSufficient()
-                  }
+                  leftSection={<IconPlus size={20} />}
+                  onClick={handleAddToCart}
+                  disabled={form.values.quantity <= 0}
                   size="xl"
                   style={{ flex: 2 }}
                   h={60}
                 >
-                  Done
+                  Add to Cart
                 </Button>
               </Group>
             </Stack>
           </form>
         </Paper>
       )}
+
+      {/* Receipt Modal */}
+      <Modal
+        opened={showReceipt}
+        onClose={handleCloseReceipt}
+        title={
+          <Group>
+            <IconReceipt size={24} />
+            <Text size="xl" fw={700}>
+              Sale Receipt
+            </Text>
+          </Group>
+        }
+        size="lg"
+        centered
+      >
+        {receiptData && (
+          <Stack>
+            <Text ta="center" fw={700} size="lg">
+              SHOPKEEPER
+            </Text>
+            <Text ta="center" c="dimmed">
+              {formatDate(receiptData.timestamp)}
+            </Text>
+
+            <Divider my="sm" />
+
+            <Table striped withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Item</Table.Th>
+                  <Table.Th>Qty</Table.Th>
+                  <Table.Th>Price</Table.Th>
+                  <Table.Th>Total</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {receiptData.items.map((item, index) => (
+                  <Table.Tr key={index}>
+                    <Table.Td>{item.productName}</Table.Td>
+                    <Table.Td>{item.qty}</Table.Td>
+                    <Table.Td>{formatMoney(item.price)}</Table.Td>
+                    <Table.Td>{formatMoney(item.total)}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+
+            <Divider my="sm" />
+
+            <Group justify="space-between">
+              <Text fw={700}>Total:</Text>
+              <Text fw={700}>{formatMoney(receiptData.totalAmount)}</Text>
+            </Group>
+
+            <Group justify="space-between">
+              <Text>Paid ({receiptData.cashReceived.currency}):</Text>
+              <Text>{formatMoney(receiptData.cashReceived)}</Text>
+            </Group>
+
+            <Group justify="space-between">
+              <Text>Change ({receiptData.change.currency}):</Text>
+              <Text>{formatMoney(receiptData.change)}</Text>
+            </Group>
+
+            <Divider my="sm" />
+
+            <Text ta="center" c="dimmed" size="sm">
+              Thank you for your purchase!
+            </Text>
+
+            <Button
+              fullWidth
+              onClick={handleCloseReceipt}
+              mt="md"
+              leftSection={<IconCheck size={20} />}
+            >
+              Done
+            </Button>
+          </Stack>
+        )}
+      </Modal>
     </>
   );
 }

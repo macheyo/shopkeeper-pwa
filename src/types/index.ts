@@ -14,16 +14,24 @@ export interface ProductDoc extends PouchDB.Core.Document<object> {
   updatedAt: string; // ISO 8601 format
 }
 
+// Define the structure for a sale item
+export interface SaleItem {
+  productId: string; // Corresponds to ProductDoc._id
+  productName: string; // For display purposes
+  productCode: string; // For reference
+  qty: number;
+  price: Money; // Price at the time of sale using Money type
+  total: Money; // Total for this item using Money type
+}
+
 // Define the structure for a Sale document stored in PouchDB
 // Explicitly include _id and _rev for clarity
 export interface SaleDoc extends PouchDB.Core.Document<object> {
   _id: string;
   _rev: string;
   type: "sale";
-  productId: string; // Corresponds to ProductDoc._id
-  qty: number;
-  price: Money; // Price at the time of sale using Money type
-  total: Money; // Total using Money type
+  items: SaleItem[]; // Array of sale items
+  totalAmount: Money; // Total amount for all items
   cashReceived?: Money; // Optional for non-cash or later payment
   change?: Money; // Optional
   timestamp: string; // ISO 8601 format

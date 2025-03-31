@@ -1,6 +1,6 @@
-import { salesDB, productsDB } from "./databases";
-import { SaleDoc, ProductDoc } from "@/types";
-import { Money, formatMoney } from "@/types/money";
+import { salesDB } from "./databases";
+import { SaleDoc } from "@/types";
+import { formatMoney } from "@/types/money";
 
 /**
  * Generates a URL-encoded daily sales report string for WhatsApp.
@@ -39,86 +39,45 @@ export async function generateDailyReport(): Promise<string> {
 
     console.log(`Found ${pendingSales.length} pending sales.`);
 
-    // Extract unique product IDs to fetch product details efficiently
-    // Explicitly type 'sale' parameter
-    const productIds = [
-      ...new Set(pendingSales.map((sale: SaleDoc) => sale.productId)),
-    ];
-
-    // Fetch corresponding product documents using correct options type
-    const productResult = await productsDB.allDocs<ProductDoc>({
-      keys: productIds, // Now productIds should be string[]
-      include_docs: true,
-    });
-    const productRows = productResult.rows;
-
-    // Create a map for quick product lookup
-    const productMap = new Map<string, ProductDoc>();
-    productRows.forEach((row) => {
-      // Check if the row is not an error and has a doc
-      if (row && "doc" in row && row.doc && "id" in row && row.id) {
-        productMap.set(row.id, row.doc);
-      } else if (row && "error" in row) {
-        console.warn(`Error fetching product for key ${row.key}: ${row.error}`);
-      }
-    });
-
     // Construct the report string
     // TODO: Get Shop Name from config/settings
     const shopName = "RUIRU"; // Placeholder
     const reportDate = todayStartISO.split("T")[0];
     let report = `[REPORT] SHOP: ${shopName} | DATE: ${reportDate}\n`;
     let totalSalesValue = 0;
-    // Aggregate sales by product for a summary view
-    const aggregatedSales: {
-      [productId: string]: {
-        qty: number;
-        total: Money;
-        code: string;
-        price: Money;
-      };
-    } = {};
 
+    // Process each sale
     for (const sale of pendingSales) {
-      const product = productMap.get(sale.productId);
-      if (product) {
-        if (!aggregatedSales[sale.productId]) {
-          aggregatedSales[sale.productId] = {
-            qty: 0,
-            total: {
-              amount: 0,
-              currency: sale.total.currency,
-              exchangeRate: sale.total.exchangeRate,
-            },
-            code: product.code,
-            price: product.price,
-          };
+      // Add sale header
+      report += `\n--- SALE ${formatDate(sale.timestamp)} ---\n`;
+
+      // Add each item in the sale
+      if (sale.items && Array.isArray(sale.items)) {
+        for (const item of sale.items) {
+          report += `${item.productCode} - ${item.productName} x${
+            item.qty
+          } @${formatMoney(item.price)} = ${formatMoney(item.total)}\n`;
         }
-        aggregatedSales[sale.productId].qty += sale.qty;
-        aggregatedSales[sale.productId].total.amount += sale.total.amount;
-        totalSalesValue += sale.total.amount;
-      } else {
-        console.warn(
-          `Product details not found for productId: ${sale.productId} in sale ${sale._id}`
-        );
-        // Optionally include a line in the report indicating missing product data
-        report += `UNKNOWN_PRODUCT (ID: ${sale.productId}) x${
-          sale.qty
-        } = ${formatMoney(sale.total)}\n`;
-        totalSalesValue += sale.total.amount;
       }
+
+      // Add sale total
+      report += `SUBTOTAL: ${formatMoney(sale.totalAmount)}\n`;
+
+      // Add payment details if available
+      if (sale.cashReceived) {
+        report += `PAID: ${formatMoney(sale.cashReceived)}\n`;
+      }
+
+      if (sale.change) {
+        report += `CHANGE: ${formatMoney(sale.change)}\n`;
+      }
+
+      // Add to total sales value
+      totalSalesValue += sale.totalAmount.amount;
     }
 
-    // Add aggregated sales to the report
-    for (const productId in aggregatedSales) {
-      const saleSummary = aggregatedSales[productId];
-      report += `${saleSummary.code} x${saleSummary.qty} @${formatMoney(
-        saleSummary.price
-      )} = ${formatMoney(saleSummary.total)}\n`;
-    }
-
-    // TODO: Add Cash Received / Change summary if needed, requires fetching more sale details or storing it differently
-    report += `TOTAL: ${formatMoney({
+    // Add grand total
+    report += `\nTOTAL SALES: ${formatMoney({
       amount: totalSalesValue,
       currency: "THC",
       exchangeRate: 1,
@@ -132,6 +91,14 @@ export async function generateDailyReport(): Promise<string> {
     // Re-throw or handle appropriately
     throw new Error(`Failed to generate report: ${message}`);
   }
+}
+
+/**
+ * Helper function to format a date string to a readable time
+ */
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 /**

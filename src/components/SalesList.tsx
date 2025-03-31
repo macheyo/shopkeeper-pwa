@@ -10,17 +10,17 @@ import {
   Button,
   Text,
   Box,
+  Accordion,
 } from "@mantine/core";
 import { IconAlertCircle, IconPlus } from "@tabler/icons-react";
-import { getSalesDB, getProductsDB } from "@/lib/databases";
-import { SaleDoc, ProductDoc } from "@/types";
+import { getSalesDB } from "@/lib/databases";
+import { SaleDoc, SaleItem } from "@/types";
 import { formatMoney } from "@/types/money";
 import { useRouter } from "next/navigation";
 
 export default function SalesList() {
   const router = useRouter();
   const [sales, setSales] = useState<SaleDoc[]>([]);
-  const [products, setProducts] = useState<Map<string, ProductDoc>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,30 +47,6 @@ export default function SalesList() {
             },
             sort: [{ timestamp: "desc" }],
           });
-
-          // Get all product IDs from sales
-          const salesDocs = result.docs as SaleDoc[];
-          const productIds = [
-            ...new Set(salesDocs.map((sale) => sale.productId)),
-          ];
-
-          // Fetch products
-          if (productIds.length > 0) {
-            const productsDB = await getProductsDB();
-            const productResult = await productsDB.allDocs({
-              keys: productIds,
-              include_docs: true,
-            });
-
-            const productMap = new Map<string, ProductDoc>();
-            productResult.rows.forEach((row) => {
-              if (row && "doc" in row && row.doc && "id" in row) {
-                productMap.set(row.id, row.doc as ProductDoc);
-              }
-            });
-
-            setProducts(productMap);
-          }
 
           setSales(result.docs as SaleDoc[]);
         } catch (err) {
@@ -119,11 +95,6 @@ export default function SalesList() {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-
-  const getProductName = (productId: string) => {
-    const product = products.get(productId);
-    return product ? product.name : "Unknown Product";
   };
 
   if (loading) {
@@ -185,50 +156,87 @@ export default function SalesList() {
         </Stack>
       ) : (
         <div style={{ animation: "fadeIn 0.5s ease-out" }}>
-          <Table striped highlightOnHover withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Time</Table.Th>
-                <Table.Th>Product</Table.Th>
-                <Table.Th>Quantity</Table.Th>
-                <Table.Th>Price</Table.Th>
-                <Table.Th>Total</Table.Th>
-                <Table.Th>Status</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {sales.map((sale, index) => (
-                <Table.Tr
-                  key={sale._id}
-                  style={{
-                    animation: `slideInFromRight 0.3s ease forwards ${
-                      index * 0.05
-                    }s`,
-                    opacity: 0,
-                    transform: "translateX(20px)",
-                  }}
-                  className="animated-row"
-                >
-                  <Table.Td>{formatDate(sale.timestamp)}</Table.Td>
-                  <Table.Td>{getProductName(sale.productId)}</Table.Td>
-                  <Table.Td>{sale.qty}</Table.Td>
-                  <Table.Td>{formatMoney(sale.price)}</Table.Td>
-                  <Table.Td>{formatMoney(sale.total)}</Table.Td>
-                  <Table.Td>
-                    <Badge
-                      color={sale.status === "synced" ? "green" : "blue"}
-                      style={{
-                        transition: "all 0.2s ease",
-                      }}
-                      className="animated-badge"
-                    >
-                      {sale.status}
-                    </Badge>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+          <Accordion>
+            {sales.map((sale, index) => (
+              <Accordion.Item
+                key={sale._id}
+                value={sale._id}
+                style={{
+                  animation: `slideInFromRight 0.3s ease forwards ${
+                    index * 0.05
+                  }s`,
+                  opacity: 0,
+                  transform: "translateX(20px)",
+                }}
+                className="animated-row"
+              >
+                <Accordion.Control>
+                  <Box>
+                    <Text fw={700}>Sale at {formatDate(sale.timestamp)}</Text>
+                    <Text size="sm">
+                      Total: {formatMoney(sale.totalAmount)} | Status:{" "}
+                      <Badge
+                        color={sale.status === "synced" ? "green" : "blue"}
+                        style={{
+                          transition: "all 0.2s ease",
+                        }}
+                        className="animated-badge"
+                      >
+                        {sale.status}
+                      </Badge>
+                    </Text>
+                  </Box>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <Table striped highlightOnHover withTableBorder>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Product</Table.Th>
+                        <Table.Th>Quantity</Table.Th>
+                        <Table.Th>Price</Table.Th>
+                        <Table.Th>Total</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {sale.items &&
+                        sale.items.map((item: SaleItem) => (
+                          <Table.Tr key={`${sale._id}_${item.productId}`}>
+                            <Table.Td>{item.productName}</Table.Td>
+                            <Table.Td>{item.qty}</Table.Td>
+                            <Table.Td>{formatMoney(item.price)}</Table.Td>
+                            <Table.Td>{formatMoney(item.total)}</Table.Td>
+                          </Table.Tr>
+                        ))}
+                    </Table.Tbody>
+                    <Table.Tfoot>
+                      <Table.Tr>
+                        <Table.Th colSpan={3} style={{ textAlign: "right" }}>
+                          Total Amount:
+                        </Table.Th>
+                        <Table.Th>{formatMoney(sale.totalAmount)}</Table.Th>
+                      </Table.Tr>
+                      {sale.cashReceived && (
+                        <Table.Tr>
+                          <Table.Th colSpan={3} style={{ textAlign: "right" }}>
+                            Cash Received:
+                          </Table.Th>
+                          <Table.Th>{formatMoney(sale.cashReceived)}</Table.Th>
+                        </Table.Tr>
+                      )}
+                      {sale.change && (
+                        <Table.Tr>
+                          <Table.Th colSpan={3} style={{ textAlign: "right" }}>
+                            Change:
+                          </Table.Th>
+                          <Table.Th>{formatMoney(sale.change)}</Table.Th>
+                        </Table.Tr>
+                      )}
+                    </Table.Tfoot>
+                  </Table>
+                </Accordion.Panel>
+              </Accordion.Item>
+            ))}
+          </Accordion>
         </div>
       )}
 
