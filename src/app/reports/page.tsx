@@ -39,7 +39,7 @@ export default function ReportsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [pendingSales, setPendingSales] = useState<SaleDoc[]>([]);
-  const phoneNumber = "254712345678"; // Default phone number, removed unused setter
+  const phoneNumber = "254718250097"; // Default phone number, removed unused setter
 
   const handleGenerateReport = async () => {
     setLoading(true);

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  Table,
   Badge,
   Loader,
   Alert,
@@ -11,6 +10,8 @@ import {
   Text,
   Box,
   Accordion,
+  Paper,
+  Group,
 } from "@mantine/core";
 import { IconAlertCircle, IconPlus } from "@tabler/icons-react";
 import { getSalesDB } from "@/lib/databases";
@@ -213,51 +214,59 @@ export default function SalesList() {
                   </Box>
                 </Accordion.Control>
                 <Accordion.Panel>
-                  <Table striped highlightOnHover withTableBorder>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>Product</Table.Th>
-                        <Table.Th>Quantity</Table.Th>
-                        <Table.Th>Price</Table.Th>
-                        <Table.Th>Total</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {sale.items &&
-                        sale.items.map((item: SaleItem) => (
-                          <Table.Tr key={`${sale._id}_${item.productId}`}>
-                            <Table.Td>{item.productName}</Table.Td>
-                            <Table.Td>{item.qty}</Table.Td>
-                            <Table.Td>{formatMoney(item.price)}</Table.Td>
-                            <Table.Td>{formatMoney(item.total)}</Table.Td>
-                          </Table.Tr>
-                        ))}
-                    </Table.Tbody>
-                    <Table.Tfoot>
-                      <Table.Tr>
-                        <Table.Th colSpan={3} style={{ textAlign: "right" }}>
-                          Total Amount:
-                        </Table.Th>
-                        <Table.Th>{formatMoney(sale.totalAmount)}</Table.Th>
-                      </Table.Tr>
-                      {sale.cashReceived && (
-                        <Table.Tr>
-                          <Table.Th colSpan={3} style={{ textAlign: "right" }}>
-                            Cash Received:
-                          </Table.Th>
-                          <Table.Th>{formatMoney(sale.cashReceived)}</Table.Th>
-                        </Table.Tr>
-                      )}
-                      {sale.change && (
-                        <Table.Tr>
-                          <Table.Th colSpan={3} style={{ textAlign: "right" }}>
-                            Change:
-                          </Table.Th>
-                          <Table.Th>{formatMoney(sale.change)}</Table.Th>
-                        </Table.Tr>
-                      )}
-                    </Table.Tfoot>
-                  </Table>
+                  {/* Mobile-friendly layout for sale items */}
+                  <Box className="sale-items-container">
+                    {/* Sale items */}
+                    {sale.items &&
+                      sale.items.map((item: SaleItem) => (
+                        <Paper
+                          key={`${sale._id}_${item.productId}`}
+                          p="xs"
+                          mb="xs"
+                          withBorder
+                          className="sale-item-card"
+                        >
+                          <Text fw={600} size="sm" mb={5}>
+                            {item.productName}
+                          </Text>
+                          <Box className="sale-item-details">
+                            <Text size="xs" c="dimmed">
+                              Qty: {item.qty}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              Price: {formatMoney(item.price)}
+                            </Text>
+                            <Text size="sm" fw={500}>
+                              Total: {formatMoney(item.total)}
+                            </Text>
+                          </Box>
+                        </Paper>
+                      ))}
+
+                    {/* Sale summary */}
+                    <Paper p="sm" withBorder mt="md" className="sale-summary">
+                      <Stack gap="xs">
+                        <Group justify="apart">
+                          <Text fw={600}>Total Amount:</Text>
+                          <Text fw={700}>{formatMoney(sale.totalAmount)}</Text>
+                        </Group>
+
+                        {sale.cashReceived && (
+                          <Group justify="apart">
+                            <Text>Cash Received:</Text>
+                            <Text>{formatMoney(sale.cashReceived)}</Text>
+                          </Group>
+                        )}
+
+                        {sale.change && (
+                          <Group justify="apart">
+                            <Text>Change:</Text>
+                            <Text>{formatMoney(sale.change)}</Text>
+                          </Group>
+                        )}
+                      </Stack>
+                    </Paper>
+                  </Box>
                 </Accordion.Panel>
               </Accordion.Item>
             ))}
@@ -265,7 +274,7 @@ export default function SalesList() {
         </div>
       )}
 
-      {/* Add CSS animations */}
+      {/* Add CSS animations and mobile styles */}
       <style jsx global>{`
         @keyframes fadeIn {
           from {
@@ -327,6 +336,53 @@ export default function SalesList() {
 
         .animated-button:active {
           transform: translateY(0);
+        }
+
+        /* Mobile-friendly styles */
+        .sale-items-container {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          max-width: 100%;
+          overflow-x: hidden;
+        }
+
+        .sale-item-card {
+          border-radius: 8px;
+          transition: all 0.2s ease;
+        }
+
+        .sale-item-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .sale-item-details {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 4px;
+        }
+
+        .sale-summary {
+          border-radius: 8px;
+          background-color: #f9f9f9;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+          .sale-item-details {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+          }
+
+          .sale-item-details > *:last-child {
+            align-self: flex-end;
+            margin-top: 4px;
+          }
         }
       `}</style>
     </>

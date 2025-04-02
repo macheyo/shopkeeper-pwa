@@ -541,18 +541,23 @@ export default function Home() {
               {/* Progress bar */}
               <Stack gap="xs">
                 {(() => {
-                  // Calculate percentage
+                  // Calculate percentage without capping at 100%
                   const percentage =
                     todayRevenue && currentTarget
-                      ? Math.min(
-                          100,
-                          (todayRevenue.amount / currentTarget.amount) * 100
-                        )
+                      ? (todayRevenue.amount / currentTarget.amount) * 100
                       : 0;
+
+                  // Calculate display percentage for progress bar (capped at 100%)
+                  const displayPercentage = Math.min(100, percentage);
+
+                  // Calculate excess percentage (how much over 100%)
+                  const excessPercentage = Math.max(0, percentage - 100);
 
                   // Determine color based on progress
                   let progressColor = "blue";
-                  if (currentTarget?.achieved) {
+                  if (percentage > 100) {
+                    progressColor = "yellow.7"; // Gold color for overachievers
+                  } else if (currentTarget?.achieved) {
                     progressColor = "green";
                   } else if (percentage >= 90) {
                     progressColor = "teal";
@@ -568,7 +573,16 @@ export default function Home() {
                     ? currentTarget.amount - (todayRevenue?.amount || 0)
                     : 0;
 
-                  if (currentTarget?.achieved) {
+                  // Special message for overachievers
+                  if (percentage > 100) {
+                    const excess =
+                      (todayRevenue?.amount || 0) - currentTarget.amount;
+                    message = `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
+                      createMoney(excess)
+                    )} (${excessPercentage.toFixed(
+                      1
+                    )}%)! You're a champion! 🏅`;
+                  } else if (currentTarget?.achieved) {
                     message =
                       "🎉 Amazing job! Target achieved! You're a superstar! 🏆";
                   } else if (percentage >= 90) {
@@ -596,7 +610,7 @@ export default function Home() {
                   return (
                     <>
                       <Progress
-                        value={percentage}
+                        value={displayPercentage}
                         color={progressColor}
                         size="xl"
                         radius="md"

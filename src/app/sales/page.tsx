@@ -132,10 +132,15 @@ export default function SalesPage() {
     return () => clearInterval(intervalId);
   }, [fetchTodaySalesData]);
 
-  // Calculate percentage of target achieved
+  // Calculate percentage of target achieved (without capping at 100%)
   const calculateTargetPercentage = () => {
     if (!todayRevenue || !currentTarget) return 0;
-    return Math.min(100, (todayRevenue.amount / currentTarget.amount) * 100);
+    return (todayRevenue.amount / currentTarget.amount) * 100;
+  };
+
+  // Calculate display percentage for progress bar (capped at 100%)
+  const getDisplayPercentage = () => {
+    return Math.min(100, calculateTargetPercentage());
   };
 
   // Get motivational message based on progress
@@ -144,8 +149,18 @@ export default function SalesPage() {
 
     const percentage = calculateTargetPercentage();
     const remaining = currentTarget.amount - todayRevenue.amount;
+    const excessPercentage = Math.max(0, percentage - 100);
 
-    if (currentTarget.achieved || percentage >= 100) {
+    // Special message for overachievers
+    if (percentage > 100) {
+      const excess = todayRevenue.amount - currentTarget.amount;
+      return {
+        message: `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
+          createMoney(excess)
+        )} (${excessPercentage.toFixed(1)}%)! You're a champion! 🏅`,
+        color: "yellow.7", // Gold color for overachievers
+      };
+    } else if (currentTarget.achieved || percentage >= 100) {
       return {
         message:
           "🎉 Amazing job! You've reached your sales target for today! 🏆",
@@ -223,15 +238,21 @@ export default function SalesPage() {
                 Today&apos;s Sales Target
               </Text>
             </Group>
-            {currentTarget.achieved && (
-              <Badge color="green" leftSection={<IconTrophy size={14} />}>
-                Achieved!
+            {calculateTargetPercentage() > 100 ? (
+              <Badge color="yellow.7" leftSection={<IconTrophy size={14} />}>
+                Exceeded! 🏅
               </Badge>
+            ) : (
+              currentTarget.achieved && (
+                <Badge color="green" leftSection={<IconTrophy size={14} />}>
+                  Achieved!
+                </Badge>
+              )
             )}
           </Group>
 
           <Progress
-            value={calculateTargetPercentage()}
+            value={getDisplayPercentage()}
             color={motivationalMessage?.color}
             size="lg"
             radius="md"
