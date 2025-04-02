@@ -40,15 +40,40 @@ export default function SalesList() {
           const todayISOString = today.toISOString();
 
           const salesDB = await getSalesDB();
-          const result = await salesDB.find({
-            selector: {
-              type: "sale",
-              timestamp: { $gte: todayISOString },
-            },
-            sort: [{ timestamp: "desc" }],
+
+          // Get all documents
+          const result = await salesDB.allDocs({
+            include_docs: true,
           });
 
-          setSales(result.docs as SaleDoc[]);
+          // Filter for sales documents and today's sales
+          const todayDate = new Date(todayISOString);
+          const filteredDocs = result.rows
+            .map((row) => row.doc)
+            .filter((doc): doc is SaleDoc => {
+              // Make sure it's a sale document with a timestamp
+              if (
+                !doc ||
+                typeof doc !== "object" ||
+                !("type" in doc) ||
+                doc.type !== "sale" ||
+                !("timestamp" in doc)
+              ) {
+                return false;
+              }
+
+              // Check if it's from today or later
+              const docDate = new Date(doc.timestamp as string);
+              return docDate >= todayDate;
+            })
+            // Sort by timestamp in descending order
+            .sort(
+              (a, b) =>
+                new Date(b.timestamp as string).getTime() -
+                new Date(a.timestamp as string).getTime()
+            );
+
+          setSales(filteredDocs);
         } catch (err) {
           console.error("Error fetching sales:", err);
           const message = err instanceof Error ? err.message : String(err);

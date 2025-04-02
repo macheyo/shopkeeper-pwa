@@ -14,10 +14,12 @@ import {
   Alert,
   Stack,
   Card,
-  Badge,
   ActionIcon,
   Modal,
   Table,
+  Checkbox,
+  Drawer,
+  ScrollArea,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -27,14 +29,19 @@ import {
   IconShoppingCart,
   IconAlertCircle,
   IconCheck,
-  IconPlus,
   IconTrash,
   IconReceipt,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
 import { ProductDoc, SaleItem } from "@/types";
-import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
+import {
+  formatMoney,
+  createMoney,
+  BASE_CURRENCY,
+  Money,
+  CurrencyCode,
+} from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
 import dynamic from "next/dynamic";
 
@@ -50,9 +57,8 @@ export default function NewSalePage() {
   const [showScanner, setShowScanner] = useState(false);
   const [products, setProducts] = useState<ProductDoc[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductDoc[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<ProductDoc | null>(
-    null
-  );
+  const [selectedProducts, setSelectedProducts] = useState<ProductDoc[]>([]);
+  const [quantityDrawerOpen, setQuantityDrawerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [cartItems, setCartItems] = useState<SaleItem[]>([]);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -82,53 +88,107 @@ export default function NewSalePage() {
     exchangeRate: 1,
   });
 
+  // Function to convert a money value to the customer's selected payment currency
+  const convertToPaymentCurrency = (money: Money): Money => {
+    if (money.currency === cashReceivedMoney.currency) {
+      return money; // Already in the same currency
+    }
+
+    // First convert to base currency (USD)
+    const valueInBaseCurrency = convertToBaseCurrency(money);
+
+    // Then convert from base currency to payment currency
+    const valueInPaymentCurrency = convertFromBaseCurrency(
+      valueInBaseCurrency,
+      cashReceivedMoney.currency,
+      cashReceivedMoney.exchangeRate
+    );
+
+    return {
+      amount: valueInPaymentCurrency,
+      currency: cashReceivedMoney.currency,
+      exchangeRate: cashReceivedMoney.exchangeRate,
+    };
+  };
+
   // Calculate total price for all items in the cart
   const calculateTotalPrice = () => {
     if (cartItems.length === 0) {
       return createMoney(0);
     }
 
-    // Start with the first item's currency
-    const baseCurrency = cartItems[0].total.currency;
-    const baseExchangeRate = cartItems[0].total.exchangeRate;
+    // Start with the first item's currency as the target currency
+    const targetCurrency = cartItems[0].total.currency;
+    const targetExchangeRate = cartItems[0].total.exchangeRate;
 
     let totalAmount = 0;
 
-    // Convert all items to the base currency and sum them up
+    // Convert all items to the target currency and sum them up
     cartItems.forEach((item) => {
-      if (item.total.currency === baseCurrency) {
+      if (item.total.currency === targetCurrency) {
+        // If the item is already in the target currency, add directly
         totalAmount += item.total.amount;
       } else {
-        // Convert to base currency
-        const valueInBaseCurrency =
-          item.total.currency === BASE_CURRENCY
-            ? item.total.amount
-            : item.total.amount / item.total.exchangeRate;
+        // First convert to base currency (USD)
+        const valueInBaseCurrency = convertToBaseCurrency(item.total);
 
-        totalAmount += valueInBaseCurrency * baseExchangeRate;
+        // Then convert from base currency to target currency
+        const valueInTargetCurrency = convertFromBaseCurrency(
+          valueInBaseCurrency,
+          targetCurrency,
+          targetExchangeRate
+        );
+
+        totalAmount += valueInTargetCurrency;
       }
     });
 
     return {
       amount: totalAmount,
-      currency: baseCurrency,
-      exchangeRate: baseExchangeRate,
+      currency: targetCurrency,
+      exchangeRate: targetExchangeRate,
     };
   };
 
   const totalPrice = calculateTotalPrice();
 
   // Update cash received money when cart changes
-  useEffect(() => {
-    if (cartItems.length > 0) {
-      setCashReceivedMoney({
-        amount: totalPrice.amount,
-        currency: totalPrice.currency,
-        exchangeRate: totalPrice.exchangeRate,
-      });
-      form.setFieldValue("cashReceived", totalPrice.amount);
+  // useEffect(() => {
+  //   if (cartItems.length > 0) {
+  //     setCashReceivedMoney({
+  //       amount: totalPrice.amount,
+  //       currency: totalPrice.currency,
+  //       exchangeRate: totalPrice.exchangeRate,
+  //     });
+  //     form.setFieldValue("cashReceived", totalPrice.amount);
+  //   }
+  // }, [cartItems, totalPrice.amount]);
+
+  // Convert a money value to the base currency (USD)
+  const convertToBaseCurrency = (money: Money): number => {
+    if (money.currency === BASE_CURRENCY) {
+      return money.amount; // Already in USD
     }
-  }, [cartItems, totalPrice.amount]);
+
+    // For other currencies, convert to USD using the exchange rate
+    // The exchange rate is defined as 1 USD = X of this currency
+    return money.amount / money.exchangeRate;
+  };
+
+  // Convert a value in base currency (USD) to a specific currency
+  const convertFromBaseCurrency = (
+    amount: number,
+    currency: CurrencyCode,
+    exchangeRate: number
+  ): number => {
+    if (currency === BASE_CURRENCY) {
+      return amount; // Already in USD
+    }
+
+    // For other currencies, convert from USD using the exchange rate
+    // The exchange rate is defined as 1 USD = X of this currency
+    return amount * exchangeRate;
+  };
 
   // Convert cash received to product currency for comparison
   const convertCashToProductCurrency = () => {
@@ -139,25 +199,27 @@ export default function NewSalePage() {
       return cashReceivedMoney.amount;
     }
 
-    // Convert to base currency first (if not already in base currency)
-    const valueInBaseCurrency =
-      cashReceivedMoney.currency === BASE_CURRENCY
-        ? cashReceivedMoney.amount
-        : cashReceivedMoney.amount / cashReceivedMoney.exchangeRate;
+    // Convert both to base currency first
+    const cashInBaseCurrency = convertToBaseCurrency(cashReceivedMoney);
 
     // Then convert from base currency to product currency
-    return valueInBaseCurrency * totalPrice.exchangeRate;
+    return convertFromBaseCurrency(
+      cashInBaseCurrency,
+      totalPrice.currency,
+      totalPrice.exchangeRate
+    );
   };
 
   // Check if payment is sufficient
   const isPaymentSufficient = () => {
     if (cartItems.length === 0) return false;
 
-    // Convert cash received to product currency for comparison
-    const cashReceivedInProductCurrency = convertCashToProductCurrency();
+    // Convert both to base currency for comparison
+    const totalInBaseCurrency = convertToBaseCurrency(totalPrice);
+    const cashInBaseCurrency = convertToBaseCurrency(cashReceivedMoney);
 
-    // Check if payment is sufficient
-    return cashReceivedInProductCurrency >= totalPrice.amount;
+    // Add a small buffer for floating point comparison (0.01)
+    return cashInBaseCurrency >= totalInBaseCurrency - 0.01;
   };
 
   // Calculate change in the currency the customer paid with
@@ -170,17 +232,24 @@ export default function NewSalePage() {
       );
     }
 
-    // Convert total price to payment currency
-    const totalPriceInPaymentCurrency =
-      totalPrice.currency === cashReceivedMoney.currency
-        ? totalPrice.amount
-        : (totalPrice.amount / totalPrice.exchangeRate) *
-          cashReceivedMoney.exchangeRate;
+    // Convert both to base currency
+    const totalInBaseCurrency = convertToBaseCurrency(totalPrice);
+    const cashInBaseCurrency = convertToBaseCurrency(cashReceivedMoney);
 
-    // Calculate change in payment currency
+    // Calculate change in base currency
+    const changeInBaseCurrency = cashInBaseCurrency - totalInBaseCurrency;
+
+    // Convert change to payment currency
+    const changeInPaymentCurrency = convertFromBaseCurrency(
+      changeInBaseCurrency,
+      cashReceivedMoney.currency,
+      cashReceivedMoney.exchangeRate
+    );
+
+    // Return change in payment currency
     return {
       ...cashReceivedMoney,
-      amount: cashReceivedMoney.amount - totalPriceInPaymentCurrency,
+      amount: changeInPaymentCurrency,
     };
   };
 
@@ -228,10 +297,27 @@ export default function NewSalePage() {
     setFilteredProducts(filtered);
   }, [searchTerm, products]);
 
-  const handleProductSelect = (product: ProductDoc) => {
-    setSelectedProduct(product);
-    // Reset quantity to 1 when selecting a new product
-    form.setFieldValue("quantity", 1);
+  const [productQuantities, setProductQuantities] = useState<
+    Record<string, number>
+  >({});
+
+  const handleProductSelect = (product: ProductDoc, isSelected: boolean) => {
+    if (isSelected) {
+      setSelectedProducts([...selectedProducts, product]);
+      // Initialize quantity to 1 for newly selected product
+      setProductQuantities({
+        ...productQuantities,
+        [product._id]: 1,
+      });
+    } else {
+      setSelectedProducts(
+        selectedProducts.filter((p) => p._id !== product._id)
+      );
+      // Remove quantity for deselected product
+      const newQuantities = { ...productQuantities };
+      delete newQuantities[product._id];
+      setProductQuantities(newQuantities);
+    }
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
@@ -252,7 +338,16 @@ export default function NewSalePage() {
 
       if (result.docs.length > 0) {
         const product = result.docs[0] as ProductDoc;
-        handleProductSelect(product);
+        // Add to selected products if not already selected
+        if (!selectedProducts.some((p) => p._id === product._id)) {
+          handleProductSelect(product, true);
+        } else {
+          // If already selected, increment quantity
+          setProductQuantities({
+            ...productQuantities,
+            [product._id]: (productQuantities[product._id] || 0) + 1,
+          });
+        }
       } else {
         setError(`No product found with barcode: ${barcode}`);
       }
@@ -266,33 +361,43 @@ export default function NewSalePage() {
     }
   };
 
-  const handleAddToCart = () => {
-    if (!selectedProduct) return;
+  const handleQuantityChange = (productId: string, quantity: number) => {
+    setProductQuantities({
+      ...productQuantities,
+      [productId]: quantity,
+    });
+  };
 
-    const quantity = form.values.quantity;
+  const handleAddSelectedToCart = () => {
+    if (selectedProducts.length === 0) return;
 
-    // Calculate total for this item
-    const itemTotal = {
-      ...selectedProduct.price,
-      amount: selectedProduct.price.amount * quantity,
-    };
+    const newItems: SaleItem[] = selectedProducts.map((product) => {
+      const quantity = productQuantities[product._id] || 1;
 
-    // Create a new sale item
-    const newItem: SaleItem = {
-      productId: selectedProduct._id,
-      productName: selectedProduct.name,
-      productCode: selectedProduct.code,
-      qty: quantity,
-      price: selectedProduct.price,
-      total: itemTotal,
-    };
+      // Calculate total for this item
+      const itemTotal = {
+        ...product.price,
+        amount: product.price.amount * quantity,
+      };
+
+      // Create a new sale item
+      return {
+        productId: product._id,
+        productName: product.name,
+        productCode: product.code,
+        qty: quantity,
+        price: product.price,
+        total: itemTotal,
+      };
+    });
 
     // Add to cart
-    setCartItems([...cartItems, newItem]);
+    setCartItems([...cartItems, ...newItems]);
 
     // Reset selection
-    setSelectedProduct(null);
-    form.reset();
+    setSelectedProducts([]);
+    setProductQuantities({});
+    setQuantityDrawerOpen(false);
     setSearchTerm("");
   };
 
@@ -310,6 +415,14 @@ export default function NewSalePage() {
 
     if (cartItems.length === 0) {
       setError("Please add at least one product to the cart");
+      return;
+    }
+
+    // Double-check payment is sufficient
+    if (!isPaymentSufficient()) {
+      setError(
+        "Payment amount is insufficient. Please enter the correct amount."
+      );
       return;
     }
 
@@ -448,10 +561,26 @@ export default function NewSalePage() {
                   <Text size="sm">Price:</Text>
                   <Text>{formatMoney(item.price)}</Text>
                 </Group>
+                {cashReceivedMoney.currency !== item.price.currency && (
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm">Price ({cashReceivedMoney.currency}):</Text>
+                    <Text>
+                      {formatMoney(convertToPaymentCurrency(item.price))}
+                    </Text>
+                  </Group>
+                )}
                 <Group justify="space-between">
                   <Text size="sm">Total:</Text>
                   <Text fw={700}>{formatMoney(item.total)}</Text>
                 </Group>
+                {cashReceivedMoney.currency !== item.total.currency && (
+                  <Group justify="space-between">
+                    <Text size="sm">Total ({cashReceivedMoney.currency}):</Text>
+                    <Text fw={700}>
+                      {formatMoney(convertToPaymentCurrency(item.total))}
+                    </Text>
+                  </Group>
+                )}
               </Card>
             ))}
           </Stack>
@@ -465,6 +594,14 @@ export default function NewSalePage() {
                 {formatMoney(totalPrice)}
               </Text>
             </Group>
+            {cashReceivedMoney.currency !== totalPrice.currency && (
+              <Group justify="space-between" mt="xs">
+                <Text size="md">Total ({cashReceivedMoney.currency}):</Text>
+                <Text size="md">
+                  {formatMoney(convertToPaymentCurrency(totalPrice))}
+                </Text>
+              </Group>
+            )}
           </Card>
 
           {/* Payment Section */}
@@ -480,23 +617,24 @@ export default function NewSalePage() {
               setCashReceivedMoney(value);
               form.setFieldValue("cashReceived", value.amount);
 
-              // Show expected amount in base currency when currency changes
+              // Show expected amount when currency changes
               if (value.currency !== totalPrice.currency) {
-                // Calculate equivalent in base currency
-                const valueInBaseCurrency =
-                  value.currency === BASE_CURRENCY
-                    ? totalPrice.amount
-                    : totalPrice.amount / totalPrice.exchangeRate;
+                // First convert total price to base currency (USD)
+                const totalInBaseCurrency = convertToBaseCurrency(totalPrice);
 
-                // Calculate expected amount in selected currency
-                const expectedAmount = valueInBaseCurrency * value.exchangeRate;
+                // Then convert from base currency to the selected payment currency
+                const totalInPaymentCurrency = convertFromBaseCurrency(
+                  totalInBaseCurrency,
+                  value.currency,
+                  value.exchangeRate
+                );
 
-                // Update the amount to the expected amount
-                setCashReceivedMoney({
-                  ...value,
-                  amount: expectedAmount,
-                });
-                form.setFieldValue("cashReceived", expectedAmount);
+                // Update the amount to the expected amount in the selected currency
+                // setCashReceivedMoney({
+                //   ...value,
+                //   amount: totalInPaymentCurrency,
+                // });
+                form.setFieldValue("cashReceived", totalInPaymentCurrency);
               }
             }}
           />
@@ -551,7 +689,7 @@ export default function NewSalePage() {
       {/* Step 1: Scan or Search */}
       <Paper shadow="md" p="lg" withBorder mb="lg">
         <Title order={3} mb="md" ta="center">
-          {cartItems.length > 0 ? "Add Another Product" : "Find Product"}
+          {cartItems.length > 0 ? "Add More Products" : "Find Products"}
         </Title>
 
         <Button
@@ -598,108 +736,149 @@ export default function NewSalePage() {
                   key={product._id}
                   padding="md"
                   withBorder
-                  style={{
-                    cursor: "pointer",
+                  style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    const isSelected = selectedProducts.some(
+                      (p) => p._id === product._id
+                    );
+                    handleProductSelect(product, !isSelected);
                   }}
-                  onClick={() => handleProductSelect(product)}
                 >
-                  <Group justify="space-between">
-                    <div>
+                  <Group justify="space-between" align="flex-start">
+                    <Checkbox
+                      checked={selectedProducts.some(
+                        (p) => p._id === product._id
+                      )}
+                      onChange={(e) => {
+                        // This will be triggered when clicking directly on the checkbox
+                        e.stopPropagation(); // Prevent the card click from firing
+                        handleProductSelect(product, e.currentTarget.checked);
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
                       <Text fw={700} size="lg">
                         {product.name}
                       </Text>
                       <Text size="md">Code: {product.code}</Text>
                     </div>
-                    <Text fw={700} size="xl">
-                      {formatMoney(product.price)}
-                    </Text>
+                    <div>
+                      <Text fw={700} size="xl">
+                        {formatMoney(product.price)}
+                      </Text>
+                      {cashReceivedMoney.currency !== product.price.currency &&
+                        cashReceivedMoney.amount > 0 && (
+                          <Text size="sm" c="dimmed">
+                            {formatMoney(
+                              convertToPaymentCurrency(product.price)
+                            )}
+                          </Text>
+                        )}
+                    </div>
                   </Group>
                 </Card>
               ))}
             </Stack>
           )}
         </Box>
+
+        {selectedProducts.length > 0 && (
+          <Button
+            fullWidth
+            color="green"
+            leftSection={<IconShoppingCart size={20} />}
+            onClick={() => setQuantityDrawerOpen(true)}
+            size="xl"
+            mt="lg"
+            h={60}
+          >
+            Add {selectedProducts.length} Selected Product
+            {selectedProducts.length > 1 ? "s" : ""} to Cart
+          </Button>
+        )}
       </Paper>
 
-      {/* Step 2: Product Details */}
-      {selectedProduct && (
-        <Paper shadow="md" p="lg" withBorder>
-          <Title order={3} mb="lg" ta="center">
-            Product Details
-          </Title>
+      {/* Quantity Drawer */}
+      <Drawer
+        opened={quantityDrawerOpen}
+        onClose={() => setQuantityDrawerOpen(false)}
+        title={<Title order={3}>Set Quantities</Title>}
+        position="bottom"
+        size="lg"
+      >
+        <ScrollArea h={400} offsetScrollbars>
+          <Stack gap="md">
+            {selectedProducts.map((product) => (
+              <Card key={product._id} withBorder p="md">
+                <Group justify="space-between" mb="md">
+                  <div>
+                    <Text fw={700} size="lg">
+                      {product.name}
+                    </Text>
+                    <Text size="sm">Code: {product.code}</Text>
+                    <Text size="sm">
+                      Unit Price: {formatMoney(product.price)}
+                      {cashReceivedMoney.currency !== product.price.currency &&
+                        cashReceivedMoney.amount > 0 && (
+                          <Text span ml="xs" c="dimmed">
+                            (
+                            {formatMoney(
+                              convertToPaymentCurrency(product.price)
+                            )}
+                            )
+                          </Text>
+                        )}
+                    </Text>
+                  </div>
+                </Group>
 
-          <Card withBorder mb="lg" padding="lg">
-            <Group justify="space-between" mb="md">
-              <Text fw={700} size="lg">
-                Product:
-              </Text>
-              <Text size="lg">{selectedProduct.name}</Text>
-            </Group>
-            <Group justify="space-between" mb="md">
-              <Text fw={700} size="lg">
-                Code:
-              </Text>
-              <Badge size="lg">{selectedProduct.code}</Badge>
-            </Group>
-            <Group justify="space-between">
-              <Text fw={700} size="lg">
-                Unit Price:
-              </Text>
-              <Text fw={700} size="xl">
-                {formatMoney(selectedProduct.price)}
-              </Text>
-            </Group>
-          </Card>
+                <Group justify="space-between" align="center">
+                  <Text fw={500}>Quantity:</Text>
+                  <NumberInput
+                    value={productQuantities[product._id] || 1}
+                    onChange={(value) =>
+                      handleQuantityChange(product._id, Number(value))
+                    }
+                    min={1}
+                    size="md"
+                    style={{ width: "120px" }}
+                  />
+                </Group>
 
-          <form>
-            <Stack gap="lg">
-              <NumberInput
-                label="Quantity"
-                description="Number of items"
-                min={1}
-                required
-                size="xl"
-                {...form.getInputProps("quantity")}
-              />
+                <Group justify="space-between" mt="md">
+                  <Text fw={500}>Total:</Text>
+                  <Text fw={700}>
+                    {formatMoney({
+                      ...product.price,
+                      amount:
+                        product.price.amount *
+                        (productQuantities[product._id] || 1),
+                    })}
+                  </Text>
+                </Group>
+              </Card>
+            ))}
+          </Stack>
+        </ScrollArea>
 
-              <Group justify="space-between">
-                <Text fw={700} size="xl">
-                  Total:
-                </Text>
-                <Text fw={700} size="xl">
-                  {formatMoney({
-                    ...selectedProduct.price,
-                    amount: selectedProduct.price.amount * form.values.quantity,
-                  })}
-                </Text>
-              </Group>
-
-              <Group mt="lg">
-                <Button
-                  variant="outline"
-                  color="gray"
-                  onClick={() => setSelectedProduct(null)}
-                  size="lg"
-                  style={{ flex: 1 }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  color="blue"
-                  leftSection={<IconPlus size={20} />}
-                  onClick={handleAddToCart}
-                  disabled={form.values.quantity <= 0}
-                  size="xl"
-                  style={{ flex: 2 }}
-                  h={60}
-                >
-                  Cart
-                </Button>
-              </Group>
-            </Stack>
-          </form>
-        </Paper>
-      )}
+        <Group mt="xl">
+          <Button
+            variant="outline"
+            onClick={() => setQuantityDrawerOpen(false)}
+            style={{ flex: 1 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="green"
+            leftSection={<IconShoppingCart size={20} />}
+            onClick={handleAddSelectedToCart}
+            style={{ flex: 2 }}
+            size="lg"
+          >
+            Add to Cart
+          </Button>
+        </Group>
+      </Drawer>
 
       {/* Receipt Modal */}
       <Modal
@@ -737,14 +916,60 @@ export default function NewSalePage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {receiptData.items.map((item, index) => (
-                  <Table.Tr key={index}>
-                    <Table.Td>{item.productName}</Table.Td>
-                    <Table.Td>{item.qty}</Table.Td>
-                    <Table.Td>{formatMoney(item.price)}</Table.Td>
-                    <Table.Td>{formatMoney(item.total)}</Table.Td>
-                  </Table.Tr>
-                ))}
+                {receiptData.items.map((item, index) => {
+                  // Convert price and total to payment currency if different
+                  const showConversion =
+                    receiptData.cashReceived.currency !== item.price.currency;
+
+                  // Convert price to payment currency
+                  const priceInPaymentCurrency = showConversion
+                    ? {
+                        amount: convertFromBaseCurrency(
+                          convertToBaseCurrency(item.price),
+                          receiptData.cashReceived.currency,
+                          receiptData.cashReceived.exchangeRate
+                        ),
+                        currency: receiptData.cashReceived.currency,
+                        exchangeRate: receiptData.cashReceived.exchangeRate,
+                      }
+                    : null;
+
+                  // Convert total to payment currency
+                  const totalInPaymentCurrency = showConversion
+                    ? {
+                        amount: convertFromBaseCurrency(
+                          convertToBaseCurrency(item.total),
+                          receiptData.cashReceived.currency,
+                          receiptData.cashReceived.exchangeRate
+                        ),
+                        currency: receiptData.cashReceived.currency,
+                        exchangeRate: receiptData.cashReceived.exchangeRate,
+                      }
+                    : null;
+
+                  return (
+                    <Table.Tr key={index}>
+                      <Table.Td>{item.productName}</Table.Td>
+                      <Table.Td>{item.qty}</Table.Td>
+                      <Table.Td>
+                        {formatMoney(item.price)}
+                        {showConversion && priceInPaymentCurrency && (
+                          <Text size="xs" c="dimmed" mt={2}>
+                            {formatMoney(priceInPaymentCurrency)}
+                          </Text>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        {formatMoney(item.total)}
+                        {showConversion && totalInPaymentCurrency && (
+                          <Text size="xs" c="dimmed" mt={2}>
+                            {formatMoney(totalInPaymentCurrency)}
+                          </Text>
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
               </Table.Tbody>
             </Table>
 
@@ -754,6 +979,24 @@ export default function NewSalePage() {
               <Text fw={700}>Total:</Text>
               <Text fw={700}>{formatMoney(receiptData.totalAmount)}</Text>
             </Group>
+
+            {receiptData.cashReceived.currency !==
+              receiptData.totalAmount.currency && (
+              <Group justify="space-between">
+                <Text>Total ({receiptData.cashReceived.currency}):</Text>
+                <Text>
+                  {formatMoney({
+                    amount: convertFromBaseCurrency(
+                      convertToBaseCurrency(receiptData.totalAmount),
+                      receiptData.cashReceived.currency,
+                      receiptData.cashReceived.exchangeRate
+                    ),
+                    currency: receiptData.cashReceived.currency,
+                    exchangeRate: receiptData.cashReceived.exchangeRate,
+                  })}
+                </Text>
+              </Group>
+            )}
 
             <Group justify="space-between">
               <Text>Paid ({receiptData.cashReceived.currency}):</Text>

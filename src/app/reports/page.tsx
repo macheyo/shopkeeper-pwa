@@ -29,7 +29,7 @@ import {
   initiateWhatsAppSync,
   markSalesAsSynced,
 } from "@/lib/sync";
-import { salesDB } from "@/lib/databases";
+import { getSalesDB } from "@/lib/databases";
 import { SaleDoc } from "@/types";
 
 export default function ReportsPage() {
@@ -56,7 +56,9 @@ export default function ReportsPage() {
       today.setHours(0, 0, 0, 0);
       const todayISOString = today.toISOString();
 
-      const result = await salesDB.find({
+      // Initialize salesDB before using it
+      const db = await getSalesDB();
+      const result = await db.find({
         selector: {
           type: "sale",
           status: "pending",

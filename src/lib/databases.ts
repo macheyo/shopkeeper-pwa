@@ -35,6 +35,19 @@ export async function getSalesDB(): Promise<PouchDB.Database> {
     if (DB_KEY && DB_KEY !== "default-insecure-key") {
       await salesDB.crypto(DB_KEY);
     }
+
+    // Create an index for the timestamp field to enable sorting
+    try {
+      // Create an index with timestamp as the first field
+      await salesDB.createIndex({
+        index: {
+          fields: ["timestamp", "type"],
+          name: "sales_timestamp_index",
+        },
+      });
+    } catch (err) {
+      console.error("Error creating sales index:", err);
+    }
   }
   return salesDB;
 }

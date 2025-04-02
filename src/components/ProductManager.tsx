@@ -12,46 +12,10 @@ import {
   Center,
   Loader,
 } from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconRefresh } from "@tabler/icons-react";
 import { getProductsDB } from "@/lib/databases";
 import { ProductDoc } from "@/types";
-import { formatMoney, createMoney, BASE_CURRENCY } from "@/types/money";
-
-// Mock data for fallback
-const mockProducts: ProductDoc[] = [
-  {
-    _id: "product-1",
-    _rev: "1-abc123",
-    type: "product",
-    name: "Product 1",
-    code: "P001",
-    price: createMoney(10.99, BASE_CURRENCY, 1),
-    barcode: "123456789",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    _id: "product-2",
-    _rev: "1-def456",
-    type: "product",
-    name: "Product 2",
-    code: "P002",
-    price: createMoney(24.99, BASE_CURRENCY, 1),
-    barcode: "987654321",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    _id: "product-3",
-    _rev: "1-ghi789",
-    type: "product",
-    name: "Product 3",
-    code: "P003",
-    price: createMoney(5.99, BASE_CURRENCY, 1),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+import { formatMoney } from "@/types/money";
 
 export default function ProductManager() {
   const [products, setProducts] = useState<ProductDoc[]>([]);
@@ -59,68 +23,73 @@ export default function ProductManager() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isMockData, setIsMockData] = useState<boolean>(false);
 
-  // Fetch products from the database
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+  // Function to fetch products from the database
+  const fetchProducts = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-        // Get the products database
-        const db = await getProductsDB();
+      // Get the products database
+      const db = await getProductsDB();
 
-        // Check if the database is initialized
-        if (!db) {
-          console.error("Products database is not initialized");
-          setError("Database not available. Using mock data.");
-          setProducts(mockProducts);
-          setIsMockData(true);
-          return;
-        }
-
-        // Fetch all products
-        const result = await db.allDocs({
-          include_docs: true,
-          startkey: "product:",
-          endkey: "product:\ufff0",
-        });
-
-        // Map the results to our ProductDoc type
-        const fetchedProducts = result.rows
-          .map((row) => row.doc as ProductDoc)
-          .filter((doc) => doc && doc.type === "product");
-
-        if (fetchedProducts.length > 0) {
-          setProducts(fetchedProducts);
-        } else {
-          // If no products found, use mock data
-          console.log("No products found in database, using mock data");
-          setProducts(mockProducts);
-          setIsMockData(true);
-        }
-      } catch (err) {
-        console.error("Error fetching products:", err);
-        // Fallback to mock data on error
-        setProducts(mockProducts);
-        setIsMockData(true);
-
-        const message = err instanceof Error ? err.message : String(err);
-        setError(`Error fetching products: ${message}`);
-      } finally {
-        setIsLoading(false);
+      // Check if the database is initialized
+      if (!db) {
+        console.error("Products database is not initialized");
+        setError("Database not available. Please try again later.");
+        setProducts([]);
+        setIsMockData(false);
+        return;
       }
-    };
 
+      // Fetch all products
+      const result = await db.allDocs({
+        include_docs: true,
+      });
+
+      // Map the results to our ProductDoc type
+      const fetchedProducts = result.rows
+        .map((row) => row.doc as ProductDoc)
+        .filter((doc) => doc && doc.type === "product");
+
+      if (fetchedProducts.length > 0) {
+        setProducts(fetchedProducts);
+      } else {
+        // If no products found, show empty state
+        console.log("No products found in database");
+        setProducts([]);
+        setIsMockData(false);
+      }
+    } catch (err) {
+      console.error("Error fetching products:", err);
+      // Show error but don't fallback to mock data
+      setProducts([]);
+      setIsMockData(false);
+
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Error fetching products: ${message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch products when component mounts
+  useEffect(() => {
     fetchProducts();
   }, []);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string, rev: string) => {
     if (
       typeof window !== "undefined" &&
       window.confirm("Are you sure you want to delete this product?")
     ) {
       try {
-        // Filter out the product with the given id
+        // Get the database
+        const db = await getProductsDB();
+
+        // Delete the product from the database
+        await db.remove(id, rev);
+
+        // Update the UI by filtering out the deleted product
         setProducts(products.filter((product) => product._id !== id));
         console.log(`Product ${id} deleted.`);
       } catch (err) {
@@ -129,6 +98,10 @@ export default function ProductManager() {
         setError(`Failed to delete product ${id}. Error: ${message}`);
       }
     }
+  };
+
+  const handleRefresh = () => {
+    fetchProducts();
   };
 
   if (isLoading) {
@@ -155,9 +128,18 @@ export default function ProductManager() {
 
   return (
     <>
-      <Text size="xl" fw={700} mb="lg" ta="center">
-        {isMockData ? "Your Products (Mock Data)" : "Your Products"}
-      </Text>
+      <Group justify="space-between" mb="md">
+        <Text size="xl" fw={700}>
+          {isMockData ? "Your Products (Mock Data)" : "Your Products"}
+        </Text>
+        <Button
+          variant="subtle"
+          leftSection={<IconRefresh size={16} />}
+          onClick={handleRefresh}
+        >
+          Refresh
+        </Button>
+      </Group>
 
       {products.length === 0 ? (
         <Text size="lg" ta="center" py="xl">
@@ -200,8 +182,8 @@ export default function ProductManager() {
                     <Button
                       color="red"
                       size="sm"
-                      onClick={() => handleDelete(product._id!)}
-                      disabled={!product._id}
+                      onClick={() => handleDelete(product._id!, product._rev!)}
+                      disabled={!product._id || !product._rev}
                       style={{
                         transition: "all 0.2s ease",
                       }}
@@ -249,8 +231,8 @@ export default function ProductManager() {
                   size="md"
                   fullWidth
                   mt="md"
-                  onClick={() => handleDelete(product._id!)}
-                  disabled={!product._id}
+                  onClick={() => handleDelete(product._id!, product._rev!)}
+                  disabled={!product._id || !product._rev}
                   style={{
                     transition: "all 0.2s ease",
                   }}

@@ -6,8 +6,7 @@ export type CurrencyCode =
   | "ZAR" // South African Rand
   | "BWP" // Botswana Pula
   | "ZMW" // Zambian Kwacha
-  | "MZN" // Mozambican Metical
-  | "THC"; // THC Currency
+  | "MZN"; // Mozambican Metical
 
 // Currency information with flags
 export interface CurrencyInfo {
@@ -26,18 +25,17 @@ export const CURRENCY_INFO: Record<CurrencyCode, CurrencyInfo> = {
   BWP: { code: "BWP", name: "Botswana Pula", symbol: "P", flag: "🇧🇼" },
   ZMW: { code: "ZMW", name: "Zambian Kwacha", symbol: "K", flag: "🇿🇲" },
   MZN: { code: "MZN", name: "Mozambican Metical", symbol: "MT", flag: "🇲🇿" },
-  THC: { code: "THC", name: "THC Currency", symbol: "THC", flag: "🌿" },
 };
 
 // Define the Money object structure
 export interface Money {
   amount: number;
   currency: CurrencyCode;
-  exchangeRate: number; // Rate relative to the base currency (e.g., 1 USD = X of this currency)
+  exchangeRate: number; // Rate relative to USD (e.g., 1 USD = X of this currency)
 }
 
 // Default base currency
-export const BASE_CURRENCY: CurrencyCode = "THC";
+export const BASE_CURRENCY: CurrencyCode = "USD";
 
 // Helper function to create a Money object
 export function createMoney(
@@ -80,13 +78,7 @@ export function convertMoney(
 
 // Helper function to format Money for display
 export function formatMoney(money: Money): string {
-  // Special handling for THC currency
-  if (money.currency === "THC") {
-    // Format with THC symbol and proper formatting
-    return `THC ${formatNumberWithCommas(money.amount)}`;
-  }
-
-  // For other currencies, use the standard formatter
+  // Use the standard formatter for all currencies
   const formatter = new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: money.currency,
@@ -109,12 +101,11 @@ export function formatNumberWithCommas(value: number): string {
 
 // Sample exchange rates (to be replaced with actual rates from an API or user input)
 export const DEFAULT_EXCHANGE_RATES: Record<CurrencyCode, number> = {
-  USD: 1,
+  USD: 1, // USD is the reference currency
   EUR: 0.92,
   ZWL: 3250.5,
   ZAR: 18.65,
   BWP: 13.75,
   ZMW: 26.3,
   MZN: 63.85,
-  THC: 1, // Set THC exchange rate relative to USD
 };

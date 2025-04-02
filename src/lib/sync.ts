@@ -1,4 +1,4 @@
-import { salesDB } from "./databases";
+import { getSalesDB } from "./databases";
 import { SaleDoc } from "@/types";
 import { formatMoney } from "@/types/money";
 
@@ -20,9 +20,12 @@ export async function generateDailyReport(): Promise<string> {
   console.log(`Generating report for sales from ${todayStartISO}...`);
 
   try {
+    // Initialize salesDB before using it
+    const db = await getSalesDB();
+
     // Find sales that are 'pending' and occurred today or later
     // Remove generic from find, assert type later
-    const findResult = await salesDB.find({
+    const findResult = await db.find({
       selector: {
         status: "pending",
         timestamp: { $gte: todayStartISO },
@@ -79,7 +82,7 @@ export async function generateDailyReport(): Promise<string> {
     // Add grand total
     report += `\nTOTAL SALES: ${formatMoney({
       amount: totalSalesValue,
-      currency: "THC",
+      currency: "USD",
       exchangeRate: 1,
     })}`;
 
@@ -156,8 +159,11 @@ export async function markSalesAsSynced(saleIds: string[]): Promise<void> {
   console.log(`Marking ${saleIds.length} sales as synced:`, saleIds);
 
   try {
+    // Initialize salesDB before using it
+    const db = await getSalesDB();
+
     // Fetch the current revisions of the documents
-    const docsToUpdate = await salesDB.bulkGet({
+    const docsToUpdate = await db.bulkGet({
       docs: saleIds.map((id) => ({ id })),
     });
 
@@ -205,7 +211,7 @@ export async function markSalesAsSynced(saleIds: string[]): Promise<void> {
       console.log(
         `Updating ${updatedDocs.length} documents to 'synced' status.`
       );
-      const bulkResult = await salesDB.bulkDocs(updatedDocs);
+      const bulkResult = await db.bulkDocs(updatedDocs);
       console.log("Bulk update result:", bulkResult);
 
       // Check for conflicts or errors during the bulk update using type guard
