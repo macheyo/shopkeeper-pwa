@@ -34,7 +34,7 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
-import { ProductDoc, SaleItem } from "@/types";
+import { ProductDoc, SaleItem, SaleDoc } from "@/types";
 import {
   formatMoney,
   createMoney,
@@ -69,6 +69,15 @@ export default function NewSalePage() {
     change: Money;
     timestamp: string;
   } | null>(null);
+
+  // State for sales target
+  const [currentTarget, setCurrentTarget] = useState<{
+    amount: number;
+    currency: string;
+    date: string;
+    achieved: boolean;
+  } | null>(null);
+  const [todayRevenue, setTodayRevenue] = useState<Money | null>(null);
 
   const form = useForm({
     initialValues: {
@@ -255,29 +264,161 @@ export default function NewSalePage() {
 
   const change = calculateChange();
 
-  // Fetch all products on mount
+  // Function to fetch today's sales data and target
+  const fetchTodaySalesData = async () => {
+    if (typeof window === "undefined") return;
+
+    try {
+      // Get today's sales
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayISOString = today.toISOString();
+
+      const salesDB = await getSalesDB();
+      const salesResult = await salesDB.find({
+        selector: {
+          type: "sale",
+          timestamp: { $gte: todayISOString },
+        },
+      });
+
+      const todaySales = salesResult.docs as SaleDoc[];
+
+      // Calculate total revenue
+      if (todaySales.length > 0) {
+        let totalAmount = 0;
+        const currency = BASE_CURRENCY;
+        const exchangeRate = 1;
+
+        // Sum up all sales and convert to base currency
+        todaySales.forEach((sale) => {
+          if (sale.totalAmount.currency === BASE_CURRENCY) {
+            totalAmount += sale.totalAmount.amount;
+          } else {
+            // Convert to base currency
+            const valueInBaseCurrency =
+              sale.totalAmount.amount / sale.totalAmount.exchangeRate;
+            totalAmount += valueInBaseCurrency;
+          }
+        });
+
+        setTodayRevenue({
+          amount: totalAmount,
+          currency,
+          exchangeRate,
+        });
+      } else {
+        setTodayRevenue(createMoney(0));
+      }
+
+      // Load current target from localStorage
+      const targetJson = localStorage.getItem("currentSalesTarget");
+      if (targetJson) {
+        const target = JSON.parse(targetJson);
+        setCurrentTarget(target);
+      }
+    } catch (error) {
+      console.error("Error fetching sales data:", error);
+    }
+  };
+
+  // Calculate how much more is needed to reach the target
+  const calculateRemainingToTarget = () => {
+    if (!todayRevenue || !currentTarget) return null;
+
+    const remaining = currentTarget.amount - todayRevenue.amount;
+    if (remaining <= 0) return 0; // Target already reached
+
+    return remaining;
+  };
+
+  // Check if adding a product would help reach the target
+  const wouldHelpReachTarget = (product: ProductDoc) => {
+    if (!todayRevenue || !currentTarget || currentTarget.achieved) return false;
+
+    const remaining = calculateRemainingToTarget();
+    if (remaining === null || remaining <= 0) return false;
+
+    // Convert product price to base currency if needed
+    let productPriceInBaseCurrency = product.price.amount;
+    if (product.price.currency !== BASE_CURRENCY) {
+      productPriceInBaseCurrency = convertToBaseCurrency(product.price);
+    }
+
+    // Check if this product would get us closer to the target
+    return productPriceInBaseCurrency > 0;
+  };
+
+  // Get motivational message for a product
+  const getProductMotivationalMessage = (product: ProductDoc) => {
+    if (!todayRevenue || !currentTarget || currentTarget.achieved) return null;
+
+    const remaining = calculateRemainingToTarget();
+    if (remaining === null || remaining <= 0) return null;
+
+    // Convert product price to base currency if needed
+    let productPriceInBaseCurrency = product.price.amount;
+    if (product.price.currency !== BASE_CURRENCY) {
+      productPriceInBaseCurrency = convertToBaseCurrency(product.price);
+    }
+
+    // Calculate how many of this product would reach the target
+    const neededQuantity = Math.ceil(remaining / productPriceInBaseCurrency);
+
+    if (neededQuantity === 1) {
+      return {
+        message: `🎯 Sell just 1 of this item to reach your target today! 🎉`,
+        color: "teal",
+      };
+    } else if (neededQuantity <= 3) {
+      return {
+        message: `🚀 Sell exactly ${neededQuantity} of these to reach your target today! 💪`,
+        color: "cyan",
+      };
+    } else if (neededQuantity <= 5) {
+      return {
+        message: `⭐ Sell ${neededQuantity} of these to complete your daily target! 🏆`,
+        color: "indigo",
+      };
+    } else {
+      return {
+        message: `✨ This product will help you get closer to your daily target! 📈`,
+        color: "blue",
+      };
+    }
+  };
+
+  // Fetch all products and sales data on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const fetchProducts = async () => {
+    const fetchData = async () => {
       try {
+        // Fetch products
         const productsDB = await getProductsDB();
         const result = await productsDB.find({
           selector: { type: "product" },
         });
         setProducts(result.docs as ProductDoc[]);
         setFilteredProducts(result.docs as ProductDoc[]);
+
+        // Fetch sales data and target
+        await fetchTodaySalesData();
       } catch (err) {
-        console.error("Error fetching products:", err);
+        console.error("Error fetching data:", err);
         setError(
-          `Failed to load products: ${
+          `Failed to load data: ${
             err instanceof Error ? err.message : String(err)
           }`
         );
       }
     };
 
-    fetchProducts();
+    fetchData();
+
+    // Set up interval to refresh sales data every minute
+    const intervalId = setInterval(fetchTodaySalesData, 60000);
+    return () => clearInterval(intervalId);
   }, []);
 
   // Filter products when search term changes
@@ -760,6 +901,23 @@ export default function NewSalePage() {
                         {product.name}
                       </Text>
                       <Text size="md">Code: {product.code}</Text>
+
+                      {/* Target-related motivational message */}
+                      {wouldHelpReachTarget(product) && (
+                        <Alert
+                          color={
+                            getProductMotivationalMessage(product)?.color ||
+                            "blue"
+                          }
+                          variant="light"
+                          radius="md"
+                          mt="xs"
+                          p="xs"
+                          withCloseButton={false}
+                        >
+                          {getProductMotivationalMessage(product)?.message}
+                        </Alert>
+                      )}
                     </div>
                     <div>
                       <Text fw={700} size="xl">
@@ -828,6 +986,23 @@ export default function NewSalePage() {
                           </Text>
                         )}
                     </Text>
+
+                    {/* Target-related motivational message */}
+                    {wouldHelpReachTarget(product) && (
+                      <Alert
+                        color={
+                          getProductMotivationalMessage(product)?.color ||
+                          "blue"
+                        }
+                        variant="light"
+                        radius="md"
+                        mt="xs"
+                        p="xs"
+                        withCloseButton={false}
+                      >
+                        {getProductMotivationalMessage(product)?.message}
+                      </Alert>
+                    )}
                   </div>
                 </Group>
 

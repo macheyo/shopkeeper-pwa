@@ -40,8 +40,14 @@ import {
 
 import { useRouter } from "next/navigation";
 import { getProductsDB, getSalesDB } from "@/lib/databases";
-import { ProductDoc, SaleDoc } from "@/types";
-import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
+import { SaleDoc } from "@/types";
+import {
+  formatMoney,
+  createMoney,
+  BASE_CURRENCY,
+  Money,
+  CurrencyCode,
+} from "@/types/money";
 
 // BeforeInstallPromptEvent type definition
 type BeforeInstallPromptEvent = Event & {
@@ -117,8 +123,8 @@ export default function Home() {
       // Calculate total revenue
       if (todaySales.length > 0) {
         let totalAmount = 0;
-        let currency = BASE_CURRENCY;
-        let exchangeRate = 1;
+        const currency = BASE_CURRENCY;
+        const exchangeRate = 1;
 
         // Sum up all sales and convert to base currency
         todaySales.forEach((sale) => {
@@ -231,18 +237,22 @@ export default function Home() {
     setCurrentTarget(newTarget);
     localStorage.setItem("currentSalesTarget", JSON.stringify(newTarget));
     setShowTargetModal(false);
+    // Reset target amount for next time
+    setTargetAmount(0);
   };
 
   useEffect(() => {
-    // Fetch dashboard data
-    if (typeof window !== "undefined") {
-      fetchDashboardData();
-      loadSalesTarget();
-
-      // Set up interval to refresh data every minute
-      const intervalId = setInterval(fetchDashboardData, 60000);
-      return () => clearInterval(intervalId);
+    // Only run in browser environment
+    if (typeof window === "undefined") {
+      return () => {}; // Return empty cleanup function if window is undefined
     }
+
+    // Fetch dashboard data
+    fetchDashboardData();
+    loadSalesTarget();
+
+    // Set up interval to refresh data every minute
+    const intervalId = setInterval(fetchDashboardData, 60000);
 
     // Check if already installed
     const checkInstalled = () => {
@@ -283,23 +293,22 @@ export default function Home() {
       }
     };
 
-    if (typeof window !== "undefined") {
-      window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-      window.addEventListener("appinstalled", handleAppInstalled);
-      window.addEventListener("online", handleOnlineStatus);
-      window.addEventListener("offline", handleOnlineStatus);
-    }
+    // Add event listeners
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    window.addEventListener("online", handleOnlineStatus);
+    window.addEventListener("offline", handleOnlineStatus);
 
+    // Return cleanup function
     return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener(
-          "beforeinstallprompt",
-          handleBeforeInstallPrompt
-        );
-        window.removeEventListener("appinstalled", handleAppInstalled);
-        window.removeEventListener("online", handleOnlineStatus);
-        window.removeEventListener("offline", handleOnlineStatus);
-      }
+      clearInterval(intervalId);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+      window.removeEventListener("online", handleOnlineStatus);
+      window.removeEventListener("offline", handleOnlineStatus);
     };
   }, [fetchDashboardData, loadSalesTarget]);
 
@@ -377,7 +386,7 @@ export default function Home() {
               <Table.Td>{new Date(target.date).toLocaleDateString()}</Table.Td>
               <Table.Td>
                 {formatMoney(
-                  createMoney(target.amount, target.currency as any)
+                  createMoney(target.amount, target.currency as CurrencyCode)
                 )}
               </Table.Td>
               <Table.Td>
@@ -531,31 +540,102 @@ export default function Home() {
 
               {/* Progress bar */}
               <Stack gap="xs">
-                <Progress
-                  value={
+                {(() => {
+                  // Calculate percentage
+                  const percentage =
                     todayRevenue && currentTarget
                       ? Math.min(
                           100,
                           (todayRevenue.amount / currentTarget.amount) * 100
                         )
-                      : 0
+                      : 0;
+
+                  // Determine color based on progress
+                  let progressColor = "blue";
+                  if (currentTarget?.achieved) {
+                    progressColor = "green";
+                  } else if (percentage >= 90) {
+                    progressColor = "teal";
+                  } else if (percentage >= 75) {
+                    progressColor = "cyan";
+                  } else if (percentage >= 50) {
+                    progressColor = "indigo";
                   }
-                  color={currentTarget.achieved ? "green" : "blue"}
-                  size="xl"
-                  radius="md"
-                  striped={currentTarget.achieved}
-                  animated={currentTarget.achieved}
-                />
-                <Group justify="apart">
-                  <Text size="sm" c="dimmed">
-                    {todayRevenue ? formatMoney(todayRevenue) : "$0.00"}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    {formatMoney(
-                      createMoney(currentTarget.amount, BASE_CURRENCY)
-                    )}
-                  </Text>
-                </Group>
+
+                  // Get encouraging message based on progress
+                  let message = "";
+                  const remaining = currentTarget
+                    ? currentTarget.amount - (todayRevenue?.amount || 0)
+                    : 0;
+
+                  if (currentTarget?.achieved) {
+                    message =
+                      "🎉 Amazing job! Target achieved! You're a superstar! 🏆";
+                  } else if (percentage >= 90) {
+                    message = `🚀 Almost there! Just ${formatMoney(
+                      createMoney(remaining)
+                    )} more to go! You can do it! ✨`;
+                  } else if (percentage >= 75) {
+                    message = `💪 You're making excellent progress! Only ${formatMoney(
+                      createMoney(remaining)
+                    )} more to reach your goal! 🔥`;
+                  } else if (percentage >= 50) {
+                    message = `👍 Halfway there! Keep it up! ${formatMoney(
+                      createMoney(remaining)
+                    )} more to go! You're on fire! 🔥`;
+                  } else if (percentage >= 25) {
+                    message = `😊 Good start! ${formatMoney(
+                      createMoney(remaining)
+                    )} more to reach your target! Keep going! ⭐`;
+                  } else if (percentage > 0) {
+                    message = `🌱 You've started! ${formatMoney(
+                      createMoney(remaining)
+                    )} more to reach your target! Every sale counts! 📈`;
+                  }
+
+                  return (
+                    <>
+                      <Progress
+                        value={percentage}
+                        color={progressColor}
+                        size="xl"
+                        radius="md"
+                        striped={currentTarget?.achieved || percentage >= 90}
+                        animated={currentTarget?.achieved || percentage >= 90}
+                      />
+                      <Group justify="apart">
+                        <Text size="sm" c="dimmed">
+                          {todayRevenue ? formatMoney(todayRevenue) : "$0.00"}
+                        </Text>
+                        <Text size="sm" fw={500} c={progressColor}>
+                          {percentage.toFixed(1)}%
+                        </Text>
+                        <Text size="sm" c="dimmed">
+                          {formatMoney(
+                            createMoney(
+                              currentTarget?.amount || 0,
+                              BASE_CURRENCY
+                            )
+                          )}
+                        </Text>
+                      </Group>
+                      {message && (
+                        <Text
+                          ta="center"
+                          size="sm"
+                          fw={500}
+                          c={progressColor}
+                          style={{
+                            opacity: percentage > 0 ? 1 : 0,
+                            transition: "opacity 0.3s ease",
+                          }}
+                        >
+                          {message}
+                        </Text>
+                      )}
+                    </>
+                  );
+                })()}
               </Stack>
             </Card>
           )}
@@ -709,9 +789,20 @@ export default function Home() {
           <Text ta="center">
             Keep up the great work! Your dedication and effort have paid off.
           </Text>
-          <Button size="lg" onClick={() => setShowCelebration(false)}>
-            Thank You!
-          </Button>
+          <Group>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCelebration(false);
+                setShowTargetModal(true);
+              }}
+            >
+              Set New Target
+            </Button>
+            <Button size="lg" onClick={() => setShowCelebration(false)}>
+              Thank You!
+            </Button>
+          </Group>
         </Stack>
       </Modal>
 
