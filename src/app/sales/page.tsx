@@ -20,48 +20,26 @@ import { getSalesDB } from "@/lib/databases";
 import { SaleDoc } from "@/types";
 import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
 import { useDateFilter } from "@/contexts/DateFilterContext";
-
-// Interface for sales target
-interface SalesTarget {
-  amount: number;
-  currency: string;
-  date: string;
-  achieved: boolean;
-}
+import {
+  SalesTarget,
+  AggregatedTarget,
+  getTargetForDateRange,
+  formatTargetAmount,
+  getTargetLabel,
+} from "@/lib/salesTargets";
 
 export default function SalesPage() {
   const router = useRouter();
-  const { dateRangeInfo } = useDateFilter();
+  const { dateRangeInfo, dateRange, customDateRange } = useDateFilter();
   const [revenue, setRevenue] = useState<Money | null>(null);
   const [currentTarget, setCurrentTarget] = useState<SalesTarget | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  // Function to check if target is achieved and update it
-  const checkTargetAchievement = useCallback(
-    (totalAmount: number) => {
-      if (!currentTarget) return;
-
-      if (totalAmount >= currentTarget.amount && !currentTarget.achieved) {
-        // Target achieved!
-        const updatedTarget = {
-          ...currentTarget,
-          achieved: true,
-        };
-        setCurrentTarget(updatedTarget);
-        localStorage.setItem(
-          "currentSalesTarget",
-          JSON.stringify(updatedTarget)
-        );
-      }
-    },
-    [currentTarget]
-  );
+  const [aggregatedTarget, setAggregatedTarget] =
+    useState<AggregatedTarget | null>(null);
 
   // Function to fetch sales data for the selected date range
   const fetchSalesData = useCallback(async () => {
     if (typeof window === "undefined") return;
 
-    setLoading(true);
     try {
       // Get sales for the selected date range
       const startDateISOString = dateRangeInfo.startDate.toISOString();
@@ -124,23 +102,34 @@ export default function SalesPage() {
         setRevenue(createMoney(0));
       }
 
-      // Load current target from localStorage
-      const targetJson = localStorage.getItem("currentSalesTarget");
-      if (targetJson) {
-        const target = JSON.parse(targetJson);
-        setCurrentTarget(target);
+      // Get the appropriate target for the selected date range
+      const target = getTargetForDateRange(
+        dateRange,
+        customDateRange,
+        dateRangeInfo.startDate,
+        dateRangeInfo.endDate,
+        totalAmount
+      );
 
-        // Check if we've met the target
-        if (totalAmount >= target.amount && !target.achieved) {
-          checkTargetAchievement(totalAmount);
+      if (target) {
+        if ("totalAmount" in target) {
+          // It's an aggregated target
+          setAggregatedTarget(target);
+          setCurrentTarget(null);
+        } else {
+          // It's a single day target
+          setCurrentTarget(target);
+          setAggregatedTarget(null);
         }
+      } else {
+        setCurrentTarget(null);
+        setAggregatedTarget(null);
       }
     } catch (error) {
       console.error("Error fetching sales data:", error);
     } finally {
-      setLoading(false);
     }
-  }, [checkTargetAchievement, dateRangeInfo]); // Re-fetch when date range changes
+  }, [dateRange, customDateRange, dateRangeInfo]); // Re-fetch when date range changes
 
   // Fetch data when component mounts or date range changes
   useEffect(() => {
@@ -153,8 +142,15 @@ export default function SalesPage() {
 
   // Calculate percentage of target achieved (without capping at 100%)
   const calculateTargetPercentage = () => {
-    if (!revenue || !currentTarget) return 0;
-    return (revenue.amount / currentTarget.amount) * 100;
+    if (!revenue) return 0;
+
+    // Get the target amount based on whether we have a current target or aggregated target
+    const targetAmount =
+      currentTarget?.amount || aggregatedTarget?.totalAmount || 0;
+
+    if (targetAmount === 0) return 0;
+
+    return (revenue.amount / targetAmount) * 100;
   };
 
   // Calculate display percentage for progress bar (capped at 100%)
@@ -164,22 +160,31 @@ export default function SalesPage() {
 
   // Get motivational message based on progress
   const getMotivationalMessage = () => {
-    if (!revenue || !currentTarget) return null;
+    if (!revenue) return null;
+
+    // Get the target based on whether we have a current target or aggregated target
+    if (!currentTarget && !aggregatedTarget) return null;
 
     const percentage = calculateTargetPercentage();
-    const remaining = currentTarget.amount - revenue.amount;
+    const targetAmount =
+      currentTarget?.amount || aggregatedTarget?.totalAmount || 0;
+    const remaining = targetAmount - revenue.amount;
     const excessPercentage = Math.max(0, percentage - 100);
 
     // Special message for overachievers
     if (percentage > 100) {
-      const excess = revenue.amount - currentTarget.amount;
+      const excess = revenue.amount - targetAmount;
       return {
         message: `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
           createMoney(excess)
         )} (${excessPercentage.toFixed(1)}%)! You're a champion! 🏅`,
         color: "yellow.7", // Gold color for overachievers
       };
-    } else if (currentTarget.achieved || percentage >= 100) {
+    } else if (
+      currentTarget?.achieved ||
+      aggregatedTarget?.achieved ||
+      percentage >= 100
+    ) {
       return {
         message:
           "🎉 Amazing job! You've reached your sales target for today! 🏆",
@@ -248,13 +253,15 @@ export default function SalesPage() {
       </Box>
 
       {/* Target Progress Card */}
-      {currentTarget ? (
+      {currentTarget || aggregatedTarget ? (
         <Paper withBorder p="md" mb="lg" radius="md">
           <Group justify="space-between" mb="xs">
             <Group>
               <IconTarget size={20} color={motivationalMessage?.color} />
               <Text fw={600} size="md">
-                Today&apos;s Sales Target
+                {currentTarget
+                  ? "Today's Sales Target"
+                  : getTargetLabel(aggregatedTarget, dateRange)}
               </Text>
             </Group>
             {calculateTargetPercentage() > 100 ? (
@@ -262,7 +269,7 @@ export default function SalesPage() {
                 Exceeded! 🏅
               </Badge>
             ) : (
-              currentTarget.achieved && (
+              (currentTarget?.achieved || aggregatedTarget?.achieved) && (
                 <Badge color="green" leftSection={<IconTrophy size={14} />}>
                   Achieved!
                 </Badge>
@@ -276,10 +283,14 @@ export default function SalesPage() {
             size="lg"
             radius="md"
             striped={
-              currentTarget.achieved || calculateTargetPercentage() >= 90
+              currentTarget?.achieved ||
+              aggregatedTarget?.achieved ||
+              calculateTargetPercentage() >= 90
             }
             animated={
-              currentTarget.achieved || calculateTargetPercentage() >= 90
+              currentTarget?.achieved ||
+              aggregatedTarget?.achieved ||
+              calculateTargetPercentage() >= 90
             }
             mb="xs"
           />
@@ -290,7 +301,11 @@ export default function SalesPage() {
               {calculateTargetPercentage().toFixed(1)}%
             </Text>
             <Text size="sm">
-              {formatMoney(createMoney(currentTarget.amount, BASE_CURRENCY))}
+              {currentTarget
+                ? formatMoney(
+                    createMoney(currentTarget.amount, currentTarget.currency)
+                  )
+                : formatTargetAmount(aggregatedTarget)}
             </Text>
           </Group>
 
@@ -309,7 +324,9 @@ export default function SalesPage() {
           <Group justify="space-between" align="center">
             <Group>
               <IconTarget size={20} />
-              <Text>No sales target set for today</Text>
+              <Text>
+                No sales target set for {dateRangeInfo.label.toLowerCase()}
+              </Text>
             </Group>
             <Button
               leftSection={<IconTarget size={16} />}

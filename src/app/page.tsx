@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Button,
   Card,
@@ -20,6 +20,7 @@ import {
   ActionIcon,
   Tooltip,
   Table,
+  Tabs,
 } from "@mantine/core";
 import {
   IconDownload,
@@ -36,6 +37,7 @@ import {
   IconHistory,
   IconCheck,
   IconX,
+  IconCalendar,
 } from "@tabler/icons-react";
 
 import { useRouter } from "next/navigation";
@@ -49,6 +51,20 @@ import {
   CurrencyCode,
 } from "@/types/money";
 import { useDateFilter } from "@/contexts/DateFilterContext";
+import {
+  SalesTarget,
+  AggregatedTarget,
+  setCurrentTarget,
+  getCurrentTarget,
+  saveTargetToHistory,
+  getTargetHistory,
+  getTargetForDateRange,
+  formatTargetAmount,
+  getTargetLabel,
+  setWeeklyTarget,
+  setMonthlyTarget,
+  updateTargetAchievement,
+} from "@/lib/salesTargets";
 
 // BeforeInstallPromptEvent type definition
 type BeforeInstallPromptEvent = Event & {
@@ -60,17 +76,9 @@ type BeforeInstallPromptEvent = Event & {
   prompt(): Promise<void>;
 };
 
-// Interface for sales target
-interface SalesTarget {
-  amount: number;
-  currency: string;
-  date: string;
-  achieved: boolean;
-}
-
 export default function Home() {
   const router = useRouter();
-  const { dateRangeInfo } = useDateFilter();
+  const { dateRangeInfo, dateRange, customDateRange } = useDateFilter();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -88,10 +96,33 @@ export default function Home() {
   // State for sales target
   const [showTargetModal, setShowTargetModal] = useState<boolean>(false);
   const [targetAmount, setTargetAmount] = useState<number>(0);
-  const [currentTarget, setCurrentTarget] = useState<SalesTarget | null>(null);
+  const [currentTarget, setCurrentTargetState] = useState<SalesTarget | null>(
+    null
+  );
+  const [aggregatedTarget, setAggregatedTarget] =
+    useState<AggregatedTarget | null>(null);
   const [targetHistory, setTargetHistory] = useState<SalesTarget[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
   const [showCelebration, setShowCelebration] = useState<boolean>(false);
+  const [weeklyTargetAmount, setWeeklyTargetAmount] = useState<number>(0);
+  const [monthlyTargetAmount, setMonthlyTargetAmount] = useState<number>(0);
+
+  // Function to check if target is achieved
+  const checkTargetAchievement = useCallback(
+    (totalAmount: number) => {
+      if (!currentTarget) return;
+
+      if (totalAmount >= currentTarget.amount && !currentTarget.achieved) {
+        // Update in localStorage using the imported function
+        const newTarget = updateTargetAchievement(currentTarget, true);
+        setCurrentTargetState(newTarget);
+
+        // Show celebration
+        setShowCelebration(true);
+      }
+    },
+    [currentTarget]
+  );
 
   // Function to fetch data for dashboard
   const fetchDashboardData = useCallback(async () => {
@@ -143,8 +174,8 @@ export default function Home() {
       setSalesCount(filteredSales.length);
 
       // Calculate total revenue
+      let totalAmount = 0;
       if (filteredSales.length > 0) {
-        let totalAmount = 0;
         const currency = BASE_CURRENCY;
         const exchangeRate = 1;
 
@@ -165,51 +196,75 @@ export default function Home() {
           currency,
           exchangeRate,
         });
-
-        // Check if we've met the target
-        checkTargetAchievement(totalAmount);
       } else {
         setRevenue(createMoney(0));
+      }
+
+      // Get the appropriate target for the selected date range
+      const target = getTargetForDateRange(
+        dateRange,
+        customDateRange,
+        dateRangeInfo.startDate,
+        dateRangeInfo.endDate,
+        totalAmount
+      );
+
+      if (target) {
+        if ("totalAmount" in target) {
+          // It's an aggregated target
+          setAggregatedTarget(target);
+          setCurrentTargetState(null);
+
+          // Check if we've met the aggregated target
+          if (totalAmount >= target.totalAmount && !target.achieved) {
+            // Show celebration
+            setShowCelebration(true);
+          }
+        } else {
+          // It's a single day target
+          setCurrentTargetState(target);
+          setAggregatedTarget(null);
+
+          // Check if we've met the target
+          checkTargetAchievement(totalAmount);
+        }
+      } else {
+        setCurrentTargetState(null);
+        setAggregatedTarget(null);
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
-  }, [dateRangeInfo]); // Re-fetch when date range changes
+  }, [dateRange, customDateRange, dateRangeInfo, checkTargetAchievement]); // Re-fetch when date range changes
 
   // Function to load sales target from localStorage
   const loadSalesTarget = useCallback(() => {
     if (typeof window === "undefined") return;
 
     // Load current target
-    const targetJson = localStorage.getItem("currentSalesTarget");
-    if (targetJson) {
-      const target = JSON.parse(targetJson) as SalesTarget;
-
+    const target = getCurrentTarget();
+    if (target) {
       // Check if target is for today
       const today = new Date().toISOString().split("T")[0];
       if (target.date === today) {
-        setCurrentTarget(target);
+        setCurrentTargetState(target);
       } else {
         // If target is from a previous day, move it to history
         saveTargetToHistory(target);
-        setCurrentTarget(null);
-        localStorage.removeItem("currentSalesTarget");
+        setCurrentTargetState(null);
       }
     }
 
     // Load target history
-    const historyJson = localStorage.getItem("salesTargetHistory");
-    if (historyJson) {
-      setTargetHistory(JSON.parse(historyJson));
-    }
+    setTargetHistory(getTargetHistory());
 
     // Check if we should prompt for a new target
     const lastPrompt = localStorage.getItem("lastTargetPrompt");
     const today = new Date().toISOString().split("T")[0];
 
-    if (!targetJson && (!lastPrompt || lastPrompt !== today)) {
+    if (!target && (!lastPrompt || lastPrompt !== today)) {
       // Only show the prompt if we don't have a target for today
       // and we haven't prompted today
       setTimeout(() => {
@@ -219,48 +274,45 @@ export default function Home() {
     }
   }, []);
 
-  // Function to save target to history
-  const saveTargetToHistory = (target: SalesTarget) => {
-    const updatedHistory = [target, ...targetHistory].slice(0, 30); // Keep last 30 days
-    setTargetHistory(updatedHistory);
-    localStorage.setItem("salesTargetHistory", JSON.stringify(updatedHistory));
-  };
-
-  // Function to check if target is achieved
-  const checkTargetAchievement = (totalAmount: number) => {
-    if (!currentTarget) return;
-
-    if (totalAmount >= currentTarget.amount && !currentTarget.achieved) {
-      // Target achieved!
-      const updatedTarget = {
-        ...currentTarget,
-        achieved: true,
-      };
-      setCurrentTarget(updatedTarget);
-      localStorage.setItem("currentSalesTarget", JSON.stringify(updatedTarget));
-
-      // Show celebration
-      setShowCelebration(true);
-    }
-  };
-
-  // Function to set a new sales target
+  // Function to set a new daily sales target
   const setNewTarget = () => {
     if (targetAmount <= 0) return;
 
-    const today = new Date().toISOString().split("T")[0];
-    const newTarget: SalesTarget = {
-      amount: targetAmount,
-      currency: BASE_CURRENCY,
-      date: today,
-      achieved: false,
-    };
-
-    setCurrentTarget(newTarget);
-    localStorage.setItem("currentSalesTarget", JSON.stringify(newTarget));
+    const newTarget = setCurrentTarget(targetAmount);
+    setCurrentTargetState(newTarget);
     setShowTargetModal(false);
     // Reset target amount for next time
     setTargetAmount(0);
+  };
+
+  // Function to set a new weekly sales target
+  const setNewWeeklyTarget = () => {
+    if (weeklyTargetAmount <= 0) return;
+
+    // Get the start of the current week
+    const now = new Date();
+    const day = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust to get Monday
+    const monday = new Date(now.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+
+    setWeeklyTarget(monday, weeklyTargetAmount);
+    setWeeklyTargetAmount(0);
+
+    // Refresh dashboard data
+    fetchDashboardData();
+  };
+
+  // Function to set a new monthly sales target
+  const setNewMonthlyTarget = () => {
+    if (monthlyTargetAmount <= 0) return;
+
+    const now = new Date();
+    setMonthlyTarget(now.getFullYear(), now.getMonth(), monthlyTargetAmount);
+    setMonthlyTargetAmount(0);
+
+    // Refresh dashboard data
+    fetchDashboardData();
   };
 
   // Add a state to track if the context is ready
@@ -395,6 +447,119 @@ export default function Home() {
     },
   ];
 
+  // Function to render the progress bar
+  const renderProgressBar = (): React.ReactNode => {
+    // Calculate percentage without capping at 100%
+    const targetAmount =
+      currentTarget?.amount || aggregatedTarget?.totalAmount || 0;
+    const percentage =
+      revenue && targetAmount > 0 ? (revenue.amount / targetAmount) * 100 : 0;
+
+    // Calculate display percentage for progress bar (capped at 100%)
+    const displayPercentage = Math.min(100, percentage);
+
+    // Calculate excess percentage (how much over 100%)
+    const excessPercentage = Math.max(0, percentage - 100);
+
+    // Determine color based on progress
+    let progressColor = "blue";
+    if (percentage > 100) {
+      progressColor = "yellow.7"; // Gold color for overachievers
+    } else if (currentTarget?.achieved || aggregatedTarget?.achieved) {
+      progressColor = "green";
+    } else if (percentage >= 90) {
+      progressColor = "teal";
+    } else if (percentage >= 75) {
+      progressColor = "cyan";
+    } else if (percentage >= 50) {
+      progressColor = "indigo";
+    }
+
+    // Get encouraging message based on progress
+    let message = "";
+    const remaining = targetAmount - (revenue?.amount || 0);
+
+    // Special message for overachievers
+    if (percentage > 100) {
+      const excess = (revenue?.amount || 0) - targetAmount;
+      message = `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
+        createMoney(excess)
+      )} (${excessPercentage.toFixed(1)}%)! You're a champion! 🏅`;
+    } else if (currentTarget?.achieved || aggregatedTarget?.achieved) {
+      message = "🎉 Amazing job! Target achieved! You're a superstar! 🏆";
+    } else if (percentage >= 90) {
+      message = `🚀 Almost there! Just ${formatMoney(
+        createMoney(remaining)
+      )} more to go! You can do it! ✨`;
+    } else if (percentage >= 75) {
+      message = `💪 You're making excellent progress! Only ${formatMoney(
+        createMoney(remaining)
+      )} more to reach your goal! 🔥`;
+    } else if (percentage >= 50) {
+      message = `👍 Halfway there! Keep it up! ${formatMoney(
+        createMoney(remaining)
+      )} more to go! You're on fire! 🔥`;
+    } else if (percentage >= 25) {
+      message = `😊 Good start! ${formatMoney(
+        createMoney(remaining)
+      )} more to reach your target! Keep going! ⭐`;
+    } else if (percentage > 0) {
+      message = `🌱 You've started! ${formatMoney(
+        createMoney(remaining)
+      )} more to reach your target! Every sale counts! 📈`;
+    }
+
+    return (
+      <>
+        <Progress
+          value={displayPercentage}
+          color={progressColor}
+          size="xl"
+          radius="md"
+          striped={
+            currentTarget?.achieved ||
+            aggregatedTarget?.achieved ||
+            percentage >= 90
+          }
+          animated={
+            currentTarget?.achieved ||
+            aggregatedTarget?.achieved ||
+            percentage >= 90
+          }
+        />
+        <Group justify="apart">
+          <Text size="sm" c="dimmed">
+            {revenue ? formatMoney(revenue) : "$0.00"}
+          </Text>
+          <Text size="sm" fw={500} c={progressColor}>
+            {percentage.toFixed(1)}%
+          </Text>
+          <Text size="sm" c="dimmed">
+            {currentTarget
+              ? formatMoney(
+                  createMoney(currentTarget.amount, currentTarget.currency)
+                )
+              : formatTargetAmount(aggregatedTarget)}
+          </Text>
+        </Group>
+        {message && (
+          <Text
+            ta="center"
+            size="sm"
+            fw={500}
+            c={progressColor}
+            style={{
+              opacity: percentage > 0 ? 1 : 0,
+              transition: "opacity 0.3s ease",
+            }}
+          >
+            {message}
+          </Text>
+        )}
+      </>
+    );
+  };
+
   // Render the target history table
   const renderTargetHistory = () => {
     if (targetHistory.length === 0) {
@@ -527,13 +692,15 @@ export default function Home() {
           </SimpleGrid>
 
           {/* Sales Target Card */}
-          {currentTarget && (
+          {currentTarget || aggregatedTarget ? (
             <Card withBorder p="md" radius="md" mb="md">
               <Group justify="space-between" align="flex-start" mb="xs">
                 <div>
                   <Group align="center">
                     <Text fw={500} size="lg">
-                      Today&apos;s Sales Target
+                      {currentTarget
+                        ? "Today's Sales Target"
+                        : getTargetLabel(aggregatedTarget, dateRange)}
                     </Text>
                     <Tooltip label="View target history">
                       <ActionIcon
@@ -547,11 +714,17 @@ export default function Home() {
                   </Group>
                   <Group gap="xs" mt="xs">
                     <Text fw={700} size="xl">
-                      {formatMoney(
-                        createMoney(currentTarget.amount, BASE_CURRENCY)
-                      )}
+                      {currentTarget
+                        ? formatMoney(
+                            createMoney(
+                              currentTarget.amount,
+                              currentTarget.currency
+                            )
+                          )
+                        : formatTargetAmount(aggregatedTarget)}
                     </Text>
-                    {currentTarget.achieved && (
+                    {(currentTarget?.achieved ||
+                      aggregatedTarget?.achieved) && (
                       <Badge color="green" size="lg">
                         Achieved!
                       </Badge>
@@ -559,12 +732,16 @@ export default function Home() {
                   </Group>
                 </div>
                 <ThemeIcon
-                  color={currentTarget.achieved ? "green" : "blue"}
+                  color={
+                    currentTarget?.achieved || aggregatedTarget?.achieved
+                      ? "green"
+                      : "blue"
+                  }
                   variant="light"
                   size="lg"
                   radius="md"
                 >
-                  {currentTarget.achieved ? (
+                  {currentTarget?.achieved || aggregatedTarget?.achieved ? (
                     <IconTrophy style={{ width: rem(20), height: rem(20) }} />
                   ) : (
                     <IconTarget style={{ width: rem(20), height: rem(20) }} />
@@ -573,125 +750,16 @@ export default function Home() {
               </Group>
 
               {/* Progress bar */}
-              <Stack gap="xs">
-                {(() => {
-                  // Calculate percentage without capping at 100%
-                  const percentage =
-                    revenue && currentTarget
-                      ? (revenue.amount / currentTarget.amount) * 100
-                      : 0;
-
-                  // Calculate display percentage for progress bar (capped at 100%)
-                  const displayPercentage = Math.min(100, percentage);
-
-                  // Calculate excess percentage (how much over 100%)
-                  const excessPercentage = Math.max(0, percentage - 100);
-
-                  // Determine color based on progress
-                  let progressColor = "blue";
-                  if (percentage > 100) {
-                    progressColor = "yellow.7"; // Gold color for overachievers
-                  } else if (currentTarget?.achieved) {
-                    progressColor = "green";
-                  } else if (percentage >= 90) {
-                    progressColor = "teal";
-                  } else if (percentage >= 75) {
-                    progressColor = "cyan";
-                  } else if (percentage >= 50) {
-                    progressColor = "indigo";
-                  }
-
-                  // Get encouraging message based on progress
-                  let message = "";
-                  const remaining = currentTarget
-                    ? currentTarget.amount - (revenue?.amount || 0)
-                    : 0;
-
-                  // Special message for overachievers
-                  if (percentage > 100) {
-                    const excess =
-                      (revenue?.amount || 0) - currentTarget.amount;
-                    message = `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
-                      createMoney(excess)
-                    )} (${excessPercentage.toFixed(
-                      1
-                    )}%)! You're a champion! 🏅`;
-                  } else if (currentTarget?.achieved) {
-                    message =
-                      "🎉 Amazing job! Target achieved! You're a superstar! 🏆";
-                  } else if (percentage >= 90) {
-                    message = `🚀 Almost there! Just ${formatMoney(
-                      createMoney(remaining)
-                    )} more to go! You can do it! ✨`;
-                  } else if (percentage >= 75) {
-                    message = `💪 You're making excellent progress! Only ${formatMoney(
-                      createMoney(remaining)
-                    )} more to reach your goal! 🔥`;
-                  } else if (percentage >= 50) {
-                    message = `👍 Halfway there! Keep it up! ${formatMoney(
-                      createMoney(remaining)
-                    )} more to go! You're on fire! 🔥`;
-                  } else if (percentage >= 25) {
-                    message = `😊 Good start! ${formatMoney(
-                      createMoney(remaining)
-                    )} more to reach your target! Keep going! ⭐`;
-                  } else if (percentage > 0) {
-                    message = `🌱 You've started! ${formatMoney(
-                      createMoney(remaining)
-                    )} more to reach your target! Every sale counts! 📈`;
-                  }
-
-                  return (
-                    <>
-                      <Progress
-                        value={displayPercentage}
-                        color={progressColor}
-                        size="xl"
-                        radius="md"
-                        striped={currentTarget?.achieved || percentage >= 90}
-                        animated={currentTarget?.achieved || percentage >= 90}
-                      />
-                      <Group justify="apart">
-                        <Text size="sm" c="dimmed">
-                          {revenue ? formatMoney(revenue) : "$0.00"}
-                        </Text>
-                        <Text size="sm" fw={500} c={progressColor}>
-                          {percentage.toFixed(1)}%
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {formatMoney(
-                            createMoney(
-                              currentTarget?.amount || 0,
-                              BASE_CURRENCY
-                            )
-                          )}
-                        </Text>
-                      </Group>
-                      {message && (
-                        <Text
-                          ta="center"
-                          size="sm"
-                          fw={500}
-                          c={progressColor}
-                          style={{
-                            opacity: percentage > 0 ? 1 : 0,
-                            transition: "opacity 0.3s ease",
-                          }}
-                        >
-                          {message}
-                        </Text>
-                      )}
-                    </>
-                  );
-                })()}
-              </Stack>
+              <Stack gap="xs">{renderProgressBar()}</Stack>
             </Card>
-          )}
+          ) : null}
 
-          {!currentTarget && (
+          {!currentTarget && !aggregatedTarget && (
             <Card withBorder p="md" radius="md" mb="md">
               <Group justify="space-between" align="center">
-                <Text>No sales target set for today</Text>
+                <Text>
+                  No sales target set for {dateRangeInfo.label.toLowerCase()}
+                </Text>
                 <Button
                   leftSection={<IconTarget size={16} />}
                   onClick={() => setShowTargetModal(true)}
@@ -768,39 +836,136 @@ export default function Home() {
         </Stack>
       </Container>
 
-      {/* Set Target Modal */}
+      {/* Modals */}
+      {/* Target Modal */}
       <Modal
         opened={showTargetModal}
         onClose={() => setShowTargetModal(false)}
-        title="Set Sales Target for Today"
+        title="Set Sales Target"
         centered
+        size="lg"
       >
         <Stack>
           <Text size="sm">
-            Setting a daily sales target can help you track your progress and
-            stay motivated.
+            Setting sales targets can help you track your progress and stay
+            motivated. Choose the type of target you want to set.
           </Text>
+          <Tabs defaultValue="daily">
+            <Tabs.List>
+              <Tabs.Tab value="daily" leftSection={<IconTarget size={16} />}>
+                Daily Target
+              </Tabs.Tab>
+              <Tabs.Tab value="weekly" leftSection={<IconCalendar size={16} />}>
+                Weekly Target
+              </Tabs.Tab>
+              <Tabs.Tab
+                value="monthly"
+                leftSection={<IconCalendar size={16} />}
+              >
+                Monthly Target
+              </Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="daily" pt="xs">
+              <Stack mt="md">
+                <Text size="sm">Set a target for today&apos;s sales.</Text>
+                <NumberInput
+                  label="Daily Target Amount"
+                  description={`Enter your daily sales target in ${BASE_CURRENCY}`}
+                  value={targetAmount}
+                  onChange={(val) => setTargetAmount(Number(val))}
+                  min={0}
+                  step={10}
+                  decimalScale={2}
+                  prefix="$"
+                  size="lg"
+                />
+                <Group justify="right" mt="md">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTargetModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={setNewTarget}
+                    disabled={targetAmount <= 0}
+                    color="blue"
+                  >
+                    Set Daily Target
+                  </Button>
+                </Group>
+              </Stack>
+            </Tabs.Panel>
+            <Tabs.Panel value="weekly" pt="xs">
+              <Stack mt="md">
+                <Text size="sm">
+                  Set a target for this week&apos;s sales. This will help you
+                  track your weekly performance.
+                </Text>
+                <NumberInput
+                  label="Weekly Target Amount"
+                  description={`Enter your weekly sales target in ${BASE_CURRENCY}`}
+                  value={weeklyTargetAmount}
+                  onChange={(val) => setWeeklyTargetAmount(Number(val))}
+                  min={0}
+                  step={50}
+                  decimalScale={2}
+                  prefix="$"
+                  size="lg"
+                />
+                <Group justify="right" mt="md">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTargetModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={setNewWeeklyTarget}
+                    disabled={weeklyTargetAmount <= 0}
+                    color="teal"
+                  >
+                    Set Weekly Target
+                  </Button>
+                </Group>
+              </Stack>
+            </Tabs.Panel>
 
-          <NumberInput
-            label="Target Amount"
-            description={`Enter your sales target in ${BASE_CURRENCY}`}
-            value={targetAmount}
-            onChange={(val) => setTargetAmount(Number(val))}
-            min={0}
-            step={10}
-            decimalScale={2}
-            prefix="$"
-            size="lg"
-          />
-
-          <Group justify="right" mt="md">
-            <Button variant="outline" onClick={() => setShowTargetModal(false)}>
-              Skip
-            </Button>
-            <Button onClick={setNewTarget} disabled={targetAmount <= 0}>
-              Set Target
-            </Button>
-          </Group>
+            <Tabs.Panel value="monthly" pt="xs">
+              <Stack mt="md">
+                <Text size="sm">
+                  Set a target for this month&apos;s sales. This will help you
+                  track your monthly performance.
+                </Text>
+                <NumberInput
+                  label="Monthly Target Amount"
+                  description={`Enter your monthly sales target in ${BASE_CURRENCY}`}
+                  value={monthlyTargetAmount}
+                  onChange={(val) => setMonthlyTargetAmount(Number(val))}
+                  min={0}
+                  step={100}
+                  decimalScale={2}
+                  prefix="$"
+                  size="lg"
+                />
+                <Group justify="right" mt="md">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTargetModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={setNewMonthlyTarget}
+                    disabled={monthlyTargetAmount <= 0}
+                    color="indigo"
+                  >
+                    Set Monthly Target
+                  </Button>
+                </Group>
+              </Stack>
+            </Tabs.Panel>
+          </Tabs>
         </Stack>
       </Modal>
 
