@@ -754,7 +754,7 @@ export default function Home() {
                   <Group align="center">
                     <Text fw={500} size="lg">
                       {currentTarget
-                        ? "Today&apos;s Sales Target"
+                        ? "Today's Sales Target"
                         : getTargetLabel(aggregatedTarget, dateRange)}
                     </Text>
                     <Tooltip label="View target history">
