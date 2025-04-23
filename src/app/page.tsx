@@ -79,6 +79,7 @@ type BeforeInstallPromptEvent = Event & {
 export default function Home() {
   const router = useRouter();
   const { dateRangeInfo, dateRange, customDateRange } = useDateFilter();
+  const { startDate, endDate, label } = dateRangeInfo;
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -87,11 +88,13 @@ export default function Home() {
     "synced"
   );
 
-  // State for actual data
+  // State for actual data with individual loading states
   const [productCount, setProductCount] = useState<number>(0);
   const [salesCount, setSalesCount] = useState<number>(0);
   const [revenue, setRevenue] = useState<Money | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [productsLoading, setProductsLoading] = useState<boolean>(true);
+  const [salesLoading, setSalesLoading] = useState<boolean>(true);
+  const [revenueLoading, setRevenueLoading] = useState<boolean>(true);
 
   // State for sales target
   const [showTargetModal, setShowTargetModal] = useState<boolean>(false);
@@ -107,69 +110,70 @@ export default function Home() {
   const [weeklyTargetAmount, setWeeklyTargetAmount] = useState<number>(0);
   const [monthlyTargetAmount, setMonthlyTargetAmount] = useState<number>(0);
 
-  // Function to check if target is achieved
-  const checkTargetAchievement = useCallback(
-    (totalAmount: number) => {
-      if (!currentTarget) return;
-
-      if (totalAmount >= currentTarget.amount && !currentTarget.achieved) {
-        // Update in localStorage using the imported function
-        const newTarget = updateTargetAchievement(currentTarget, true);
-        setCurrentTargetState(newTarget);
-
-        // Show celebration
-        setShowCelebration(true);
-      }
-    },
-    [currentTarget]
-  );
-
   // Function to fetch data for dashboard
   const fetchDashboardData = useCallback(async () => {
     if (typeof window === "undefined") return;
 
-    setLoading(true);
+    // Reset loading states
+    setProductsLoading(true);
+    setSalesLoading(true);
+    setRevenueLoading(true);
+
+    // Initialize databases
+    let productsDB;
+    let salesDB;
     try {
-      // Get product count
-      const productsDB = await getProductsDB();
+      [productsDB, salesDB] = await Promise.all([
+        getProductsDB(),
+        getSalesDB(),
+      ]);
+    } catch (error) {
+      console.error("Error initializing databases:", error);
+      return;
+    }
+
+    // Fetch products count
+    try {
       const productsResult = await productsDB.find({
         selector: { type: "product" },
       });
       setProductCount(productsResult.docs.length);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      setProductCount(0);
+    } finally {
+      setProductsLoading(false);
+    }
 
-      // Get sales for the selected date range
-      const startDateISOString = dateRangeInfo.startDate.toISOString();
-      const endDateISOString = dateRangeInfo.endDate.toISOString();
+    // Fetch sales and revenue data
+    try {
+      const startDateISOString = startDate.toISOString();
+      const endDateISOString = endDate.toISOString();
 
-      const salesDB = await getSalesDB();
+      // Create an index for timestamp and type if it doesn't exist
+      try {
+        await salesDB.createIndex({
+          index: {
+            fields: ["timestamp", "type"],
+          },
+        });
+      } catch (error) {
+        // Index might already exist, ignore error
+        console.debug("Index might already exist:", error);
+      }
 
-      // Get all documents
-      const result = await salesDB.allDocs({
-        include_docs: true,
+      // Query sales with filtering at the database level
+      const result = await salesDB.find({
+        selector: {
+          type: "sale",
+          timestamp: {
+            $gte: startDateISOString,
+            $lt: endDateISOString,
+          },
+        },
       });
 
-      // Filter for sales documents within the selected date range
-      const filteredSales = result.rows
-        .map((row) => row.doc)
-        .filter((doc): doc is SaleDoc => {
-          // Make sure it's a sale document with a timestamp
-          if (
-            !doc ||
-            typeof doc !== "object" ||
-            !("type" in doc) ||
-            doc.type !== "sale" ||
-            !("timestamp" in doc)
-          ) {
-            return false;
-          }
-
-          // Check if it's within the date range
-          const docDate = new Date(doc.timestamp as string);
-          return (
-            docDate >= new Date(startDateISOString) &&
-            docDate < new Date(endDateISOString)
-          );
-        });
+      const filteredSales = result.docs as SaleDoc[];
 
       setSalesCount(filteredSales.length);
 
@@ -225,19 +229,29 @@ export default function Home() {
           setCurrentTargetState(target);
           setAggregatedTarget(null);
 
-          // Check if we've met the target
-          checkTargetAchievement(totalAmount);
+          // Check if target is achieved
+          if (target.amount <= totalAmount && !target.achieved) {
+            // Update in localStorage using the imported function
+            const newTarget = updateTargetAchievement(target, true);
+            setCurrentTargetState(newTarget);
+
+            // Show celebration
+            setShowCelebration(true);
+          }
         }
       } else {
         setCurrentTargetState(null);
         setAggregatedTarget(null);
       }
     } catch (error) {
-      console.error("Error fetching dashboard data:", error);
+      console.error("Error fetching sales data:", error);
+      setSalesCount(0);
+      setRevenue(createMoney(0));
     } finally {
-      setLoading(false);
+      setSalesLoading(false);
+      setRevenueLoading(false);
     }
-  }, [dateRange, customDateRange, dateRangeInfo, checkTargetAchievement]); // Re-fetch when date range changes
+  }, [dateRange, customDateRange, startDate, endDate, label]); // Re-fetch when date range changes
 
   // Function to load sales target from localStorage
   const loadSalesTarget = useCallback(() => {
@@ -315,34 +329,60 @@ export default function Home() {
     fetchDashboardData();
   };
 
-  // Add a state to track if the context is ready
-  const [isContextReady, setIsContextReady] = useState(false);
-
-  // Add an effect to check when the context is ready
-  useEffect(() => {
-    // If we have dateRangeInfo with valid dates, the context is ready
-    if (dateRangeInfo && dateRangeInfo.startDate && dateRangeInfo.endDate) {
-      setIsContextReady(true);
-    }
-  }, [dateRangeInfo]);
-
   useEffect(() => {
     // Only run in browser environment
     if (typeof window === "undefined") {
       return () => {}; // Return empty cleanup function if window is undefined
     }
 
-    // Fetch dashboard data only when context is ready
-    if (isContextReady) {
-      fetchDashboardData();
-      loadSalesTarget();
+    let productsChangeListener: { cancel(): void } | null = null;
+    let salesChangeListener: { cancel(): void } | null = null;
+
+    // Set up database change listeners
+    async function setupChangeListeners() {
+      try {
+        const [productsDB, salesDB] = await Promise.all([
+          getProductsDB(),
+          getSalesDB(),
+        ]);
+
+        productsChangeListener = productsDB
+          .changes({
+            since: "now",
+            live: true,
+          })
+          .on("change", () => {
+            // Refresh products count when changes occur
+            fetchDashboardData();
+          });
+
+        salesChangeListener = salesDB
+          .changes({
+            since: "now",
+            live: true,
+            include_docs: true,
+          })
+          .on("change", (change) => {
+            const changedDoc = change.doc as SaleDoc;
+            if (changedDoc?.type === "sale") {
+              // Refresh sales data when changes occur
+              fetchDashboardData();
+            }
+          });
+      } catch (error) {
+        console.error("Error setting up change listeners:", error);
+      }
     }
 
-    // Set up interval to refresh data every minute, but only when context is ready
-    let intervalId: NodeJS.Timeout | undefined = undefined;
-    if (isContextReady) {
-      intervalId = setInterval(fetchDashboardData, 60000);
-    }
+    // Load sales target data
+    loadSalesTarget();
+
+    // Fetch initial data and set up listeners
+    fetchDashboardData();
+    setupChangeListeners();
+
+    // Set up interval to refresh data every minute
+    const intervalId = setInterval(fetchDashboardData, 60000);
 
     // Check if already installed
     const checkInstalled = () => {
@@ -391,7 +431,15 @@ export default function Home() {
 
     // Return cleanup function
     return () => {
-      clearInterval(intervalId);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      if (productsChangeListener) {
+        productsChangeListener.cancel();
+      }
+      if (salesChangeListener) {
+        salesChangeListener.cancel();
+      }
       window.removeEventListener(
         "beforeinstallprompt",
         handleBeforeInstallPrompt
@@ -400,7 +448,14 @@ export default function Home() {
       window.removeEventListener("online", handleOnlineStatus);
       window.removeEventListener("offline", handleOnlineStatus);
     };
-  }, [fetchDashboardData, loadSalesTarget]);
+  }, [
+    fetchDashboardData,
+    loadSalesTarget,
+    dateRange,
+    customDateRange,
+    startDate,
+    endDate,
+  ]);
 
   const handleInstall = async () => {
     if (!deferredPrompt) return;
@@ -426,21 +481,21 @@ export default function Home() {
   const stats = [
     {
       label: "Products",
-      value: loading ? "..." : productCount.toString(),
+      value: productsLoading ? "..." : productCount.toString(),
       icon: IconPackage,
       color: "green",
       path: "/products",
     },
     {
       label: `Sales (${dateRangeInfo.label})`,
-      value: loading ? "..." : salesCount.toString(),
+      value: salesLoading ? "..." : salesCount.toString(),
       icon: IconShoppingCart,
       color: "blue",
       path: "/sales",
     },
     {
       label: `Revenue (${dateRangeInfo.label})`,
-      value: loading ? "..." : revenue ? formatMoney(revenue) : "$0.00",
+      value: revenueLoading ? "..." : revenue ? formatMoney(revenue) : "$0.00",
       icon: IconChartBar,
       color: "violet",
       path: "/reports",
@@ -482,29 +537,29 @@ export default function Home() {
     // Special message for overachievers
     if (percentage > 100) {
       const excess = (revenue?.amount || 0) - targetAmount;
-      message = `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
+      message = `🏅 EXCEPTIONAL PERFORMANCE! You&apos;ve exceeded your target by ${formatMoney(
         createMoney(excess)
-      )} (${excessPercentage.toFixed(1)}%)! You're a champion! 🏅`;
+      )} (${excessPercentage.toFixed(1)}%)! You&apos;re a champion! 🏅`;
     } else if (currentTarget?.achieved || aggregatedTarget?.achieved) {
-      message = "🎉 Amazing job! Target achieved! You're a superstar! 🏆";
+      message = "🎉 Amazing job! Target achieved! You&apos;re a superstar! 🏆";
     } else if (percentage >= 90) {
       message = `🚀 Almost there! Just ${formatMoney(
         createMoney(remaining)
       )} more to go! You can do it! ✨`;
     } else if (percentage >= 75) {
-      message = `💪 You're making excellent progress! Only ${formatMoney(
+      message = `💪 You&apos;re making excellent progress! Only ${formatMoney(
         createMoney(remaining)
       )} more to reach your goal! 🔥`;
     } else if (percentage >= 50) {
       message = `👍 Halfway there! Keep it up! ${formatMoney(
         createMoney(remaining)
-      )} more to go! You're on fire! 🔥`;
+      )} more to go! You&apos;re on fire! 🔥`;
     } else if (percentage >= 25) {
       message = `😊 Good start! ${formatMoney(
         createMoney(remaining)
       )} more to reach your target! Keep going! ⭐`;
     } else if (percentage > 0) {
-      message = `🌱 You've started! ${formatMoney(
+      message = `🌱 You&apos;ve started! ${formatMoney(
         createMoney(remaining)
       )} more to reach your target! Every sale counts! 📈`;
     }
@@ -699,7 +754,7 @@ export default function Home() {
                   <Group align="center">
                     <Text fw={500} size="lg">
                       {currentTarget
-                        ? "Today's Sales Target"
+                        ? "Today&apos;s Sales Target"
                         : getTargetLabel(aggregatedTarget, dateRange)}
                     </Text>
                     <Tooltip label="View target history">
@@ -812,13 +867,10 @@ export default function Home() {
                 </Button>
 
                 <Button
-                  component="a"
-                  href="#"
                   leftSection={<IconShare size={20} />}
                   variant="outline"
                   fullWidth
-                  onClick={(e) => {
-                    e.preventDefault();
+                  onClick={() => {
                     if (navigator.share) {
                       navigator.share({
                         title: "ShopKeeper Reports",
@@ -833,6 +885,17 @@ export default function Home() {
               </SimpleGrid>
             </Stack>
           </Card>
+
+          {/* Add hover styles */}
+          <style jsx>{`
+            .hover-card {
+              transition: transform 0.2s, box-shadow 0.2s;
+            }
+            .hover-card:hover {
+              transform: translateY(-4px);
+              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            }
+          `}</style>
         </Stack>
       </Container>
 
@@ -998,7 +1061,7 @@ export default function Home() {
           <Text size="xl" fw={700} ta="center">
             You&apos;ve achieved your sales target for today!
           </Text>
-          <div style={{ fontSize: "5rem", textAlign: "center" }}>🏆</div>
+          <div style={{ fontSize: rem(80), textAlign: "center" }}>🏆</div>
           <Text ta="center">
             Keep up the great work! Your dedication and effort have paid off.
           </Text>
@@ -1018,14 +1081,6 @@ export default function Home() {
           </Group>
         </Stack>
       </Modal>
-
-      {/* Add hover styles */}
-      <style jsx global>{`
-        .hover-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-      `}</style>
     </div>
   );
 }

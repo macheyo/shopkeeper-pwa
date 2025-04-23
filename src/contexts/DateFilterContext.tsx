@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+} from "react";
 import {
   DateRange,
   CustomDateRange,
@@ -46,7 +52,9 @@ export function DateFilterProvider({
   >(undefined);
 
   // Calculate the actual date range info based on the selected range
-  const dateRangeInfo = getDateRangeFromFilter(dateRange, customDateRange);
+  const dateRangeInfo = useMemo(() => {
+    return getDateRangeFromFilter(dateRange, customDateRange);
+  }, [dateRange, customDateRange]);
 
   // Load saved date range from localStorage on initial render
   useEffect(() => {

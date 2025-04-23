@@ -1,7 +1,9 @@
 import { Modal, Text, Badge, Button, Table } from "@mantine/core";
 import { formatMoney, createMoney, CurrencyCode } from "@/types/money";
-import { getTargetHistory } from "@/lib/salesTargets";
+import { getTargetsForDateRange, SalesTarget } from "@/lib/salesTargets";
 import { IconCheck, IconX } from "@tabler/icons-react";
+import { useDateFilter } from "@/contexts/DateFilterContext";
+import { useState, useEffect, useCallback } from "react";
 
 interface SalesTargetHistoryModalProps {
   opened: boolean;
@@ -12,7 +14,27 @@ export function SalesTargetHistoryModal({
   opened,
   onClose,
 }: SalesTargetHistoryModalProps) {
-  const targetHistory = getTargetHistory();
+  const { dateRangeInfo } = useDateFilter();
+  const [targetHistory, setTargetHistory] = useState<SalesTarget[]>([]);
+
+  const fetchTargetHistory = useCallback(async () => {
+    if (typeof window === "undefined") return;
+
+    try {
+      // Get sales for the selected date range
+      const startDate = dateRangeInfo.startDate;
+      const endDate = dateRangeInfo.endDate;
+
+      const targets = getTargetsForDateRange(startDate, endDate);
+      setTargetHistory(targets);
+    } catch (error) {
+      console.error("Error fetching target history:", error);
+    }
+  }, [dateRangeInfo]);
+
+  useEffect(() => {
+    fetchTargetHistory();
+  }, [fetchTargetHistory]);
 
   const renderTargetHistory = () => {
     if (targetHistory.length === 0) {
