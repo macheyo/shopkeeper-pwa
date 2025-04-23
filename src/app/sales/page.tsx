@@ -11,8 +11,15 @@ import {
   Progress,
   Badge,
   Button,
+  ActionIcon,
+  Tooltip,
 } from "@mantine/core";
-import { IconPlus, IconTarget, IconTrophy } from "@tabler/icons-react";
+import {
+  IconPlus,
+  IconTarget,
+  IconTrophy,
+  IconHistory,
+} from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import SalesList from "@/components/SalesList";
 import CollapsibleFab from "@/components/CollapsibleFab";
@@ -27,6 +34,7 @@ import {
   formatTargetAmount,
   getTargetLabel,
 } from "@/lib/salesTargets";
+import { SalesTargetHistoryModal } from "@/components/SalesTargetHistoryModal";
 
 export default function SalesPage() {
   const router = useRouter();
@@ -35,6 +43,7 @@ export default function SalesPage() {
   const [currentTarget, setCurrentTarget] = useState<SalesTarget | null>(null);
   const [aggregatedTarget, setAggregatedTarget] =
     useState<AggregatedTarget | null>(null);
+  const [opened, setOpened] = useState(false);
 
   // Function to fetch sales data for the selected date range
   const fetchSalesData = useCallback(async () => {
@@ -263,6 +272,15 @@ export default function SalesPage() {
                   ? "Today's Sales Target"
                   : getTargetLabel(aggregatedTarget, dateRange)}
               </Text>
+              <Tooltip label="View target history">
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setOpened(true)}
+                >
+                  <IconHistory size={18} />
+                </ActionIcon>
+              </Tooltip>
             </Group>
             {calculateTargetPercentage() > 100 ? (
               <Badge color="yellow.7" leftSection={<IconTrophy size={14} />}>
@@ -342,6 +360,10 @@ export default function SalesPage() {
       <Paper shadow="xs" p="md" withBorder>
         <SalesList />
       </Paper>
+      <SalesTargetHistoryModal
+        opened={opened}
+        onClose={() => setOpened(false)}
+      />
     </>
   );
 }
