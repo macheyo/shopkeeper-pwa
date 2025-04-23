@@ -31,9 +31,11 @@ import {
 } from "@/lib/sync";
 import { getSalesDB } from "@/lib/databases";
 import { SaleDoc } from "@/types";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 
 export default function ReportsPage() {
   // Removed unused router
+  const { dateRangeInfo } = useDateFilter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -51,36 +53,67 @@ export default function ReportsPage() {
       if (typeof window === "undefined") {
         throw new Error("Reports can only be generated in the browser");
       }
-      // Get pending sales
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayISOString = today.toISOString();
+
+      // Get pending sales for the selected date range
+      const startDateISOString = dateRangeInfo.startDate.toISOString();
+      const endDateISOString = dateRangeInfo.endDate.toISOString();
 
       // Initialize salesDB before using it
       const db = await getSalesDB();
-      const result = await db.find({
-        selector: {
-          type: "sale",
-          status: "pending",
-          timestamp: { $gte: todayISOString },
-        },
+
+      // Get all documents
+      const result = await db.allDocs({
+        include_docs: true,
       });
 
-      const sales = result.docs as SaleDoc[];
-      setPendingSales(sales);
+      // Filter for pending sales documents within the selected date range
+      const filteredSales = result.rows
+        .map((row) => row.doc)
+        .filter((doc): doc is SaleDoc => {
+          // Make sure it's a sale document with a timestamp and pending status
+          if (
+            !doc ||
+            typeof doc !== "object" ||
+            !("type" in doc) ||
+            doc.type !== "sale" ||
+            !("timestamp" in doc) ||
+            !("status" in doc) ||
+            doc.status !== "pending"
+          ) {
+            return false;
+          }
 
-      if (sales.length === 0) {
-        setSuccess("No pending sales to report.");
+          // Check if it's within the date range
+          const docDate = new Date(doc.timestamp as string);
+          return (
+            docDate >= new Date(startDateISOString) &&
+            docDate < new Date(endDateISOString)
+          );
+        });
+
+      setPendingSales(filteredSales);
+
+      if (filteredSales.length === 0) {
+        setSuccess(
+          `No pending sales to report for ${dateRangeInfo.label.toLowerCase()}.`
+        );
         setLoading(false);
         return;
       }
 
-      // Generate report
-      const encodedReport = await generateDailyReport();
+      // Generate report with the selected date range
+      const encodedReport = await generateDailyReport(
+        dateRangeInfo.startDate,
+        dateRangeInfo.endDate
+      );
       // Decode for display
       const decodedReport = decodeURIComponent(encodedReport);
       setReport(decodedReport);
-      setSuccess(`Report generated with ${sales.length} sales.`);
+      setSuccess(
+        `Report generated with ${
+          filteredSales.length
+        } sales for ${dateRangeInfo.label.toLowerCase()}.`
+      );
     } catch (err) {
       console.error("Error generating report:", err);
       setError(
@@ -100,8 +133,11 @@ export default function ReportsPage() {
     }
 
     try {
-      // Get the encoded report again
-      const encodedReport = await generateDailyReport();
+      // Get the encoded report again with the selected date range
+      const encodedReport = await generateDailyReport(
+        dateRangeInfo.startDate,
+        dateRangeInfo.endDate
+      );
 
       // Send via WhatsApp
       initiateWhatsAppSync(encodedReport, phoneNumber);
@@ -138,7 +174,8 @@ export default function ReportsPage() {
           />
         </Group>
         <Text c="dimmed" mt="xs">
-          Generate and send daily sales reports via WhatsApp
+          Generate and send sales reports via WhatsApp for{" "}
+          {dateRangeInfo.label.toLowerCase()}
         </Text>
       </Box>
 

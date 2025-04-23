@@ -18,15 +18,31 @@ import { getSalesDB } from "@/lib/databases";
 import { SaleDoc, SaleItem } from "@/types";
 import { formatMoney } from "@/types/money";
 import { useRouter } from "next/navigation";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 
 export default function SalesList() {
   const router = useRouter();
+  const { dateRangeInfo } = useDateFilter();
   const [sales, setSales] = useState<SaleDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Add a state to track if the context is ready
+  const [isContextReady, setIsContextReady] = useState(false);
+
+  // Add an effect to check when the context is ready
+  useEffect(() => {
+    // If we have dateRangeInfo with valid dates, the context is ready
+    if (dateRangeInfo && dateRangeInfo.startDate && dateRangeInfo.endDate) {
+      setIsContextReady(true);
+    }
+  }, [dateRangeInfo]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // Only proceed if the context is ready
+    if (!isContextReady) return;
 
     let cleanup: (() => void) | undefined;
 
@@ -35,10 +51,9 @@ export default function SalesList() {
         setLoading(true);
         setError(null);
         try {
-          // Get today's sales
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const todayISOString = today.toISOString();
+          // Get the date range from context
+          const startDateISOString = dateRangeInfo.startDate.toISOString();
+          const endDateISOString = dateRangeInfo.endDate.toISOString();
 
           const salesDB = await getSalesDB();
 
@@ -47,8 +62,7 @@ export default function SalesList() {
             include_docs: true,
           });
 
-          // Filter for sales documents and today's sales
-          const todayDate = new Date(todayISOString);
+          // Filter for sales documents within the selected date range
           const filteredDocs = result.rows
             .map((row) => row.doc)
             .filter((doc): doc is SaleDoc => {
@@ -63,9 +77,12 @@ export default function SalesList() {
                 return false;
               }
 
-              // Check if it's from today or later
+              // Check if it's within the date range
               const docDate = new Date(doc.timestamp as string);
-              return docDate >= todayDate;
+              return (
+                docDate >= new Date(startDateISOString) &&
+                docDate < new Date(endDateISOString)
+              );
             })
             // Sort by timestamp in descending order
             .sort(
@@ -116,7 +133,7 @@ export default function SalesList() {
     return () => {
       if (cleanup) cleanup();
     };
-  }, []);
+  }, [dateRangeInfo]); // Re-fetch when date range changes
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -165,7 +182,9 @@ export default function SalesList() {
             animation: "fadeIn 0.5s ease-out",
           }}
         >
-          <Text c="dimmed">No sales recorded today</Text>
+          <Text c="dimmed">
+            No sales found for {dateRangeInfo.label.toLowerCase()}
+          </Text>
           <Button
             variant="light"
             onClick={() => router.push("/sales/new")}

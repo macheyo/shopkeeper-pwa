@@ -3,41 +3,73 @@ import { SaleDoc } from "@/types";
 import { formatMoney } from "@/types/money";
 
 /**
- * Generates a URL-encoded daily sales report string for WhatsApp.
- * Fetches pending sales for today, looks up product details, and formats the report.
+ * Generates a URL-encoded sales report string for WhatsApp.
+ * Fetches pending sales for the specified date range, looks up product details, and formats the report.
+ * @param {Date} startDate - The start date for the report (inclusive)
+ * @param {Date} endDate - The end date for the report (exclusive)
  * @returns {Promise<string>} A promise that resolves with the URL-encoded report string.
  * @throws {Error} If fetching sales or products fails.
  */
-export async function generateDailyReport(): Promise<string> {
+export async function generateDailyReport(
+  startDate?: Date,
+  endDate?: Date
+): Promise<string> {
   if (typeof window === "undefined") {
     return encodeURIComponent("[REPORT] Not available during server rendering");
   }
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayStartISO = todayStart.toISOString();
+  // Default to today if no dates provided
+  const reportStartDate = startDate || new Date();
+  reportStartDate.setHours(0, 0, 0, 0);
 
-  console.log(`Generating report for sales from ${todayStartISO}...`);
+  const reportEndDate = endDate || new Date(reportStartDate);
+  reportEndDate.setDate(reportEndDate.getDate() + 1); // Default to next day if no end date
+
+  const startDateISO = reportStartDate.toISOString();
+  const endDateISO = reportEndDate.toISOString();
+
+  console.log(
+    `Generating report for sales from ${startDateISO} to ${endDateISO}...`
+  );
 
   try {
     // Initialize salesDB before using it
     const db = await getSalesDB();
 
-    // Find sales that are 'pending' and occurred today or later
-    // Remove generic from find, assert type later
-    const findResult = await db.find({
-      selector: {
-        status: "pending",
-        timestamp: { $gte: todayStartISO },
-      },
-      // Ensure the index on ['status', 'timestamp'] exists
+    // Get all documents
+    const result = await db.allDocs({
+      include_docs: true,
     });
-    // Assert the type of docs
-    const pendingSales = findResult.docs as SaleDoc[];
+
+    // Filter for pending sales documents within the selected date range
+    const pendingSales = result.rows
+      .map((row) => row.doc)
+      .filter((doc): doc is SaleDoc => {
+        // Make sure it's a sale document with a timestamp and pending status
+        if (
+          !doc ||
+          typeof doc !== "object" ||
+          !("type" in doc) ||
+          doc.type !== "sale" ||
+          !("timestamp" in doc) ||
+          !("status" in doc) ||
+          doc.status !== "pending"
+        ) {
+          return false;
+        }
+
+        // Check if it's within the date range
+        const docDate = new Date(doc.timestamp as string);
+        return (
+          docDate >= new Date(startDateISO) && docDate < new Date(endDateISO)
+        );
+      });
 
     if (pendingSales.length === 0) {
-      console.log("No pending sales found for today.");
-      return encodeURIComponent("[REPORT] No pending sales today.");
+      console.log(`No pending sales found for the selected date range.`);
+      return encodeURIComponent(
+        "[REPORT] No pending sales for the selected date range."
+      );
     }
 
     console.log(`Found ${pendingSales.length} pending sales.`);
@@ -45,8 +77,16 @@ export async function generateDailyReport(): Promise<string> {
     // Construct the report string
     // TODO: Get Shop Name from config/settings
     const shopName = "RUIRU"; // Placeholder
-    const reportDate = todayStartISO.split("T")[0];
-    let report = `[REPORT] SHOP: ${shopName} | DATE: ${reportDate}\n`;
+    const startDateFormatted = reportStartDate.toISOString().split("T")[0];
+    const endDateFormatted = new Date(endDateISO).toISOString().split("T")[0];
+
+    // Format the date range for the report
+    const dateRangeText =
+      startDateFormatted === endDateFormatted
+        ? startDateFormatted
+        : `${startDateFormatted} to ${endDateFormatted}`;
+
+    let report = `[REPORT] SHOP: ${shopName} | DATE: ${dateRangeText}\n`;
     let totalSalesValue = 0;
 
     // Process each sale

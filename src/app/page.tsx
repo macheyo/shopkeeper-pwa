@@ -48,6 +48,7 @@ import {
   Money,
   CurrencyCode,
 } from "@/types/money";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 
 // BeforeInstallPromptEvent type definition
 type BeforeInstallPromptEvent = Event & {
@@ -69,6 +70,7 @@ interface SalesTarget {
 
 export default function Home() {
   const router = useRouter();
+  const { dateRangeInfo } = useDateFilter();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -79,8 +81,8 @@ export default function Home() {
 
   // State for actual data
   const [productCount, setProductCount] = useState<number>(0);
-  const [todaySalesCount, setTodaySalesCount] = useState<number>(0);
-  const [todayRevenue, setTodayRevenue] = useState<Money | null>(null);
+  const [salesCount, setSalesCount] = useState<number>(0);
+  const [revenue, setRevenue] = useState<Money | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   // State for sales target
@@ -104,30 +106,50 @@ export default function Home() {
       });
       setProductCount(productsResult.docs.length);
 
-      // Get today's sales
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayISOString = today.toISOString();
+      // Get sales for the selected date range
+      const startDateISOString = dateRangeInfo.startDate.toISOString();
+      const endDateISOString = dateRangeInfo.endDate.toISOString();
 
       const salesDB = await getSalesDB();
-      const salesResult = await salesDB.find({
-        selector: {
-          type: "sale",
-          timestamp: { $gte: todayISOString },
-        },
+
+      // Get all documents
+      const result = await salesDB.allDocs({
+        include_docs: true,
       });
 
-      const todaySales = salesResult.docs as SaleDoc[];
-      setTodaySalesCount(todaySales.length);
+      // Filter for sales documents within the selected date range
+      const filteredSales = result.rows
+        .map((row) => row.doc)
+        .filter((doc): doc is SaleDoc => {
+          // Make sure it's a sale document with a timestamp
+          if (
+            !doc ||
+            typeof doc !== "object" ||
+            !("type" in doc) ||
+            doc.type !== "sale" ||
+            !("timestamp" in doc)
+          ) {
+            return false;
+          }
+
+          // Check if it's within the date range
+          const docDate = new Date(doc.timestamp as string);
+          return (
+            docDate >= new Date(startDateISOString) &&
+            docDate < new Date(endDateISOString)
+          );
+        });
+
+      setSalesCount(filteredSales.length);
 
       // Calculate total revenue
-      if (todaySales.length > 0) {
+      if (filteredSales.length > 0) {
         let totalAmount = 0;
         const currency = BASE_CURRENCY;
         const exchangeRate = 1;
 
         // Sum up all sales and convert to base currency
-        todaySales.forEach((sale) => {
+        filteredSales.forEach((sale) => {
           if (sale.totalAmount.currency === BASE_CURRENCY) {
             totalAmount += sale.totalAmount.amount;
           } else {
@@ -138,7 +160,7 @@ export default function Home() {
           }
         });
 
-        setTodayRevenue({
+        setRevenue({
           amount: totalAmount,
           currency,
           exchangeRate,
@@ -147,14 +169,14 @@ export default function Home() {
         // Check if we've met the target
         checkTargetAchievement(totalAmount);
       } else {
-        setTodayRevenue(createMoney(0));
+        setRevenue(createMoney(0));
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dateRangeInfo]); // Re-fetch when date range changes
 
   // Function to load sales target from localStorage
   const loadSalesTarget = useCallback(() => {
@@ -241,18 +263,34 @@ export default function Home() {
     setTargetAmount(0);
   };
 
+  // Add a state to track if the context is ready
+  const [isContextReady, setIsContextReady] = useState(false);
+
+  // Add an effect to check when the context is ready
+  useEffect(() => {
+    // If we have dateRangeInfo with valid dates, the context is ready
+    if (dateRangeInfo && dateRangeInfo.startDate && dateRangeInfo.endDate) {
+      setIsContextReady(true);
+    }
+  }, [dateRangeInfo]);
+
   useEffect(() => {
     // Only run in browser environment
     if (typeof window === "undefined") {
       return () => {}; // Return empty cleanup function if window is undefined
     }
 
-    // Fetch dashboard data
-    fetchDashboardData();
-    loadSalesTarget();
+    // Fetch dashboard data only when context is ready
+    if (isContextReady) {
+      fetchDashboardData();
+      loadSalesTarget();
+    }
 
-    // Set up interval to refresh data every minute
-    const intervalId = setInterval(fetchDashboardData, 60000);
+    // Set up interval to refresh data every minute, but only when context is ready
+    let intervalId: NodeJS.Timeout | undefined = undefined;
+    if (isContextReady) {
+      intervalId = setInterval(fetchDashboardData, 60000);
+    }
 
     // Check if already installed
     const checkInstalled = () => {
@@ -342,19 +380,15 @@ export default function Home() {
       path: "/products",
     },
     {
-      label: "Sales Today",
-      value: loading ? "..." : todaySalesCount.toString(),
+      label: `Sales (${dateRangeInfo.label})`,
+      value: loading ? "..." : salesCount.toString(),
       icon: IconShoppingCart,
       color: "blue",
       path: "/sales",
     },
     {
-      label: "Revenue",
-      value: loading
-        ? "..."
-        : todayRevenue
-        ? formatMoney(todayRevenue)
-        : "$0.00",
+      label: `Revenue (${dateRangeInfo.label})`,
+      value: loading ? "..." : revenue ? formatMoney(revenue) : "$0.00",
       icon: IconChartBar,
       color: "violet",
       path: "/reports",
@@ -543,8 +577,8 @@ export default function Home() {
                 {(() => {
                   // Calculate percentage without capping at 100%
                   const percentage =
-                    todayRevenue && currentTarget
-                      ? (todayRevenue.amount / currentTarget.amount) * 100
+                    revenue && currentTarget
+                      ? (revenue.amount / currentTarget.amount) * 100
                       : 0;
 
                   // Calculate display percentage for progress bar (capped at 100%)
@@ -570,13 +604,13 @@ export default function Home() {
                   // Get encouraging message based on progress
                   let message = "";
                   const remaining = currentTarget
-                    ? currentTarget.amount - (todayRevenue?.amount || 0)
+                    ? currentTarget.amount - (revenue?.amount || 0)
                     : 0;
 
                   // Special message for overachievers
                   if (percentage > 100) {
                     const excess =
-                      (todayRevenue?.amount || 0) - currentTarget.amount;
+                      (revenue?.amount || 0) - currentTarget.amount;
                     message = `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
                       createMoney(excess)
                     )} (${excessPercentage.toFixed(
@@ -619,7 +653,7 @@ export default function Home() {
                       />
                       <Group justify="apart">
                         <Text size="sm" c="dimmed">
-                          {todayRevenue ? formatMoney(todayRevenue) : "$0.00"}
+                          {revenue ? formatMoney(revenue) : "$0.00"}
                         </Text>
                         <Text size="sm" fw={500} c={progressColor}>
                           {percentage.toFixed(1)}%

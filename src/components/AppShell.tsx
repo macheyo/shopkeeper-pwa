@@ -17,6 +17,7 @@ import {
   IconShoppingCart,
   IconSend,
 } from "@tabler/icons-react";
+import DateFilter from "./DateFilter";
 import { usePathname } from "next/navigation";
 import BottomNav from "./BottomNav";
 
@@ -80,6 +81,7 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
           </Group>
           <Group>{getConnectionStatus()}</Group>
         </Group>
+        {/* Header DateFilter removed and moved below */}
       </AppShell.Header>
 
       {/* Side navigation for desktop */}
@@ -214,6 +216,26 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
       </AppShell.Navbar>
 
       <AppShell.Main>
+        {/* Global Date Filter - Fixed position for mobile and desktop */}
+        <Box
+          style={{
+            position: "sticky",
+            top: 70, // Below the header
+            zIndex: 100,
+            width: "100%",
+            backgroundColor: "white",
+            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+            padding: "12px 16px",
+            borderBottom: "1px solid #eee",
+            marginBottom: "16px",
+            transition: "all 0.3s ease",
+            backdropFilter: "blur(10px)",
+            background: "rgba(0, 0, 0, 0.95)",
+          }}
+        >
+          <DateFilter />
+        </Box>
+
         <Container size="xl">
           {/* Add padding at the bottom on mobile to account for the bottom nav */}
           <Box pb={{ base: "60px", sm: 0 }}>{children}</Box>

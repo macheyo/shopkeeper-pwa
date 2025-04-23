@@ -19,6 +19,7 @@ import CollapsibleFab from "@/components/CollapsibleFab";
 import { getSalesDB } from "@/lib/databases";
 import { SaleDoc } from "@/types";
 import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 
 // Interface for sales target
 interface SalesTarget {
@@ -30,11 +31,10 @@ interface SalesTarget {
 
 export default function SalesPage() {
   const router = useRouter();
-  const [todayRevenue, setTodayRevenue] = useState<Money | null>(null);
+  const { dateRangeInfo } = useDateFilter();
+  const [revenue, setRevenue] = useState<Money | null>(null);
   const [currentTarget, setCurrentTarget] = useState<SalesTarget | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-
-  console.log("SalesPage rendered::", loading);
 
   // Function to check if target is achieved and update it
   const checkTargetAchievement = useCallback(
@@ -57,35 +57,54 @@ export default function SalesPage() {
     [currentTarget]
   );
 
-  // Function to fetch today's sales data
-  const fetchTodaySalesData = useCallback(async () => {
+  // Function to fetch sales data for the selected date range
+  const fetchSalesData = useCallback(async () => {
     if (typeof window === "undefined") return;
 
     setLoading(true);
     try {
-      // Get today's sales
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayISOString = today.toISOString();
+      // Get sales for the selected date range
+      const startDateISOString = dateRangeInfo.startDate.toISOString();
+      const endDateISOString = dateRangeInfo.endDate.toISOString();
 
       const salesDB = await getSalesDB();
-      const salesResult = await salesDB.find({
-        selector: {
-          type: "sale",
-          timestamp: { $gte: todayISOString },
-        },
+
+      // Get all documents
+      const result = await salesDB.allDocs({
+        include_docs: true,
       });
 
-      const todaySales = salesResult.docs as SaleDoc[];
+      // Filter for sales documents within the selected date range
+      const filteredSales = result.rows
+        .map((row) => row.doc)
+        .filter((doc): doc is SaleDoc => {
+          // Make sure it's a sale document with a timestamp
+          if (
+            !doc ||
+            typeof doc !== "object" ||
+            !("type" in doc) ||
+            doc.type !== "sale" ||
+            !("timestamp" in doc)
+          ) {
+            return false;
+          }
+
+          // Check if it's within the date range
+          const docDate = new Date(doc.timestamp as string);
+          return (
+            docDate >= new Date(startDateISOString) &&
+            docDate < new Date(endDateISOString)
+          );
+        });
 
       // Calculate total revenue
       let totalAmount = 0;
-      if (todaySales.length > 0) {
+      if (filteredSales.length > 0) {
         const currency = BASE_CURRENCY;
         const exchangeRate = 1;
 
         // Sum up all sales and convert to base currency
-        todaySales.forEach((sale) => {
+        filteredSales.forEach((sale) => {
           if (sale.totalAmount.currency === BASE_CURRENCY) {
             totalAmount += sale.totalAmount.amount;
           } else {
@@ -96,13 +115,13 @@ export default function SalesPage() {
           }
         });
 
-        setTodayRevenue({
+        setRevenue({
           amount: totalAmount,
           currency,
           exchangeRate,
         });
       } else {
-        setTodayRevenue(createMoney(0));
+        setRevenue(createMoney(0));
       }
 
       // Load current target from localStorage
@@ -121,21 +140,21 @@ export default function SalesPage() {
     } finally {
       setLoading(false);
     }
-  }, [checkTargetAchievement]);
+  }, [checkTargetAchievement, dateRangeInfo]); // Re-fetch when date range changes
 
-  // Fetch data when component mounts
+  // Fetch data when component mounts or date range changes
   useEffect(() => {
-    fetchTodaySalesData();
+    fetchSalesData();
 
     // Set up interval to refresh data every 30 seconds
-    const intervalId = setInterval(fetchTodaySalesData, 30000);
+    const intervalId = setInterval(fetchSalesData, 30000);
     return () => clearInterval(intervalId);
-  }, [fetchTodaySalesData]);
+  }, [fetchSalesData]);
 
   // Calculate percentage of target achieved (without capping at 100%)
   const calculateTargetPercentage = () => {
-    if (!todayRevenue || !currentTarget) return 0;
-    return (todayRevenue.amount / currentTarget.amount) * 100;
+    if (!revenue || !currentTarget) return 0;
+    return (revenue.amount / currentTarget.amount) * 100;
   };
 
   // Calculate display percentage for progress bar (capped at 100%)
@@ -145,15 +164,15 @@ export default function SalesPage() {
 
   // Get motivational message based on progress
   const getMotivationalMessage = () => {
-    if (!todayRevenue || !currentTarget) return null;
+    if (!revenue || !currentTarget) return null;
 
     const percentage = calculateTargetPercentage();
-    const remaining = currentTarget.amount - todayRevenue.amount;
+    const remaining = currentTarget.amount - revenue.amount;
     const excessPercentage = Math.max(0, percentage - 100);
 
     // Special message for overachievers
     if (percentage > 100) {
-      const excess = todayRevenue.amount - currentTarget.amount;
+      const excess = revenue.amount - currentTarget.amount;
       return {
         message: `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
           createMoney(excess)
@@ -266,9 +285,7 @@ export default function SalesPage() {
           />
 
           <Group justify="space-between" mb="xs">
-            <Text size="sm">
-              {todayRevenue ? formatMoney(todayRevenue) : "$0.00"}
-            </Text>
+            <Text size="sm">{revenue ? formatMoney(revenue) : "$0.00"}</Text>
             <Text size="sm" fw={500} c={motivationalMessage?.color}>
               {calculateTargetPercentage().toFixed(1)}%
             </Text>
