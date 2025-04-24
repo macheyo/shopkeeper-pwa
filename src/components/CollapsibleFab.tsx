@@ -109,8 +109,8 @@ export default function CollapsibleFab({
           padding: expanded ? "8px 16px" : "8px",
           overflow: "hidden",
           boxShadow: buttonHovered
-            ? "0 6px 16px rgba(0, 0, 0, 0.15)"
-            : "0 4px 12px rgba(0, 0, 0, 0.1)",
+            ? "var(--mantine-shadow-md)"
+            : "var(--mantine-shadow-sm)",
         }}
         onMouseEnter={() => setButtonHovered(true)}
         onMouseLeave={() => setButtonHovered(false)}

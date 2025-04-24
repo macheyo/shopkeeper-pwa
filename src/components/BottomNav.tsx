@@ -91,12 +91,12 @@ export default function BottomNav() {
         bottom: visible ? 0 : -60, // Hide below the viewport when not visible
         left: 0,
         right: 0,
-        background: "white",
-        borderTop: "1px solid var(--mantine-color-gray-3)",
+        background: "var(--mantine-color-body)",
+        borderTop: "1px solid var(--mantine-color-default-border)",
         padding: "8px 0",
         zIndex: 1000,
         transition: "bottom 0.3s ease, transform 0.2s ease",
-        boxShadow: "0 -2px 10px rgba(0, 0, 0, 0.05)",
+        boxShadow: "var(--mantine-shadow-sm)",
         transform: visible ? "translateY(0)" : "translateY(100%)",
       }}
       hiddenFrom="sm"

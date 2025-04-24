@@ -372,7 +372,7 @@ export default function SalesList() {
         }
 
         .animated-row:hover {
-          background-color: rgba(0, 0, 0, 0.03);
+          background-color: var(--mantine-color-default-hover);
           transform: translateX(5px);
         }
 
@@ -390,7 +390,7 @@ export default function SalesList() {
 
         .animated-button:hover {
           transform: translateY(-2px);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          box-shadow: var(--mantine-shadow-sm);
         }
 
         .animated-button:active {
@@ -413,7 +413,7 @@ export default function SalesList() {
 
         .sale-item-card:hover {
           transform: translateY(-2px);
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          box-shadow: var(--mantine-shadow-xs);
         }
 
         .sale-item-details {
@@ -427,7 +427,7 @@ export default function SalesList() {
 
         .sale-summary {
           border-radius: 8px;
-          background-color: #f9f9f9;
+          background-color: var(--mantine-color-default-hover);
         }
 
         /* Responsive adjustments */

@@ -356,7 +356,7 @@ export default function DateFilter({
           style={{
             padding: "10px",
             borderRadius: "8px",
-            backgroundColor: "var(--mantine-color-gray-0)",
+            backgroundColor: "var(--mantine-color-default)",
             marginBottom: "10px",
           }}
         >
@@ -568,7 +568,7 @@ export default function DateFilter({
                     width: "100%",
                     padding: "10px",
                     borderRadius: "6px",
-                    border: "1px solid var(--mantine-color-gray-4)",
+                    border: "1px solid var(--mantine-color-default-border)",
                     fontSize: "14px",
                   }}
                 />
@@ -587,7 +587,7 @@ export default function DateFilter({
                     width: "100%",
                     padding: "10px",
                     borderRadius: "6px",
-                    border: "1px solid var(--mantine-color-gray-4)",
+                    border: "1px solid var(--mantine-color-default-border)",
                     fontSize: "14px",
                   }}
                   min={startDate ? startDate.toISOString().split("T")[0] : ""}
@@ -601,7 +601,7 @@ export default function DateFilter({
               style={{
                 padding: "10px",
                 borderRadius: "6px",
-                backgroundColor: "var(--mantine-color-blue-0)",
+                backgroundColor: "var(--mantine-color-blue-light)",
                 marginBottom: "10px",
               }}
             >

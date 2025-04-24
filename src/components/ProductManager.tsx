@@ -274,7 +274,7 @@ export default function ProductManager() {
 
         .mantine-Card-root:hover {
           transform: translateY(-3px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          box-shadow: var(--mantine-shadow-sm);
         }
 
         /* Add hover effects for table rows */
@@ -289,7 +289,7 @@ export default function ProductManager() {
 
         .mantine-Button-root:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          box-shadow: var(--mantine-shadow-xs);
         }
 
         .mantine-Button-root:active:not(:disabled) {

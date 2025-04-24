@@ -271,8 +271,8 @@ export default function PWAInstallPrompt({
             withBorder
             p="md"
             radius="md"
-            bg="gray.0"
             style={{
+              backgroundColor: "var(--mantine-color-default)",
               animation: "slideIn 0.5s ease-out",
               transition: "transform 0.2s ease, box-shadow 0.2s ease",
             }}
@@ -382,8 +382,8 @@ export default function PWAInstallPrompt({
             title="Install app"
             style={{
               boxShadow: buttonHovered
-                ? "0 6px 16px rgba(0, 0, 0, 0.15)"
-                : "0 4px 12px rgba(0, 0, 0, 0.1)",
+                ? "var(--mantine-shadow-md)"
+                : "var(--mantine-shadow-sm)",
               transition: "all 0.3s ease",
             }}
             onMouseEnter={() => setButtonHovered(true)}
@@ -459,7 +459,7 @@ export default function PWAInstallPrompt({
 
         .animated-paper:hover {
           transform: translateY(-3px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          box-shadow: var(--mantine-shadow-sm);
         }
 
         .animated-button {
@@ -468,7 +468,7 @@ export default function PWAInstallPrompt({
 
         .animated-button:hover {
           transform: translateY(-2px) !important;
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+          box-shadow: var(--mantine-shadow-sm) !important;
         }
 
         .animated-button:active {
@@ -476,7 +476,7 @@ export default function PWAInstallPrompt({
         }
 
         .animated-button.primary:hover {
-          box-shadow: 0 4px 12px rgba(34, 139, 230, 0.3) !important;
+          box-shadow: var(--mantine-shadow-md) !important;
         }
 
         .install-button {

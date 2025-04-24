@@ -59,7 +59,7 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
       styles={{
         header: {
           transition: "box-shadow 0.3s ease",
-          boxShadow: "0 2px 10px rgba(0, 0, 0, 0.05)",
+          boxShadow: "var(--mantine-shadow-sm)",
         },
       }}
     >
@@ -223,14 +223,14 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
             top: 70, // Below the header
             zIndex: 100,
             width: "100%",
-            backgroundColor: "white",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+            backgroundColor: "var(--mantine-color-body)",
+            boxShadow: "var(--mantine-shadow-xs)",
             padding: "12px 16px",
-            borderBottom: "1px solid #eee",
+            borderBottom: "1px solid var(--mantine-color-default-border)",
             marginBottom: "16px",
             transition: "all 0.3s ease",
             backdropFilter: "blur(10px)",
-            background: "rgba(0, 0, 0, 0.95)",
+            background: "var(--mantine-color-dark-filled)",
           }}
         >
           <DateFilter />
