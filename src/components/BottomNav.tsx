@@ -14,6 +14,9 @@ export default function BottomNav() {
   const pathname = usePathname();
   const [visible, setVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [scrollTimeout, setScrollTimeout] = useState<NodeJS.Timeout | null>(
+    null
+  );
 
   const navItems = [
     {
@@ -57,31 +60,40 @@ export default function BottomNav() {
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      const windowHeight = window.innerHeight;
-      const documentHeight = document.documentElement.scrollHeight;
 
-      // Check if we're at the bottom of the page
-      const isAtBottom = currentScrollY + windowHeight >= documentHeight - 10;
-
-      if (isAtBottom) {
-        // Hide navbar when at the bottom of the page
-        setVisible(false);
-      }
-      // Show navbar when scrolling up or at the top
-      else if (currentScrollY <= 10 || currentScrollY < lastScrollY) {
+      // Always show navbar at the top of the page
+      if (currentScrollY <= 10) {
         setVisible(true);
+        return;
       }
-      // Hide navbar when scrolling down and not at the top
-      else if (currentScrollY > lastScrollY && currentScrollY > 10) {
+
+      // Hide navbar only when scrolling down
+      if (currentScrollY > lastScrollY) {
         setVisible(false);
       }
 
+      // Clear existing timeout
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+
+      // Set new timeout to show navbar after scrolling stops
+      const timeout = setTimeout(() => {
+        setVisible(true);
+      }, 1000); // Show navbar 1 second after scrolling stops
+
+      setScrollTimeout(timeout);
       setLastScrollY(currentScrollY);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [lastScrollY]);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+    };
+  }, [lastScrollY, scrollTimeout]);
 
   return (
     <Group
@@ -97,7 +109,7 @@ export default function BottomNav() {
         zIndex: 1000,
         transition: "bottom 0.3s ease, transform 0.2s ease",
         boxShadow: "var(--mantine-shadow-sm)",
-        transform: visible ? "translateY(0)" : "translateY(100%)",
+        transform: visible ? "translateY(0)" : "translateY(60px)",
       }}
       hiddenFrom="sm"
     >

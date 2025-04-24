@@ -381,7 +381,7 @@ export default function DateFilter({
           {basicOptions.map((option) => (
             <Button
               key={option.value}
-              variant={dateRange === option.value ? "filled" : "light"}
+              variant={dateRange === option.value ? "filled" : "subtle"}
               onClick={() => handleValueChange(option.value)}
               fullWidth
               color={dateRange === option.value ? "blue" : "gray"}
@@ -389,7 +389,18 @@ export default function DateFilter({
                 root: {
                   transition: "all 0.2s ease",
                   transform:
-                    dateRange === option.value ? "scale(1.05)" : "none",
+                    dateRange === option.value ? "scale(1.02)" : "none",
+                  boxShadow:
+                    dateRange === option.value
+                      ? "var(--mantine-shadow-sm)"
+                      : "none",
+                  "&:hover": {
+                    transform: "scale(1.02)",
+                    backgroundColor:
+                      dateRange === option.value
+                        ? "var(--mantine-color-blue-6)"
+                        : "var(--mantine-color-gray-1)",
+                  },
                 },
               }}
             >
@@ -405,7 +416,7 @@ export default function DateFilter({
           {extendedOptions.map((option) => (
             <Button
               key={option.value}
-              variant={dateRange === option.value ? "filled" : "light"}
+              variant={dateRange === option.value ? "filled" : "subtle"}
               onClick={() => handleValueChange(option.value)}
               fullWidth
               color={dateRange === option.value ? "blue" : "gray"}
@@ -413,7 +424,18 @@ export default function DateFilter({
                 root: {
                   transition: "all 0.2s ease",
                   transform:
-                    dateRange === option.value ? "scale(1.05)" : "none",
+                    dateRange === option.value ? "scale(1.02)" : "none",
+                  boxShadow:
+                    dateRange === option.value
+                      ? "var(--mantine-shadow-sm)"
+                      : "none",
+                  "&:hover": {
+                    transform: "scale(1.02)",
+                    backgroundColor:
+                      dateRange === option.value
+                        ? "var(--mantine-color-blue-6)"
+                        : "var(--mantine-color-gray-1)",
+                  },
                 },
               }}
             >
@@ -546,9 +568,10 @@ export default function DateFilter({
           <Box
             style={{
               padding: "15px",
-              borderRadius: "8px",
-              backgroundColor: "var(--mantine-color-gray-0)",
+              borderRadius: "12px",
+              backgroundColor: "var(--mantine-color-blue-0)",
               marginBottom: "15px",
+              border: "1px solid var(--mantine-color-blue-2)",
             }}
           >
             <Group>
