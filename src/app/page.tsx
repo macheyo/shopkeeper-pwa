@@ -537,29 +537,29 @@ export default function Home() {
     // Special message for overachievers
     if (percentage > 100) {
       const excess = (revenue?.amount || 0) - targetAmount;
-      message = `🏅 EXCEPTIONAL PERFORMANCE! You&apos;ve exceeded your target by ${formatMoney(
+      message = `🏅 EXCEPTIONAL PERFORMANCE! You've exceeded your target by ${formatMoney(
         createMoney(excess)
-      )} (${excessPercentage.toFixed(1)}%)! You&apos;re a champion! 🏅`;
+      )} (${excessPercentage.toFixed(1)}%)! You're a champion! 🏅`;
     } else if (currentTarget?.achieved || aggregatedTarget?.achieved) {
-      message = "🎉 Amazing job! Target achieved! You&apos;re a superstar! 🏆";
+      message = "🎉 Amazing job! Target achieved! You're a superstar! 🏆";
     } else if (percentage >= 90) {
       message = `🚀 Almost there! Just ${formatMoney(
         createMoney(remaining)
       )} more to go! You can do it! ✨`;
     } else if (percentage >= 75) {
-      message = `💪 You&apos;re making excellent progress! Only ${formatMoney(
+      message = `💪 You're making excellent progress! Only ${formatMoney(
         createMoney(remaining)
       )} more to reach your goal! 🔥`;
     } else if (percentage >= 50) {
       message = `👍 Halfway there! Keep it up! ${formatMoney(
         createMoney(remaining)
-      )} more to go! You&apos;re on fire! 🔥`;
+      )} more to go! You're on fire! 🔥`;
     } else if (percentage >= 25) {
       message = `😊 Good start! ${formatMoney(
         createMoney(remaining)
       )} more to reach your target! Keep going! ⭐`;
     } else if (percentage > 0) {
-      message = `🌱 You&apos;ve started! ${formatMoney(
+      message = `🌱 You've started! ${formatMoney(
         createMoney(remaining)
       )} more to reach your target! Every sale counts! 📈`;
     }

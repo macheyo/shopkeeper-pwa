@@ -51,13 +51,21 @@ export default function SalesList() {
         setLoading(true);
         setError(null);
         try {
+          // Initialize the database first
+          const salesDB = await getSalesDB().catch((err) => {
+            throw new Error(
+              `Failed to initialize sales database: ${err.message}`
+            );
+          });
+          if (!dateRangeInfo?.startDate || !dateRangeInfo?.endDate) {
+            throw new Error("Date range is not properly initialized");
+          }
+
           // Get the date range from context
           const startDateISOString = dateRangeInfo.startDate.toISOString();
           const endDateISOString = dateRangeInfo.endDate.toISOString();
 
-          const salesDB = await getSalesDB();
-
-          // Get all documents
+          // Get all documents with error handling
           const result = await salesDB.allDocs({
             include_docs: true,
           });
@@ -96,6 +104,7 @@ export default function SalesList() {
           console.error("Error fetching sales:", err);
           const message = err instanceof Error ? err.message : String(err);
           setError(`Failed to load sales: ${message}`);
+          setSales([]); // Reset sales on error
         } finally {
           setLoading(false);
         }
@@ -103,29 +112,47 @@ export default function SalesList() {
 
       await fetchSales();
 
-      // Set up change listener for real-time updates
-      const salesDB = await getSalesDB();
-      const changes = salesDB
-        .changes({
-          since: "now",
-          live: true,
-          include_docs: true,
-        })
-        .on("change", (change) => {
-          const doc = change.doc as unknown;
-          if (
-            doc &&
-            typeof doc === "object" &&
-            "type" in doc &&
-            doc.type === "sale"
-          ) {
-            fetchSales();
-          }
+      try {
+        // Set up change listener for real-time updates
+        const salesDB = await getSalesDB().catch((err) => {
+          throw new Error(
+            `Failed to initialize sales database for changes: ${err.message}`
+          );
         });
 
-      cleanup = () => {
-        changes.cancel();
-      };
+        const changes = salesDB
+          .changes({
+            since: "now",
+            live: true,
+            include_docs: true,
+          })
+          .on("change", (change) => {
+            const doc = change.doc as unknown;
+            if (
+              doc &&
+              typeof doc === "object" &&
+              "type" in doc &&
+              doc.type === "sale"
+            ) {
+              fetchSales().catch((err) => {
+                console.error("Error fetching sales after change:", err);
+                setError(`Failed to refresh sales: ${err.message}`);
+              });
+            }
+          })
+          .on("error", (err) => {
+            console.error("Changes feed error:", err);
+            setError(`Real-time updates error: ${err.message}`);
+          });
+
+        cleanup = () => {
+          changes.cancel();
+        };
+      } catch (err) {
+        console.error("Error setting up changes listener:", err);
+        const message = err instanceof Error ? err.message : String(err);
+        setError(`Failed to set up real-time updates: ${message}`);
+      }
     };
 
     init();
