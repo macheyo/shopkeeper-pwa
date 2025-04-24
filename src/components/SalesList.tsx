@@ -27,22 +27,23 @@ export default function SalesList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Add a state to track if the context is ready
-  const [isContextReady, setIsContextReady] = useState(false);
-
-  // Add an effect to check when the context is ready
   useEffect(() => {
-    // If we have dateRangeInfo with valid dates, the context is ready
-    if (dateRangeInfo && dateRangeInfo.startDate && dateRangeInfo.endDate) {
-      setIsContextReady(true);
+    if (typeof window === "undefined") {
+      console.log("Not running in browser environment");
+      return;
     }
-  }, [dateRangeInfo]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+    // Check if we have valid date range info
+    if (!dateRangeInfo?.startDate || !dateRangeInfo?.endDate) {
+      console.log("Date range not available yet:", dateRangeInfo);
+      return;
+    }
 
-    // Only proceed if the context is ready
-    if (!isContextReady) return;
+    console.log("Starting sales fetch with date range:", {
+      start: dateRangeInfo.startDate.toISOString(),
+      end: dateRangeInfo.endDate.toISOString(),
+      label: dateRangeInfo.label,
+    });
 
     let cleanup: (() => void) | undefined;
 
@@ -51,20 +52,21 @@ export default function SalesList() {
         setLoading(true);
         setError(null);
         try {
+          console.log("Initializing database...");
           // Initialize the database first
           const salesDB = await getSalesDB().catch((err) => {
+            console.error("Database initialization failed:", err);
             throw new Error(
               `Failed to initialize sales database: ${err.message}`
             );
           });
-          if (!dateRangeInfo?.startDate || !dateRangeInfo?.endDate) {
-            throw new Error("Date range is not properly initialized");
-          }
+          console.log("Database initialized successfully");
 
           // Get the date range from context
           const startDateISOString = dateRangeInfo.startDate.toISOString();
           const endDateISOString = dateRangeInfo.endDate.toISOString();
 
+          console.log("Fetching documents...");
           // Get all documents with error handling
           const result = await salesDB.allDocs({
             include_docs: true,
@@ -99,6 +101,7 @@ export default function SalesList() {
                 new Date(a.timestamp as string).getTime()
             );
 
+          console.log("Filtered sales:", filteredDocs);
           setSales(filteredDocs);
         } catch (err) {
           console.error("Error fetching sales:", err);
@@ -106,53 +109,63 @@ export default function SalesList() {
           setError(`Failed to load sales: ${message}`);
           setSales([]); // Reset sales on error
         } finally {
-          setLoading(false);
+          // Ensure loading state is reset even if there's an error
+          setTimeout(() => {
+            console.log("Resetting loading state");
+            setLoading(false);
+          }, 0);
         }
       };
 
-      await fetchSales();
+      // Initial fetch
+      await fetchSales().catch((err) => {
+        console.error("Initial fetch failed:", err);
+        setError(`Initial data load failed: ${err.message}`);
+      });
 
-      try {
-        // Set up change listener for real-time updates
-        const salesDB = await getSalesDB().catch((err) => {
-          throw new Error(
-            `Failed to initialize sales database for changes: ${err.message}`
-          );
-        });
-
-        const changes = salesDB
-          .changes({
-            since: "now",
-            live: true,
-            include_docs: true,
-          })
-          .on("change", (change) => {
-            const doc = change.doc as unknown;
-            if (
-              doc &&
-              typeof doc === "object" &&
-              "type" in doc &&
-              doc.type === "sale"
-            ) {
-              fetchSales().catch((err) => {
-                console.error("Error fetching sales after change:", err);
-                setError(`Failed to refresh sales: ${err.message}`);
-              });
-            }
-          })
-          .on("error", (err) => {
-            console.error("Changes feed error:", err);
-            setError(`Real-time updates error: ${err.message}`);
+      // Only set up changes listener if initial fetch was successful
+      if (!error)
+        try {
+          // Set up change listener for real-time updates
+          const salesDB = await getSalesDB().catch((err) => {
+            throw new Error(
+              `Failed to initialize sales database for changes: ${err.message}`
+            );
           });
 
-        cleanup = () => {
-          changes.cancel();
-        };
-      } catch (err) {
-        console.error("Error setting up changes listener:", err);
-        const message = err instanceof Error ? err.message : String(err);
-        setError(`Failed to set up real-time updates: ${message}`);
-      }
+          const changes = salesDB
+            .changes({
+              since: "now",
+              live: true,
+              include_docs: true,
+            })
+            .on("change", (change) => {
+              const doc = change.doc as unknown;
+              if (
+                doc &&
+                typeof doc === "object" &&
+                "type" in doc &&
+                doc.type === "sale"
+              ) {
+                fetchSales().catch((err) => {
+                  console.error("Error fetching sales after change:", err);
+                  setError(`Failed to refresh sales: ${err.message}`);
+                });
+              }
+            })
+            .on("error", (err) => {
+              console.error("Changes feed error:", err);
+              setError(`Real-time updates error: ${err.message}`);
+            });
+
+          cleanup = () => {
+            changes.cancel();
+          };
+        } catch (err) {
+          console.error("Error setting up changes listener:", err);
+          const message = err instanceof Error ? err.message : String(err);
+          setError(`Failed to set up real-time updates: ${message}`);
+        }
     };
 
     init();

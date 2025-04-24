@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import ClientOnly from "@/components/ClientOnly";
 import {
   Title,
   Group,
@@ -358,7 +359,9 @@ export default function SalesPage() {
       )}
 
       <Paper shadow="xs" p="md" withBorder>
-        <SalesList />
+        <ClientOnly>
+          <SalesList />
+        </ClientOnly>
       </Paper>
       <SalesTargetHistoryModal
         opened={opened}
