@@ -10,16 +10,21 @@ import {
   Container,
   Divider,
   Box,
+  Tooltip,
+  ActionIcon,
 } from "@mantine/core";
 import {
   IconHome,
-  IconPackage,
   IconShoppingCart,
   IconSend,
+  IconShoppingBag,
+  IconRefresh,
+  IconBrandWhatsapp,
+  IconCloud,
 } from "@tabler/icons-react";
-import DateFilter from "./DateFilter";
 import { usePathname } from "next/navigation";
 import BottomNav from "./BottomNav";
+import DateFilter from "./DateFilter";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -28,22 +33,47 @@ interface AppShellProps {
 export default function ShopkeeperAppShell({ children }: AppShellProps) {
   const pathname = usePathname();
 
-  // Status indicator for connection to backend
+  // Status indicators for WhatsApp and GCP connections
   const getConnectionStatus = () => {
     const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+    // TODO: Implement actual WhatsApp and GCP connection checks
+    const whatsAppStatus = isOnline;
+    const gcpStatus = isOnline;
 
     return (
-      <Text
-        size="sm"
-        c={isOnline ? "green.7" : "red.7"}
-        fw={500}
-        style={{
-          transition: "color 0.3s ease, transform 0.2s ease",
-          animation: isOnline ? "pulse 2s infinite" : "none",
-        }}
-      >
-        {isOnline ? "Connected" : "Offline"}
-      </Text>
+      <Group gap="sm">
+        <Tooltip
+          label={`WhatsApp: ${whatsAppStatus ? "Connected" : "Offline"}`}
+        >
+          <ActionIcon
+            variant="light"
+            color={whatsAppStatus ? "green" : "red"}
+            size="lg"
+            style={{
+              transition: "all 0.3s ease",
+              animation: whatsAppStatus ? "pulse 2s infinite" : "none",
+            }}
+          >
+            <IconBrandWhatsapp
+              size={20}
+              style={{ opacity: whatsAppStatus ? 1 : 0.5 }}
+            />
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label={`GCP: ${gcpStatus ? "Connected" : "Offline"}`}>
+          <ActionIcon
+            variant="light"
+            color={gcpStatus ? "green" : "red"}
+            size="lg"
+            style={{
+              transition: "all 0.3s ease",
+              animation: gcpStatus ? "pulse 2s infinite" : "none",
+            }}
+          >
+            <IconCloud size={20} style={{ opacity: gcpStatus ? 1 : 0.5 }} />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
     );
   };
 
@@ -124,37 +154,6 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
             }}
           />
           <NavLink
-            label="Products"
-            leftSection={
-              <IconPackage
-                size={24}
-                stroke={1.5}
-                style={{ transition: "transform 0.2s ease" }}
-                className="tabler-icon icon-pulse"
-              />
-            }
-            active={
-              pathname === "/products" || pathname.startsWith("/products/")
-            }
-            href="/products"
-            component="a"
-            h={60}
-            p="md"
-            style={{ fontSize: "18px" }}
-            styles={{
-              root: {
-                transition: "all 0.2s ease",
-                "&:hover": {
-                  transform: "translateX(5px)",
-                  backgroundColor: "var(--mantine-color-green-0)",
-                },
-              },
-              label: {
-                transition: "transform 0.2s ease",
-              },
-            }}
-          />
-          <NavLink
             label="Sales"
             leftSection={
               <IconShoppingCart
@@ -184,6 +183,37 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
             }}
           />
           <NavLink
+            label="Purchases"
+            leftSection={
+              <IconShoppingBag
+                size={24}
+                stroke={1.5}
+                style={{ transition: "transform 0.2s ease" }}
+                className="tabler-icon icon-bounce"
+              />
+            }
+            active={
+              pathname === "/purchases" || pathname.startsWith("/purchases/")
+            }
+            href="/purchases"
+            component="a"
+            h={60}
+            p="md"
+            style={{ fontSize: "18px" }}
+            styles={{
+              root: {
+                transition: "all 0.2s ease",
+                "&:hover": {
+                  transform: "translateX(5px)",
+                  backgroundColor: "var(--mantine-color-teal-0)",
+                },
+              },
+              label: {
+                transition: "transform 0.2s ease",
+              },
+            }}
+          />
+          <NavLink
             label="Reports"
             leftSection={
               <IconSend
@@ -205,6 +235,35 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
                 "&:hover": {
                   transform: "translateX(5px)",
                   backgroundColor: "var(--mantine-color-violet-0)",
+                },
+              },
+              label: {
+                transition: "transform 0.2s ease",
+              },
+            }}
+          />
+          <NavLink
+            label="Sync"
+            leftSection={
+              <IconRefresh
+                size={24}
+                stroke={1.5}
+                style={{ transition: "transform 0.2s ease" }}
+                className="tabler-icon icon-bounce"
+              />
+            }
+            active={pathname === "/sync"}
+            href="/sync"
+            component="a"
+            h={60}
+            p="md"
+            style={{ fontSize: "18px" }}
+            styles={{
+              root: {
+                transition: "all 0.2s ease",
+                "&:hover": {
+                  transform: "translateX(5px)",
+                  backgroundColor: "var(--mantine-color-cyan-0)",
                 },
               },
               label: {

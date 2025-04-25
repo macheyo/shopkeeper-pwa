@@ -20,6 +20,7 @@ import {
   Checkbox,
   Drawer,
   ScrollArea,
+  Badge,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -512,6 +513,21 @@ export default function NewSalePage() {
   const handleAddSelectedToCart = () => {
     if (selectedProducts.length === 0) return;
 
+    // Check stock levels
+    const insufficientStock = selectedProducts.find((product) => {
+      const quantity = productQuantities[product._id] || 1;
+      return (product.stockQuantity || 0) < quantity;
+    });
+
+    if (insufficientStock) {
+      setError(
+        `Insufficient stock for ${insufficientStock.name}. Available: ${
+          insufficientStock.stockQuantity || 0
+        }`
+      );
+      return;
+    }
+
     const newItems: SaleItem[] = selectedProducts.map((product) => {
       const quantity = productQuantities[product._id] || 1;
 
@@ -521,7 +537,7 @@ export default function NewSalePage() {
         amount: product.price.amount * quantity,
       };
 
-      // Create a new sale item
+      // Create a new sale item with cost price and purchase date for profit tracking
       return {
         productId: product._id,
         productName: product.name,
@@ -529,6 +545,8 @@ export default function NewSalePage() {
         qty: quantity,
         price: product.price,
         total: itemTotal,
+        costPrice: product.purchasePrice || createMoney(0), // Use purchase price for profit calculation
+        purchaseDate: product.purchaseDate || new Date().toISOString(), // Use current date if no purchase date
       };
     });
 
@@ -575,11 +593,41 @@ export default function NewSalePage() {
       const saleId = `sale_${now.getTime()}`;
 
       const salesDB = await getSalesDB();
+      // Calculate total cost and profit
+      const totalCost = cartItems.reduce(
+        (acc, item) => ({
+          ...acc,
+          amount: acc.amount + item.costPrice.amount * item.qty,
+        }),
+        createMoney(0)
+      );
+
+      const profit = {
+        ...totalPrice,
+        amount: totalPrice.amount - totalCost.amount,
+      };
+
+      // Update stock levels
+      const productsDB = await getProductsDB();
+      for (const item of cartItems) {
+        const product = products.find((p) => p._id === item.productId);
+        if (product) {
+          await productsDB.put({
+            ...product,
+            stockQuantity: (product.stockQuantity || 0) - item.qty,
+            updatedAt: now.toISOString(),
+          });
+        }
+      }
+
+      // Save the sale
       await salesDB.put({
         _id: saleId,
         type: "sale",
         items: cartItems,
         totalAmount: totalPrice,
+        totalCost: totalCost,
+        profit: profit,
         cashReceived: cashReceivedMoney,
         change: change,
         timestamp: now.toISOString(),
@@ -877,12 +925,24 @@ export default function NewSalePage() {
                   key={product._id}
                   padding="md"
                   withBorder
-                  style={{ cursor: "pointer" }}
+                  style={{
+                    cursor:
+                      (product.stockQuantity || 0) > 0
+                        ? "pointer"
+                        : "not-allowed",
+                    opacity: (product.stockQuantity || 0) > 0 ? 1 : 0.6,
+                    backgroundColor:
+                      (product.stockQuantity || 0) === 0
+                        ? "var(--mantine-color-red-0)"
+                        : undefined,
+                  }}
                   onClick={() => {
-                    const isSelected = selectedProducts.some(
-                      (p) => p._id === product._id
-                    );
-                    handleProductSelect(product, !isSelected);
+                    if ((product.stockQuantity || 0) > 0) {
+                      const isSelected = selectedProducts.some(
+                        (p) => p._id === product._id
+                      );
+                      handleProductSelect(product, !isSelected);
+                    }
                   }}
                 >
                   <Group justify="space-between" align="flex-start">
@@ -897,10 +957,18 @@ export default function NewSalePage() {
                       }}
                     />
                     <div style={{ flex: 1 }}>
-                      <Text fw={700} size="lg">
-                        {product.name}
-                      </Text>
+                      <Group justify="space-between">
+                        <Text fw={700} size="lg">
+                          {product.name}
+                        </Text>
+                        {(product.stockQuantity || 0) === 0 && (
+                          <Badge color="red">Out of Stock</Badge>
+                        )}
+                      </Group>
                       <Text size="md">Code: {product.code}</Text>
+                      <Text size="sm" c="dimmed">
+                        Stock: {product.stockQuantity || 0} units
+                      </Text>
 
                       {/* Target-related motivational message */}
                       {wouldHelpReachTarget(product) && (

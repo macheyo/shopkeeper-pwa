@@ -258,8 +258,13 @@ export default function SalesList() {
                 <Accordion.Control>
                   <Box>
                     <Text fw={700}>Sale at {formatDate(sale.timestamp)}</Text>
-                    <Text size="sm">
-                      Total: {formatMoney(sale.totalAmount)} | Status:{" "}
+                    <Group gap="xs">
+                      <Text size="sm">
+                        Total: {formatMoney(sale.totalAmount)}
+                      </Text>
+                      <Text size="sm" c="green">
+                        Profit: {formatMoney(sale.profit)}
+                      </Text>
                       <Badge
                         color={sale.status === "synced" ? "green" : "blue"}
                         style={{
@@ -269,7 +274,7 @@ export default function SalesList() {
                       >
                         {sale.status}
                       </Badge>
-                    </Text>
+                    </Group>
                   </Box>
                 </Accordion.Control>
                 <Accordion.Panel>
@@ -308,6 +313,18 @@ export default function SalesList() {
                         <Group justify="apart">
                           <Text fw={600}>Total Amount:</Text>
                           <Text fw={700}>{formatMoney(sale.totalAmount)}</Text>
+                        </Group>
+
+                        <Group justify="apart">
+                          <Text>Cost of Goods:</Text>
+                          <Text>{formatMoney(sale.totalCost)}</Text>
+                        </Group>
+
+                        <Group justify="apart">
+                          <Text fw={600}>Profit:</Text>
+                          <Text fw={700} c="green">
+                            {formatMoney(sale.profit)}
+                          </Text>
                         </Group>
 
                         {sale.cashReceived && (

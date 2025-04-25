@@ -6,7 +6,8 @@ export type CurrencyCode =
   | "ZAR" // South African Rand
   | "BWP" // Botswana Pula
   | "ZMW" // Zambian Kwacha
-  | "MZN"; // Mozambican Metical
+  | "MZN" // Mozambican Metical
+  | "KES"; // Kenyan Shilling
 
 // Currency information with flags
 export interface CurrencyInfo {
@@ -25,6 +26,7 @@ export const CURRENCY_INFO: Record<CurrencyCode, CurrencyInfo> = {
   BWP: { code: "BWP", name: "Botswana Pula", symbol: "P", flag: "🇧🇼" },
   ZMW: { code: "ZMW", name: "Zambian Kwacha", symbol: "K", flag: "🇿🇲" },
   MZN: { code: "MZN", name: "Mozambican Metical", symbol: "MT", flag: "🇲🇿" },
+  KES: { code: "KES", name: "Kenyan Shilling", symbol: "KSh", flag: "🇰🇪" },
 };
 
 // Define the Money object structure
@@ -108,4 +110,5 @@ export const DEFAULT_EXCHANGE_RATES: Record<CurrencyCode, number> = {
   BWP: 13.75,
   ZMW: 26.3,
   MZN: 63.85,
+  KES: 138.5,
 };

@@ -77,29 +77,6 @@ export default function ProductManager() {
     fetchProducts();
   }, []);
 
-  const handleDelete = async (id: string, rev: string) => {
-    if (
-      typeof window !== "undefined" &&
-      window.confirm("Are you sure you want to delete this product?")
-    ) {
-      try {
-        // Get the database
-        const db = await getProductsDB();
-
-        // Delete the product from the database
-        await db.remove(id, rev);
-
-        // Update the UI by filtering out the deleted product
-        setProducts(products.filter((product) => product._id !== id));
-        console.log(`Product ${id} deleted.`);
-      } catch (err) {
-        console.error("Error deleting product:", err);
-        const message = err instanceof Error ? err.message : String(err);
-        setError(`Failed to delete product ${id}. Error: ${message}`);
-      }
-    }
-  };
-
   const handleRefresh = () => {
     fetchProducts();
   };
@@ -143,7 +120,7 @@ export default function ProductManager() {
 
       {products.length === 0 ? (
         <Text size="lg" ta="center" py="xl">
-          No products found. Add some products to get started.
+          No products found. Add products through the Purchases page.
         </Text>
       ) : (
         <div style={{ maxWidth: "100%", overflowX: "auto" }}>
@@ -160,8 +137,8 @@ export default function ProductManager() {
                 <Table.Th>Code</Table.Th>
                 <Table.Th>Name</Table.Th>
                 <Table.Th>Price</Table.Th>
+                <Table.Th>Stock</Table.Th>
                 <Table.Th>Barcode</Table.Th>
-                <Table.Th>Actions</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -177,20 +154,8 @@ export default function ProductManager() {
                   <Table.Td>{product.code}</Table.Td>
                   <Table.Td>{product.name}</Table.Td>
                   <Table.Td>{formatMoney(product.price)}</Table.Td>
+                  <Table.Td>{product.stockQuantity || 0} units</Table.Td>
                   <Table.Td>{product.barcode || "N/A"}</Table.Td>
-                  <Table.Td>
-                    <Button
-                      color="red"
-                      size="sm"
-                      onClick={() => handleDelete(product._id!, product._rev!)}
-                      disabled={!product._id || !product._rev}
-                      style={{
-                        transition: "all 0.2s ease",
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -218,27 +183,15 @@ export default function ProductManager() {
                     {formatMoney(product.price)}
                   </Text>
                 </Group>
-                <Text size="md" mb="xs">
-                  Code: {product.code}
-                </Text>
-                {product.barcode && (
-                  <Text size="md" mb="xs">
-                    Barcode: {product.barcode}
+                <Stack gap="xs">
+                  <Text size="md">Code: {product.code}</Text>
+                  <Text size="md">
+                    Stock: {product.stockQuantity || 0} units
                   </Text>
-                )}
-                <Button
-                  color="red"
-                  size="md"
-                  fullWidth
-                  mt="md"
-                  onClick={() => handleDelete(product._id!, product._rev!)}
-                  disabled={!product._id || !product._rev}
-                  style={{
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  Delete Product
-                </Button>
+                  {product.barcode && (
+                    <Text size="md">Barcode: {product.barcode}</Text>
+                  )}
+                </Stack>
               </Card>
             ))}
           </Stack>

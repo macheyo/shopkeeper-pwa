@@ -1,268 +1,581 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Title,
-  Group,
-  Text,
   Paper,
-  Box,
-  Alert,
   Stack,
-  Divider,
+  Tabs,
+  Text,
+  Group,
   Card,
+  Table,
   Badge,
-  Textarea,
-  Button,
 } from "@mantine/core";
+import { getSalesDB, getPurchasesDB } from "@/lib/databases";
 import {
-  IconSend,
-  IconRefresh,
-  IconAlertCircle,
-  IconCheck,
-  IconBrandWhatsapp, // Changed from IconWhatsapp to IconBrandWhatsapp
-} from "@tabler/icons-react";
-import CollapsibleFab from "@/components/CollapsibleFab";
-// Removed unused useRouter import
-import {
-  generateDailyReport,
-  initiateWhatsAppSync,
-  markSalesAsSynced,
-} from "@/lib/sync";
-import { getSalesDB } from "@/lib/databases";
-import { SaleDoc } from "@/types";
+  SaleDoc,
+  PurchaseDoc,
+  ProfitLossStatement,
+  CashFlowStatement,
+  BalanceSheet,
+  PurchaseRunAnalysis,
+} from "@/types";
+import { formatMoney, createMoney } from "@/types/money";
 import { useDateFilter } from "@/contexts/DateFilterContext";
+import ProductManager from "@/components/ProductManager";
 
 export default function ReportsPage() {
-  // Removed unused router
   const { dateRangeInfo } = useDateFilter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [report, setReport] = useState<string | null>(null);
-  const [pendingSales, setPendingSales] = useState<SaleDoc[]>([]);
-  const phoneNumber = "254718250097"; // Default phone number, removed unused setter
+  const [loading, setLoading] = useState(true);
+  const [sales, setSales] = useState<SaleDoc[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseDoc[]>([]);
+  const [activeTab, setActiveTab] = useState<string>("pl");
 
-  const handleGenerateReport = async () => {
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-    setReport(null);
-
-    try {
-      if (typeof window === "undefined") {
-        throw new Error("Reports can only be generated in the browser");
-      }
-
-      // Get pending sales for the selected date range
-      const startDateISOString = dateRangeInfo.startDate.toISOString();
-      const endDateISOString = dateRangeInfo.endDate.toISOString();
-
-      // Initialize salesDB before using it
-      const db = await getSalesDB();
-
-      // Get all documents
-      const result = await db.allDocs({
-        include_docs: true,
-      });
-
-      // Filter for pending sales documents within the selected date range
-      const filteredSales = result.rows
-        .map((row) => row.doc)
-        .filter((doc): doc is SaleDoc => {
-          // Make sure it's a sale document with a timestamp and pending status
-          if (
-            !doc ||
-            typeof doc !== "object" ||
-            !("type" in doc) ||
-            doc.type !== "sale" ||
-            !("timestamp" in doc) ||
-            !("status" in doc) ||
-            doc.status !== "pending"
-          ) {
-            return false;
-          }
-
-          // Check if it's within the date range
-          const docDate = new Date(doc.timestamp as string);
-          return (
-            docDate >= new Date(startDateISOString) &&
-            docDate < new Date(endDateISOString)
-          );
+  // Fetch data when date range changes
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch sales
+        const salesDB = await getSalesDB();
+        const salesResult = await salesDB.find({
+          selector: {
+            type: "sale",
+            timestamp: {
+              $gte: dateRangeInfo.startDate.toISOString(),
+              $lte: dateRangeInfo.endDate.toISOString(),
+            },
+          },
         });
+        setSales(salesResult.docs as SaleDoc[]);
 
-      setPendingSales(filteredSales);
-
-      if (filteredSales.length === 0) {
-        setSuccess(
-          `No pending sales to report for ${dateRangeInfo.label.toLowerCase()}.`
-        );
+        // Fetch purchases
+        const purchasesDB = await getPurchasesDB();
+        const purchasesResult = await purchasesDB.find({
+          selector: {
+            type: "purchase",
+            timestamp: {
+              $gte: dateRangeInfo.startDate.toISOString(),
+              $lte: dateRangeInfo.endDate.toISOString(),
+            },
+          },
+        });
+        setPurchases(purchasesResult.docs as PurchaseDoc[]);
+      } catch (err) {
+        console.error("Error fetching data:", err);
+      } finally {
         setLoading(false);
-        return;
       }
+    };
 
-      // Generate report with the selected date range
-      const encodedReport = await generateDailyReport(
-        dateRangeInfo.startDate,
-        dateRangeInfo.endDate
-      );
-      // Decode for display
-      const decodedReport = decodeURIComponent(encodedReport);
-      setReport(decodedReport);
-      setSuccess(
-        `Report generated with ${
-          filteredSales.length
-        } sales for ${dateRangeInfo.label.toLowerCase()}.`
-      );
-    } catch (err) {
-      console.error("Error generating report:", err);
-      setError(
-        `Failed to generate report: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
-    } finally {
-      setLoading(false);
-    }
+    fetchData();
+  }, [dateRangeInfo.startDate, dateRangeInfo.endDate]);
+
+  // Calculate Profit/Loss Statement
+  const calculateProfitLoss = (): ProfitLossStatement => {
+    const revenue = sales.reduce(
+      (acc, sale) => acc + sale.totalAmount.amount,
+      0
+    );
+    const costOfGoodsSold = sales.reduce(
+      (acc, sale) => acc + sale.totalCost.amount,
+      0
+    );
+    const grossProfit = revenue - costOfGoodsSold;
+
+    return {
+      startDate: dateRangeInfo.startDate.toISOString(),
+      endDate: dateRangeInfo.endDate.toISOString(),
+      revenue: createMoney(revenue),
+      costOfGoodsSold: createMoney(costOfGoodsSold),
+      grossProfit: createMoney(grossProfit),
+      expenses: {}, // Add expense tracking in future
+      netProfit: createMoney(grossProfit), // Same as gross profit until we track expenses
+    };
   };
 
-  const handleSendWhatsApp = async () => {
-    if (typeof window === "undefined" || !report) {
-      setError("Please generate a report first");
-      return;
-    }
+  // Calculate Cash Flow Statement
+  const calculateCashFlow = (): CashFlowStatement => {
+    const cashFromSales = sales.reduce(
+      (acc, sale) => acc + sale.totalAmount.amount,
+      0
+    );
+    const cashForPurchases = purchases.reduce(
+      (acc, purchase) => acc + purchase.totalAmount.amount,
+      0
+    );
+    const netOperatingCash = cashFromSales - cashForPurchases;
 
-    try {
-      // Get the encoded report again with the selected date range
-      const encodedReport = await generateDailyReport(
-        dateRangeInfo.startDate,
-        dateRangeInfo.endDate
-      );
-
-      // Send via WhatsApp
-      initiateWhatsAppSync(encodedReport, phoneNumber);
-
-      // Mark sales as synced
-      if (pendingSales.length > 0) {
-        const saleIds = pendingSales.map((sale) => sale._id);
-        await markSalesAsSynced(saleIds);
-        setSuccess("Report sent to WhatsApp and sales marked as synced!");
-        // Clear the report after sending
-        setReport(null);
-        setPendingSales([]);
-      }
-    } catch (err) {
-      console.error("Error sending report:", err);
-      setError(
-        `Failed to send report: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
-    }
+    return {
+      startDate: dateRangeInfo.startDate.toISOString(),
+      endDate: dateRangeInfo.endDate.toISOString(),
+      operatingActivities: {
+        cashFromSales: createMoney(cashFromSales),
+        cashForPurchases: createMoney(cashForPurchases),
+        cashForExpenses: createMoney(0), // Add expense tracking in future
+        netOperatingCash: createMoney(netOperatingCash),
+      },
+      netCashFlow: createMoney(netOperatingCash),
+      openingBalance: createMoney(0), // Add balance tracking in future
+      closingBalance: createMoney(netOperatingCash), // Simplified for now
+    };
   };
 
-  return (
-    <>
-      <Box mb="xl">
-        <Group justify="space-between" align="center">
-          <Title order={2}>Reports</Title>
-          <CollapsibleFab
-            icon={<IconRefresh size={16} />}
-            text="Generate Report"
-            onClick={handleGenerateReport}
-            color="violet"
-          />
+  // Calculate Balance Sheet
+  const calculateBalanceSheet = (): BalanceSheet => {
+    // Calculate inventory value based on purchase prices
+    const inventoryValue = purchases.reduce((acc, purchase) => {
+      return (
+        acc +
+        purchase.items.reduce(
+          (itemAcc, item) => itemAcc + item.costPrice.amount * item.qty,
+          0
+        )
+      );
+    }, 0);
+
+    // For now, we'll assume all sales are cash sales
+    const cash = sales.reduce((acc, sale) => acc + sale.totalAmount.amount, 0);
+
+    const totalAssets = inventoryValue + cash;
+
+    return {
+      startDate: dateRangeInfo.startDate.toISOString(),
+      endDate: dateRangeInfo.endDate.toISOString(),
+      assets: {
+        inventory: createMoney(inventoryValue),
+        cash: createMoney(cash),
+        accountsReceivable: createMoney(0), // Add credit sales tracking in future
+        totalAssets: createMoney(totalAssets),
+      },
+      liabilities: {
+        accountsPayable: createMoney(0), // Add credit purchases tracking in future
+        totalLiabilities: createMoney(0),
+      },
+      equity: {
+        ownersEquity: createMoney(0), // Add equity tracking in future
+        retainedEarnings: createMoney(totalAssets), // Simplified for now
+        totalEquity: createMoney(totalAssets),
+      },
+    };
+  };
+
+  // Calculate Purchase Run Analysis
+  const calculatePurchaseRunAnalysis = (): PurchaseRunAnalysis[] => {
+    // Group purchases by purchaseRunId
+    const purchaseRuns = purchases.reduce((acc, purchase) => {
+      const run = acc.find((r) => r.purchaseRunId === purchase.purchaseRunId);
+      if (run) {
+        run.purchases.push(purchase);
+      } else {
+        acc.push({
+          purchaseRunId: purchase.purchaseRunId,
+          timestamp: purchase.timestamp,
+          purchases: [purchase],
+        });
+      }
+      return acc;
+    }, [] as { purchaseRunId: string; timestamp: string; purchases: PurchaseDoc[] }[]);
+
+    // Calculate metrics for each purchase run
+    return purchaseRuns.map((run) => {
+      const totalPurchaseAmount = run.purchases.reduce(
+        (acc, p) => acc + p.totalAmount.amount,
+        0
+      );
+
+      // Find sales of items from this purchase run
+      const relatedSales = sales.filter((sale) =>
+        sale.items.some((item) =>
+          run.purchases.some((p) =>
+            p.items.some((pi) => pi.productId === item.productId)
+          )
+        )
+      );
+
+      const itemsSold = relatedSales.reduce(
+        (acc, sale) =>
+          acc +
+          sale.items.reduce(
+            (itemAcc, item) =>
+              run.purchases.some((p) =>
+                p.items.some((pi) => pi.productId === item.productId)
+              )
+                ? itemAcc + item.qty
+                : itemAcc,
+            0
+          ),
+        0
+      );
+
+      const itemsPurchased = run.purchases.reduce(
+        (acc, p) =>
+          acc + p.items.reduce((itemAcc, item) => itemAcc + item.qty, 0),
+        0
+      );
+
+      const revenue = relatedSales.reduce(
+        (acc, sale) =>
+          acc +
+          sale.items.reduce(
+            (itemAcc, item) =>
+              run.purchases.some((p) =>
+                p.items.some((pi) => pi.productId === item.productId)
+              )
+                ? itemAcc + item.total.amount
+                : itemAcc,
+            0
+          ),
+        0
+      );
+
+      const profit = revenue - totalPurchaseAmount;
+      const profitMargin = (profit / revenue) * 100;
+      const roi = (profit / totalPurchaseAmount) * 100;
+
+      // Track time-to-sell for each item
+      const itemsWithTimeToSell = relatedSales.flatMap((sale) =>
+        sale.items
+          .filter((item) =>
+            run.purchases.some((p) =>
+              p.items.some((pi) => pi.productId === item.productId)
+            )
+          )
+          .map((item) => {
+            const saleDate = new Date(sale.timestamp);
+            const purchaseDate = new Date(item.purchaseDate);
+            const daysToSell = Math.round(
+              (saleDate.getTime() - purchaseDate.getTime()) /
+                (1000 * 60 * 60 * 24)
+            );
+
+            return {
+              productId: item.productId,
+              productName: item.productName,
+              purchaseDate: item.purchaseDate,
+              saleDate: sale.timestamp,
+              daysToSell,
+            };
+          })
+      );
+
+      // Calculate average time to sell
+      const averageTimeToSell =
+        itemsWithTimeToSell.length > 0
+          ? Math.round(
+              itemsWithTimeToSell.reduce(
+                (acc, item) => acc + item.daysToSell,
+                0
+              ) / itemsWithTimeToSell.length
+            )
+          : 0;
+
+      return {
+        purchaseRunId: run.purchaseRunId,
+        timestamp: run.timestamp,
+        totalPurchaseAmount: createMoney(totalPurchaseAmount),
+        itemsSold,
+        itemsRemaining: itemsPurchased - itemsSold,
+        revenue: createMoney(revenue),
+        profit: createMoney(profit),
+        profitMargin: Math.round(profitMargin * 100) / 100,
+        roi: Math.round(roi * 100) / 100,
+        averageTimeToSell,
+        itemsWithTimeToSell,
+      };
+    });
+  };
+
+  const profitLoss = calculateProfitLoss();
+  const cashFlow = calculateCashFlow();
+  const balanceSheet = calculateBalanceSheet();
+  const purchaseAnalysis = calculatePurchaseRunAnalysis();
+
+  const renderProfitLoss = () => (
+    <Stack gap="md">
+      <Card withBorder>
+        <Title order={4} mb="md">
+          Revenue
+        </Title>
+        <Group justify="space-between">
+          <Text>Total Sales</Text>
+          <Text fw={500}>{formatMoney(profitLoss.revenue)}</Text>
         </Group>
-        <Text c="dimmed" mt="xs">
-          Generate and send sales reports via WhatsApp for{" "}
-          {dateRangeInfo.label.toLowerCase()}
-        </Text>
-      </Box>
+      </Card>
 
-      {error && (
-        <Alert
-          icon={<IconAlertCircle size="1rem" />}
-          title="Error"
-          color="red"
-          mb="md"
-          withCloseButton
-          onClose={() => setError(null)}
-        >
-          {error}
-        </Alert>
-      )}
+      <Card withBorder>
+        <Title order={4} mb="md">
+          Cost of Goods Sold
+        </Title>
+        <Group justify="space-between">
+          <Text>Total COGS</Text>
+          <Text fw={500}>{formatMoney(profitLoss.costOfGoodsSold)}</Text>
+        </Group>
+      </Card>
 
-      {success && (
-        <Alert
-          icon={<IconCheck size="1rem" />}
-          title="Success"
-          color="green"
-          mb="md"
-          withCloseButton
-          onClose={() => setSuccess(null)}
-        >
-          {success}
-        </Alert>
-      )}
+      <Card withBorder>
+        <Title order={4} mb="md">
+          Profit
+        </Title>
+        <Group justify="space-between">
+          <Text>Gross Profit</Text>
+          <Text fw={500} c="green">
+            {formatMoney(profitLoss.grossProfit)}
+          </Text>
+        </Group>
+        <Group justify="space-between" mt="xs">
+          <Text>Net Profit</Text>
+          <Text fw={700} c="green">
+            {formatMoney(profitLoss.netProfit)}
+          </Text>
+        </Group>
+      </Card>
+    </Stack>
+  );
 
-      <Paper shadow="xs" p="md" withBorder>
-        <Stack gap="md">
-          <Group>
-            <Text fw={500}>Pending Sales:</Text>
-            <Badge color="violet" size="lg">
-              {pendingSales.length}
+  const renderCashFlow = () => (
+    <Stack gap="md">
+      <Card withBorder>
+        <Title order={4} mb="md">
+          Operating Activities
+        </Title>
+        <Stack gap="xs">
+          <Group justify="space-between">
+            <Text>Cash from Sales</Text>
+            <Text fw={500} c="green">
+              {formatMoney(cashFlow.operatingActivities.cashFromSales)}
+            </Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Cash for Purchases</Text>
+            <Text fw={500} c="red">
+              {formatMoney(cashFlow.operatingActivities.cashForPurchases)}
+            </Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Net Operating Cash</Text>
+            <Text
+              fw={700}
+              c={
+                cashFlow.operatingActivities.netOperatingCash.amount >= 0
+                  ? "green"
+                  : "red"
+              }
+            >
+              {formatMoney(cashFlow.operatingActivities.netOperatingCash)}
+            </Text>
+          </Group>
+        </Stack>
+      </Card>
+
+      <Card withBorder>
+        <Title order={4} mb="md">
+          Cash Position
+        </Title>
+        <Stack gap="xs">
+          <Group justify="space-between">
+            <Text>Opening Balance</Text>
+            <Text fw={500}>{formatMoney(cashFlow.openingBalance)}</Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Net Cash Flow</Text>
+            <Text
+              fw={500}
+              c={cashFlow.netCashFlow.amount >= 0 ? "green" : "red"}
+            >
+              {formatMoney(cashFlow.netCashFlow)}
+            </Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Closing Balance</Text>
+            <Text
+              fw={700}
+              c={cashFlow.closingBalance.amount >= 0 ? "green" : "red"}
+            >
+              {formatMoney(cashFlow.closingBalance)}
+            </Text>
+          </Group>
+        </Stack>
+      </Card>
+    </Stack>
+  );
+
+  const renderBalanceSheet = () => (
+    <Stack gap="md">
+      <Card withBorder>
+        <Title order={4} mb="md">
+          Assets
+        </Title>
+        <Stack gap="xs">
+          <Group justify="space-between">
+            <Text>Inventory</Text>
+            <Text fw={500}>{formatMoney(balanceSheet.assets.inventory)}</Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Cash</Text>
+            <Text fw={500}>{formatMoney(balanceSheet.assets.cash)}</Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Total Assets</Text>
+            <Text fw={700}>{formatMoney(balanceSheet.assets.totalAssets)}</Text>
+          </Group>
+        </Stack>
+      </Card>
+
+      <Card withBorder>
+        <Title order={4} mb="md">
+          Liabilities & Equity
+        </Title>
+        <Stack gap="xs">
+          <Group justify="space-between">
+            <Text>Total Liabilities</Text>
+            <Text fw={500}>
+              {formatMoney(balanceSheet.liabilities.totalLiabilities)}
+            </Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Total Equity</Text>
+            <Text fw={700}>{formatMoney(balanceSheet.equity.totalEquity)}</Text>
+          </Group>
+        </Stack>
+      </Card>
+    </Stack>
+  );
+
+  const renderPurchaseAnalysis = () => (
+    <Stack gap="md">
+      {purchaseAnalysis.map((run) => (
+        <Card key={run.purchaseRunId} withBorder>
+          <Group justify="space-between" mb="md">
+            <div>
+              <Text fw={700}>
+                Purchase Run #{run.purchaseRunId.split("_")[1]}
+              </Text>
+              <Text size="sm" c="dimmed">
+                {new Date(run.timestamp).toLocaleString()}
+              </Text>
+            </div>
+            <Badge
+              color={run.profit.amount >= 0 ? "green" : "red"}
+              size="lg"
+              variant="light"
+            >
+              ROI: {run.roi}%
             </Badge>
           </Group>
 
-          <Divider />
-
-          {report ? (
-            <>
-              <Card withBorder p="md">
-                <Text fw={500} mb="sm">
-                  Report Preview:
-                </Text>
-                <Textarea
-                  value={report}
-                  readOnly
-                  minRows={5}
-                  maxRows={10}
-                  style={{ fontFamily: "monospace" }}
-                />
-              </Card>
-
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">
-                  Send this report via WhatsApp to sync your sales
-                </Text>
-                <Button
-                  color="green"
-                  leftSection={<IconBrandWhatsapp size={16} />}
-                  onClick={handleSendWhatsApp}
-                  disabled={!report}
+          <Table withTableBorder>
+            <Table.Tbody>
+              <Table.Tr>
+                <Table.Td>Total Purchase Cost</Table.Td>
+                <Table.Td align="right">
+                  {formatMoney(run.totalPurchaseAmount)}
+                </Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td>Items Sold</Table.Td>
+                <Table.Td align="right">{run.itemsSold}</Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td>Items Remaining</Table.Td>
+                <Table.Td align="right">{run.itemsRemaining}</Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td>Revenue</Table.Td>
+                <Table.Td align="right">{formatMoney(run.revenue)}</Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td>Profit</Table.Td>
+                <Table.Td
+                  align="right"
+                  c={run.profit.amount >= 0 ? "green" : "red"}
                 >
-                  Send via WhatsApp
-                </Button>
-              </Group>
+                  {formatMoney(run.profit)}
+                </Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td>Profit Margin</Table.Td>
+                <Table.Td
+                  align="right"
+                  c={run.profitMargin >= 0 ? "green" : "red"}
+                >
+                  {run.profitMargin}%
+                </Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td>Average Time to Sell</Table.Td>
+                <Table.Td align="right">{run.averageTimeToSell} days</Table.Td>
+              </Table.Tr>
+            </Table.Tbody>
+          </Table>
+
+          {run.itemsWithTimeToSell.length > 0 && (
+            <>
+              <Title order={5} mt="lg" mb="sm">
+                Item Sales Timeline
+              </Title>
+              <Table withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Product</Table.Th>
+                    <Table.Th>Purchase Date</Table.Th>
+                    <Table.Th>Sale Date</Table.Th>
+                    <Table.Th>Days to Sell</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {run.itemsWithTimeToSell.map((item, idx) => (
+                    <Table.Tr key={`${item.productId}_${idx}`}>
+                      <Table.Td>{item.productName}</Table.Td>
+                      <Table.Td>
+                        {new Date(item.purchaseDate).toLocaleDateString()}
+                      </Table.Td>
+                      <Table.Td>
+                        {new Date(item.saleDate).toLocaleDateString()}
+                      </Table.Td>
+                      <Table.Td align="right">{item.daysToSell}</Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
             </>
-          ) : (
-            <Stack align="center" py="xl">
-              <IconSend size={48} opacity={0.3} />
-              <Text c="dimmed" ta="center">
-                Generate a report to see pending sales
-              </Text>
-              <Button
-                variant="light"
-                onClick={handleGenerateReport}
-                loading={loading}
-                color="violet"
-              >
-                Generate Now
-              </Button>
-            </Stack>
           )}
-        </Stack>
-      </Paper>
-    </>
+        </Card>
+      ))}
+    </Stack>
+  );
+
+  return (
+    <Stack gap="lg">
+      <Title order={2}>Financial Reports</Title>
+
+      {loading ? (
+        <Text ta="center">Loading reports...</Text>
+      ) : (
+        <Tabs
+          value={activeTab}
+          onChange={(value) => setActiveTab(value || "pl")}
+        >
+          <Tabs.List grow>
+            <Tabs.Tab value="pl">Profit & Loss</Tabs.Tab>
+            <Tabs.Tab value="cf">Cash Flow</Tabs.Tab>
+            <Tabs.Tab value="bs">Balance Sheet</Tabs.Tab>
+            <Tabs.Tab value="pa">Purchase Analysis</Tabs.Tab>
+            <Tabs.Tab value="products">Products</Tabs.Tab>
+          </Tabs.List>
+
+          <Paper p="md" mt="md" withBorder>
+            <Tabs.Panel value="pl">{renderProfitLoss()}</Tabs.Panel>
+            <Tabs.Panel value="cf">{renderCashFlow()}</Tabs.Panel>
+            <Tabs.Panel value="bs">{renderBalanceSheet()}</Tabs.Panel>
+            <Tabs.Panel value="pa">{renderPurchaseAnalysis()}</Tabs.Panel>
+            <Tabs.Panel value="products">
+              <ProductManager />
+            </Tabs.Panel>
+          </Paper>
+        </Tabs>
+      )}
+    </Stack>
   );
 }

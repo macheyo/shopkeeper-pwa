@@ -4,9 +4,10 @@ import React, { useEffect, useState } from "react";
 import { Group, Text } from "@mantine/core";
 import {
   IconHome,
-  IconPackage,
   IconShoppingCart,
   IconSend,
+  IconShoppingBag,
+  IconRefresh,
 } from "@tabler/icons-react";
 import { usePathname } from "next/navigation";
 
@@ -27,13 +28,6 @@ export default function BottomNav() {
       animation: "icon-bounce",
     },
     {
-      icon: IconPackage,
-      label: "Products",
-      path: "/products",
-      color: "green",
-      animation: "icon-pulse",
-    },
-    {
       icon: IconShoppingCart,
       label: "Sales",
       path: "/sales",
@@ -41,11 +35,25 @@ export default function BottomNav() {
       animation: "icon-wiggle",
     },
     {
+      icon: IconShoppingBag,
+      label: "Purchases",
+      path: "/purchases",
+      color: "teal",
+      animation: "icon-bounce",
+    },
+    {
       icon: IconSend,
       label: "Reports",
       path: "/reports",
       color: "violet",
       animation: "icon-spin",
+    },
+    {
+      icon: IconRefresh,
+      label: "Sync",
+      path: "/sync",
+      color: "cyan",
+      animation: "icon-bounce",
     },
   ];
 
