@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import CollapsibleFab from "@/components/CollapsibleFab";
 import {
   Title,
   Button,
@@ -10,6 +11,7 @@ import {
   Text,
   Badge,
   ActionIcon,
+  Box,
 } from "@mantine/core";
 import { IconPlus, IconEye } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
@@ -74,26 +76,20 @@ export default function PurchasesPage() {
   return (
     <>
       <Stack gap="lg">
-        <Group justify="space-between" align="center">
-          <Title order={2}>Purchases</Title>
-          <Group>
-            <Button
-              onClick={() => router.push("/products/add")}
-              leftSection={<IconPlus size={20} />}
-              variant="light"
-              size="md"
-            >
-              New Product
-            </Button>
-            <Button
+        <Box mb="xl">
+          <Group justify="space-between" align="center">
+            <Title order={2}>Purchases</Title>
+            <CollapsibleFab
+              icon={<IconPlus size={16} />}
+              text="New Purchase"
               onClick={() => router.push("/purchases/new")}
-              leftSection={<IconPlus size={20} />}
-              size="md"
-            >
-              New Purchase
-            </Button>
+              color="blue"
+            />
           </Group>
-        </Group>
+          <Text c="dimmed" mt="xs">
+            Record and manage your purchase transactions
+          </Text>
+        </Box>
 
         {loading ? (
           <Text ta="center">Loading purchases...</Text>

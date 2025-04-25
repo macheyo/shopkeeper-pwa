@@ -11,7 +11,11 @@ import {
   Card,
   Table,
   Badge,
+  Box,
+  Select,
+  Button,
 } from "@mantine/core";
+import { IconChartPie3, IconCash, IconScale } from "@tabler/icons-react";
 import { getSalesDB, getPurchasesDB } from "@/lib/databases";
 import {
   SaleDoc,
@@ -465,80 +469,86 @@ export default function ReportsPage() {
             </Badge>
           </Group>
 
-          <Table withTableBorder>
-            <Table.Tbody>
-              <Table.Tr>
-                <Table.Td>Total Purchase Cost</Table.Td>
-                <Table.Td align="right">
-                  {formatMoney(run.totalPurchaseAmount)}
-                </Table.Td>
-              </Table.Tr>
-              <Table.Tr>
-                <Table.Td>Items Sold</Table.Td>
-                <Table.Td align="right">{run.itemsSold}</Table.Td>
-              </Table.Tr>
-              <Table.Tr>
-                <Table.Td>Items Remaining</Table.Td>
-                <Table.Td align="right">{run.itemsRemaining}</Table.Td>
-              </Table.Tr>
-              <Table.Tr>
-                <Table.Td>Revenue</Table.Td>
-                <Table.Td align="right">{formatMoney(run.revenue)}</Table.Td>
-              </Table.Tr>
-              <Table.Tr>
-                <Table.Td>Profit</Table.Td>
-                <Table.Td
-                  align="right"
-                  c={run.profit.amount >= 0 ? "green" : "red"}
-                >
-                  {formatMoney(run.profit)}
-                </Table.Td>
-              </Table.Tr>
-              <Table.Tr>
-                <Table.Td>Profit Margin</Table.Td>
-                <Table.Td
-                  align="right"
-                  c={run.profitMargin >= 0 ? "green" : "red"}
-                >
-                  {run.profitMargin}%
-                </Table.Td>
-              </Table.Tr>
-              <Table.Tr>
-                <Table.Td>Average Time to Sell</Table.Td>
-                <Table.Td align="right">{run.averageTimeToSell} days</Table.Td>
-              </Table.Tr>
-            </Table.Tbody>
-          </Table>
+          <div style={{ overflowX: "auto" }}>
+            <Table withTableBorder style={{ minWidth: "100%" }}>
+              <Table.Tbody>
+                <Table.Tr>
+                  <Table.Td>Total Purchase Cost</Table.Td>
+                  <Table.Td align="right">
+                    {formatMoney(run.totalPurchaseAmount)}
+                  </Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td>Items Sold</Table.Td>
+                  <Table.Td align="right">{run.itemsSold}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td>Items Remaining</Table.Td>
+                  <Table.Td align="right">{run.itemsRemaining}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td>Revenue</Table.Td>
+                  <Table.Td align="right">{formatMoney(run.revenue)}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td>Profit</Table.Td>
+                  <Table.Td
+                    align="right"
+                    c={run.profit.amount >= 0 ? "green" : "red"}
+                  >
+                    {formatMoney(run.profit)}
+                  </Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td>Profit Margin</Table.Td>
+                  <Table.Td
+                    align="right"
+                    c={run.profitMargin >= 0 ? "green" : "red"}
+                  >
+                    {run.profitMargin}%
+                  </Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td>Average Time to Sell</Table.Td>
+                  <Table.Td align="right">
+                    {run.averageTimeToSell} days
+                  </Table.Td>
+                </Table.Tr>
+              </Table.Tbody>
+            </Table>
+          </div>
 
           {run.itemsWithTimeToSell.length > 0 && (
             <>
               <Title order={5} mt="lg" mb="sm">
                 Item Sales Timeline
               </Title>
-              <Table withTableBorder>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Product</Table.Th>
-                    <Table.Th>Purchase Date</Table.Th>
-                    <Table.Th>Sale Date</Table.Th>
-                    <Table.Th>Days to Sell</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {run.itemsWithTimeToSell.map((item, idx) => (
-                    <Table.Tr key={`${item.productId}_${idx}`}>
-                      <Table.Td>{item.productName}</Table.Td>
-                      <Table.Td>
-                        {new Date(item.purchaseDate).toLocaleDateString()}
-                      </Table.Td>
-                      <Table.Td>
-                        {new Date(item.saleDate).toLocaleDateString()}
-                      </Table.Td>
-                      <Table.Td align="right">{item.daysToSell}</Table.Td>
+              <div style={{ overflowX: "auto" }}>
+                <Table withTableBorder style={{ minWidth: "100%" }}>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Product</Table.Th>
+                      <Table.Th>Purchase Date</Table.Th>
+                      <Table.Th>Sale Date</Table.Th>
+                      <Table.Th>Days to Sell</Table.Th>
                     </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {run.itemsWithTimeToSell.map((item, idx) => (
+                      <Table.Tr key={`${item.productId}_${idx}`}>
+                        <Table.Td>{item.productName}</Table.Td>
+                        <Table.Td>
+                          {new Date(item.purchaseDate).toLocaleDateString()}
+                        </Table.Td>
+                        <Table.Td>
+                          {new Date(item.saleDate).toLocaleDateString()}
+                        </Table.Td>
+                        <Table.Td align="right">{item.daysToSell}</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </div>
             </>
           )}
         </Card>
@@ -553,28 +563,88 @@ export default function ReportsPage() {
       {loading ? (
         <Text ta="center">Loading reports...</Text>
       ) : (
-        <Tabs
-          value={activeTab}
-          onChange={(value) => setActiveTab(value || "pl")}
-        >
-          <Tabs.List grow>
-            <Tabs.Tab value="pl">Profit & Loss</Tabs.Tab>
-            <Tabs.Tab value="cf">Cash Flow</Tabs.Tab>
-            <Tabs.Tab value="bs">Balance Sheet</Tabs.Tab>
-            <Tabs.Tab value="pa">Purchase Analysis</Tabs.Tab>
-            <Tabs.Tab value="products">Products</Tabs.Tab>
-          </Tabs.List>
+        <>
+          <Box hiddenFrom="sm">
+            {/* Mobile view */}
+            <Select
+              value={activeTab}
+              onChange={(value) => setActiveTab(value || "pl")}
+              data={[
+                { value: "pl", label: "Profit & Loss" },
+                { value: "cf", label: "Cash Flow" },
+                { value: "bs", label: "Balance Sheet" },
+                { value: "pa", label: "Purchase Analysis" },
+                { value: "products", label: "Products" },
+              ]}
+              size="md"
+              mb="md"
+            />
+            <Paper p="xs" withBorder>
+              {activeTab === "pl" && renderProfitLoss()}
+              {activeTab === "cf" && renderCashFlow()}
+              {activeTab === "bs" && renderBalanceSheet()}
+              {activeTab === "pa" && renderPurchaseAnalysis()}
+              {activeTab === "products" && <ProductManager />}
+            </Paper>
 
-          <Paper p="md" mt="md" withBorder>
-            <Tabs.Panel value="pl">{renderProfitLoss()}</Tabs.Panel>
-            <Tabs.Panel value="cf">{renderCashFlow()}</Tabs.Panel>
-            <Tabs.Panel value="bs">{renderBalanceSheet()}</Tabs.Panel>
-            <Tabs.Panel value="pa">{renderPurchaseAnalysis()}</Tabs.Panel>
-            <Tabs.Panel value="products">
-              <ProductManager />
-            </Tabs.Panel>
-          </Paper>
-        </Tabs>
+            {/* Quick navigation buttons */}
+            <Group mt="md" grow>
+              {activeTab !== "pl" && (
+                <Button
+                  variant="light"
+                  onClick={() => setActiveTab("pl")}
+                  leftSection={<IconChartPie3 size={16} />}
+                >
+                  P&L
+                </Button>
+              )}
+              {activeTab !== "cf" && (
+                <Button
+                  variant="light"
+                  onClick={() => setActiveTab("cf")}
+                  leftSection={<IconCash size={16} />}
+                >
+                  Cash
+                </Button>
+              )}
+              {activeTab !== "bs" && (
+                <Button
+                  variant="light"
+                  onClick={() => setActiveTab("bs")}
+                  leftSection={<IconScale size={16} />}
+                >
+                  Balance
+                </Button>
+              )}
+            </Group>
+          </Box>
+
+          <Box visibleFrom="sm">
+            {/* Desktop view */}
+            <Tabs
+              value={activeTab}
+              onChange={(value) => setActiveTab(value || "pl")}
+            >
+              <Tabs.List grow>
+                <Tabs.Tab value="pl">Profit & Loss</Tabs.Tab>
+                <Tabs.Tab value="cf">Cash Flow</Tabs.Tab>
+                <Tabs.Tab value="bs">Balance Sheet</Tabs.Tab>
+                <Tabs.Tab value="pa">Purchase Analysis</Tabs.Tab>
+                <Tabs.Tab value="products">Products</Tabs.Tab>
+              </Tabs.List>
+
+              <Paper p="md" mt="md" withBorder>
+                <Tabs.Panel value="pl">{renderProfitLoss()}</Tabs.Panel>
+                <Tabs.Panel value="cf">{renderCashFlow()}</Tabs.Panel>
+                <Tabs.Panel value="bs">{renderBalanceSheet()}</Tabs.Panel>
+                <Tabs.Panel value="pa">{renderPurchaseAnalysis()}</Tabs.Panel>
+                <Tabs.Panel value="products">
+                  <ProductManager />
+                </Tabs.Panel>
+              </Paper>
+            </Tabs>
+          </Box>
+        </>
       )}
     </Stack>
   );

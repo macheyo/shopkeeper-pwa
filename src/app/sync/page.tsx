@@ -14,6 +14,8 @@ import {
   SegmentedControl,
   Center,
   Box,
+  Select,
+  Collapse,
 } from "@mantine/core";
 import { IconBrandWhatsapp, IconCloud, IconCheck } from "@tabler/icons-react";
 import { getSalesDB, getPurchasesDB } from "@/lib/databases";
@@ -38,6 +40,8 @@ export default function SyncPage() {
   const [items, setItems] = useState<SyncItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [countryCode, setCountryCode] = useState("+254");
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [syncMethod, setSyncMethod] = useState<"whatsapp" | "couchdb">(
     "whatsapp"
   );
@@ -105,29 +109,40 @@ export default function SyncPage() {
   }, [dateRangeInfo.startDate, dateRangeInfo.endDate]);
 
   const handleSync = async (selectedItems: SyncItem[]) => {
-    if (syncMethod === "whatsapp" && !whatsappNumber) {
-      alert("Please enter a WhatsApp number");
+    if (syncMethod === "whatsapp" && (!whatsappNumber || !countryCode)) {
+      alert("Please enter a WhatsApp number and select a country code");
       return;
     }
 
     try {
       // TODO: Implement actual sync logic
       if (syncMethod === "whatsapp") {
-        // Format message for WhatsApp
-        const message = selectedItems
-          .map(
-            (item) =>
-              `${item.type === "sale" ? "Sale" : "Purchase"} on ${new Date(
-                item.timestamp
-              ).toLocaleDateString()}: ${formatMoney(
+        // Format detailed message for WhatsApp
+        const message =
+          `*Business Summary*\n\n` +
+          selectedItems
+            .map((item) => {
+              const date = new Date(item.timestamp);
+              const formattedDate = date.toLocaleDateString();
+              const formattedTime = date.toLocaleTimeString();
+              const amount = formatMoney(
                 createMoney(item.amount, "KES", DEFAULT_EXCHANGE_RATES.KES)
-              )}`
-          )
-          .join("\n");
+              );
+
+              return (
+                `*${item.type === "sale" ? "Sale" : "Purchase"}*\n` +
+                `📅 Date: ${formattedDate}\n` +
+                `⏰ Time: ${formattedTime}\n` +
+                `💰 Amount: ${amount}\n` +
+                `🆔 ID: ${item.id}\n`
+              );
+            })
+            .join("\n");
 
         // Open WhatsApp with pre-filled message
+        const fullNumber = `${countryCode}${whatsappNumber.replace(/^0+/, "")}`;
         window.open(
-          `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`,
+          `https://wa.me/${fullNumber}?text=${encodeURIComponent(message)}`,
           "_blank"
         );
       } else {
@@ -197,21 +212,37 @@ export default function SyncPage() {
               size="lg"
             />
             {syncMethod === "whatsapp" && (
-              <TextInput
-                placeholder="WhatsApp number"
-                value={whatsappNumber}
-                onChange={(e) => setWhatsappNumber(e.target.value)}
-                rightSection={
-                  <ActionIcon
-                    variant="subtle"
-                    color="gray"
-                    onClick={() => setWhatsappNumber("")}
-                  >
-                    <IconBrandWhatsapp size={16} />
-                  </ActionIcon>
-                }
-                style={{ minWidth: 200 }}
-              />
+              <Group wrap="nowrap">
+                <Select
+                  value={countryCode}
+                  onChange={(value) => setCountryCode(value || "+254")}
+                  data={[
+                    { value: "+254", label: "🇰🇪 +254" },
+                    { value: "+255", label: "🇹🇿 +255" },
+                    { value: "+256", label: "🇺🇬 +256" },
+                    { value: "+250", label: "🇷🇼 +250" },
+                    { value: "+251", label: "🇪🇹 +251" },
+                    { value: "+252", label: "🇸🇴 +252" },
+                    { value: "+257", label: "🇧🇮 +257" },
+                  ]}
+                  style={{ width: 120 }}
+                />
+                <TextInput
+                  placeholder="WhatsApp number"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  rightSection={
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      onClick={() => setWhatsappNumber("")}
+                    >
+                      <IconBrandWhatsapp size={16} />
+                    </ActionIcon>
+                  }
+                  style={{ minWidth: 150 }}
+                />
+              </Group>
             )}
           </Group>
 
@@ -238,9 +269,16 @@ export default function SyncPage() {
       ) : (
         <Stack gap="md">
           {items.map((item) => (
-            <Card key={item.id} withBorder>
-              <Group justify="space-between">
-                <div>
+            <Card
+              key={item.id}
+              withBorder
+              style={{ cursor: "pointer" }}
+              onClick={() =>
+                setExpandedItem(expandedItem === item.id ? null : item.id)
+              }
+            >
+              <Group justify="space-between" wrap="nowrap">
+                <div style={{ minWidth: 0 }}>
                   <Group gap="xs">
                     <Text fw={500}>
                       {item.type === "sale" ? "Sale" : "Purchase"}
@@ -259,7 +297,7 @@ export default function SyncPage() {
                     )}
                   </Text>
                 </div>
-                <Group>
+                <Group wrap="nowrap">
                   <Badge
                     color={
                       item.status === "synced"
@@ -296,6 +334,52 @@ export default function SyncPage() {
                   )}
                 </Group>
               </Group>
+              <Collapse in={expandedItem === item.id}>
+                <Stack mt="md" gap="xs">
+                  <Text size="sm">
+                    <Text span fw={500}>
+                      Transaction ID:
+                    </Text>{" "}
+                    {item.id}
+                  </Text>
+                  <Text size="sm">
+                    <Text span fw={500}>
+                      Type:
+                    </Text>{" "}
+                    {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
+                  </Text>
+                  <Text size="sm">
+                    <Text span fw={500}>
+                      Date:
+                    </Text>{" "}
+                    {new Date(item.timestamp).toLocaleDateString()}
+                  </Text>
+                  <Text size="sm">
+                    <Text span fw={500}>
+                      Time:
+                    </Text>{" "}
+                    {new Date(item.timestamp).toLocaleTimeString()}
+                  </Text>
+                  <Text size="sm">
+                    <Text span fw={500}>
+                      Amount:
+                    </Text>{" "}
+                    {formatMoney(
+                      createMoney(
+                        item.amount,
+                        "KES",
+                        DEFAULT_EXCHANGE_RATES.KES
+                      )
+                    )}
+                  </Text>
+                  <Text size="sm">
+                    <Text span fw={500}>
+                      Status:
+                    </Text>{" "}
+                    {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                  </Text>
+                </Stack>
+              </Collapse>
             </Card>
           ))}
         </Stack>

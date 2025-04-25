@@ -381,28 +381,42 @@ export default function DateFilter({
           {basicOptions.map((option) => (
             <Button
               key={option.value}
-              variant={dateRange === option.value ? "filled" : "subtle"}
+              variant={dateRange === option.value ? "light" : "outline"}
               onClick={() => handleValueChange(option.value)}
               fullWidth
               color={dateRange === option.value ? "blue" : "gray"}
-              styles={{
+              styles={(theme) => ({
                 root: {
                   transition: "all 0.2s ease",
                   transform:
                     dateRange === option.value ? "scale(1.02)" : "none",
                   boxShadow:
+                    dateRange === option.value ? theme.shadows.sm : "none",
+                  backgroundColor:
                     dateRange === option.value
-                      ? "var(--mantine-shadow-sm)"
-                      : "none",
+                      ? theme.colors.blue[0]
+                      : theme.white,
+                  borderColor:
+                    dateRange === option.value
+                      ? theme.colors.blue[3]
+                      : theme.colors.gray[3],
+                  color:
+                    dateRange === option.value
+                      ? theme.colors.blue[8]
+                      : theme.colors.gray[7],
                   "&:hover": {
                     transform: "scale(1.02)",
                     backgroundColor:
                       dateRange === option.value
-                        ? "var(--mantine-color-blue-6)"
-                        : "var(--mantine-color-gray-1)",
+                        ? theme.colors.blue[1]
+                        : theme.colors.gray[0],
+                    borderColor:
+                      dateRange === option.value
+                        ? theme.colors.blue[4]
+                        : theme.colors.gray[4],
                   },
                 },
-              }}
+              })}
             >
               {option.label}
             </Button>
@@ -416,28 +430,42 @@ export default function DateFilter({
           {extendedOptions.map((option) => (
             <Button
               key={option.value}
-              variant={dateRange === option.value ? "filled" : "subtle"}
+              variant={dateRange === option.value ? "light" : "outline"}
               onClick={() => handleValueChange(option.value)}
               fullWidth
               color={dateRange === option.value ? "blue" : "gray"}
-              styles={{
+              styles={(theme) => ({
                 root: {
                   transition: "all 0.2s ease",
                   transform:
                     dateRange === option.value ? "scale(1.02)" : "none",
                   boxShadow:
+                    dateRange === option.value ? theme.shadows.sm : "none",
+                  backgroundColor:
                     dateRange === option.value
-                      ? "var(--mantine-shadow-sm)"
-                      : "none",
+                      ? theme.colors.blue[0]
+                      : theme.white,
+                  borderColor:
+                    dateRange === option.value
+                      ? theme.colors.blue[3]
+                      : theme.colors.gray[3],
+                  color:
+                    dateRange === option.value
+                      ? theme.colors.blue[8]
+                      : theme.colors.gray[7],
                   "&:hover": {
                     transform: "scale(1.02)",
                     backgroundColor:
                       dateRange === option.value
-                        ? "var(--mantine-color-blue-6)"
-                        : "var(--mantine-color-gray-1)",
+                        ? theme.colors.blue[1]
+                        : theme.colors.gray[0],
+                    borderColor:
+                      dateRange === option.value
+                        ? theme.colors.blue[4]
+                        : theme.colors.gray[4],
                   },
                 },
-              }}
+              })}
             >
               {option.label}
             </Button>
