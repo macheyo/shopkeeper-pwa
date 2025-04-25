@@ -1,156 +1,90 @@
-"use client";
-
-import React, { useState, useEffect } from "react";
-import {
-  Title,
-  Stack,
-  Card,
-  Text,
-  Group,
-  Table,
-  Badge,
-  Button,
-} from "@mantine/core";
-import { IconArrowLeft } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
 import { getPurchasesDB } from "@/lib/databases";
-import { PurchaseDoc } from "@/types";
-import { formatMoney } from "@/types/money";
+import type { PurchaseDoc } from "@/types";
+import PurchaseDetails from "./PurchaseDetails";
+import { notFound } from "next/navigation";
+import { Metadata } from "next";
+import { Suspense } from "react";
+import { Loader, Stack, Text } from "@mantine/core";
 
-export default function PurchaseDetailsPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const router = useRouter();
-  const [purchase, setPurchase] = useState<PurchaseDoc | null>(null);
-  const [loading, setLoading] = useState(true);
+interface Props {
+  params: Promise<{ id: string }>;
+}
 
-  useEffect(() => {
-    const fetchPurchase = async () => {
-      try {
-        const purchasesDB = await getPurchasesDB();
-        const result = await purchasesDB.find({
-          selector: {
-            purchaseRunId: params.id,
-          },
-        });
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  try {
+    const purchasesDB = await getPurchasesDB();
+    const { id } = await params;
+    const result = await purchasesDB.find({
+      selector: {
+        purchaseRunId: id,
+      },
+      fields: ["purchaseRunId", "timestamp"],
+    });
 
-        if (result.docs.length > 0) {
-          setPurchase(result.docs[0] as PurchaseDoc);
-        }
-      } catch (err) {
-        console.error("Error fetching purchase:", err);
-      } finally {
-        setLoading(false);
-      }
+    if (!result.docs || result.docs.length === 0) {
+      return {
+        title: "Purchase Not Found",
+      };
+    }
+
+    const purchase = result.docs[0] as unknown as Pick<
+      PurchaseDoc,
+      "purchaseRunId" | "timestamp"
+    >;
+    const date = new Date(purchase.timestamp).toLocaleDateString();
+    const purchaseNumber = purchase.purchaseRunId.split("_")[1];
+
+    return {
+      title: `Purchase #${purchaseNumber} - ${date}`,
+      description: `Purchase details for run #${purchaseNumber} made on ${date}`,
     };
-
-    fetchPurchase();
-  }, [params.id]);
-
-  if (loading) {
-    return <Text ta="center">Loading purchase details...</Text>;
+  } catch {
+    return {
+      title: "Purchase Details",
+    };
   }
+}
 
-  if (!purchase) {
-    return (
-      <Stack gap="md">
-        <Button
-          variant="subtle"
-          leftSection={<IconArrowLeft size={16} />}
-          onClick={() => router.back()}
-        >
-          Back
-        </Button>
-        <Text ta="center">Purchase not found</Text>
-      </Stack>
-    );
+async function getPurchaseDetails(id: string): Promise<PurchaseDoc> {
+  try {
+    const purchasesDB = await getPurchasesDB();
+    const result = await purchasesDB.find({
+      selector: {
+        purchaseRunId: id,
+      },
+    });
+
+    if (!result.docs || result.docs.length === 0) {
+      throw new Error("Purchase not found");
+    }
+
+    return result.docs[0] as PurchaseDoc;
+  } catch (error) {
+    console.error("Error fetching purchase:", error);
+    throw error;
   }
+}
 
+function LoadingState() {
   return (
-    <Stack gap="lg">
-      <Group>
-        <Button
-          variant="subtle"
-          leftSection={<IconArrowLeft size={16} />}
-          onClick={() => router.back()}
-        >
-          Back
-        </Button>
-      </Group>
-
-      <Title order={2}>
-        Purchase Run #{purchase.purchaseRunId.split("_")[1]}
-      </Title>
-
-      <Card withBorder>
-        <Stack gap="xs">
-          <Group>
-            <Text fw={500}>Date:</Text>
-            <Text>{new Date(purchase.timestamp).toLocaleString()}</Text>
-          </Group>
-          <Group>
-            <Text fw={500}>Total Amount:</Text>
-            <Text>{formatMoney(purchase.totalAmount)}</Text>
-          </Group>
-          <Group>
-            <Text fw={500}>Status:</Text>
-            <Badge
-              color={
-                purchase.status === "synced"
-                  ? "green"
-                  : purchase.status === "failed"
-                  ? "red"
-                  : "yellow"
-              }
-            >
-              {purchase.status || "Pending"}
-            </Badge>
-          </Group>
-        </Stack>
-      </Card>
-
-      <Card withBorder>
-        <Title order={3} mb="md">
-          Items
-        </Title>
-        <div style={{ overflowX: "auto" }}>
-          <Table withTableBorder style={{ minWidth: "100%" }}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Product</Table.Th>
-                <Table.Th>Quantity</Table.Th>
-                <Table.Th>Cost Price</Table.Th>
-                <Table.Th>Total</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {purchase.items.map((item, index) => (
-                <Table.Tr key={`${item.productId}_${index}`}>
-                  <Table.Td>{item.productName}</Table.Td>
-                  <Table.Td>{item.qty}</Table.Td>
-                  <Table.Td>{formatMoney(item.costPrice)}</Table.Td>
-                  <Table.Td>
-                    {formatMoney({
-                      ...item.costPrice,
-                      amount: item.costPrice.amount * item.qty,
-                    })}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-              <Table.Tr>
-                <Table.Td colSpan={3} style={{ textAlign: "right" }}>
-                  <Text fw={500}>Total:</Text>
-                </Table.Td>
-                <Table.Td>
-                  <Text fw={700}>{formatMoney(purchase.totalAmount)}</Text>
-                </Table.Td>
-              </Table.Tr>
-            </Table.Tbody>
-          </Table>
-        </div>
-      </Card>
+    <Stack align="center" justify="center" h="100vh" gap="md">
+      <Loader size="xl" />
+      <Text size="lg">Loading purchase details...</Text>
     </Stack>
   );
+}
+
+export default async function PurchaseDetailsPage({ params }: Props) {
+  try {
+    const { id } = await params;
+    const purchase = await getPurchaseDetails(id);
+
+    return (
+      <Suspense fallback={<LoadingState />}>
+        <PurchaseDetails purchase={purchase} />
+      </Suspense>
+    );
+  } catch {
+    notFound();
+  }
 }
