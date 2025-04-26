@@ -1,6 +1,7 @@
 export let productsDB: PouchDB.Database;
 export let salesDB: PouchDB.Database;
 export let purchasesDB: PouchDB.Database;
+export let cashInHandDB: PouchDB.Database;
 
 export async function getProductsDB(): Promise<PouchDB.Database> {
   if (!productsDB) {
@@ -59,6 +60,50 @@ export async function getSalesDB(): Promise<PouchDB.Database> {
     console.error("Error initializing sales database:", err);
     throw new Error(
       `Failed to initialize sales database: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+}
+
+export async function getCashInHandDB(): Promise<PouchDB.Database> {
+  try {
+    if (!cashInHandDB) {
+      const PouchDB = (await import("pouchdb-browser")).default;
+      const PouchDBFind = await import("pouchdb-find");
+      const crypto = await import("crypto-pouch");
+
+      PouchDB.plugin(PouchDBFind.default);
+      PouchDB.plugin(crypto.default);
+
+      cashInHandDB = new PouchDB("cash_in_hand");
+
+      const DB_KEY = process.env.NEXT_PUBLIC_DB_KEY || "default-insecure-key";
+      if (DB_KEY && DB_KEY !== "default-insecure-key") {
+        await cashInHandDB.crypto(DB_KEY);
+      }
+
+      // Create an index for the timestamp field
+      try {
+        await cashInHandDB.createIndex({
+          index: {
+            fields: ["timestamp", "type"],
+            name: "cash_in_hand_timestamp_index",
+          },
+        });
+      } catch (err) {
+        console.error("Error creating cash in hand index:", err);
+        // Don't throw here as the index might already exist
+      }
+
+      // Verify database is accessible
+      await cashInHandDB.info();
+    }
+    return cashInHandDB;
+  } catch (err) {
+    console.error("Error initializing cash in hand database:", err);
+    throw new Error(
+      `Failed to initialize cash in hand database: ${
         err instanceof Error ? err.message : String(err)
       }`
     );

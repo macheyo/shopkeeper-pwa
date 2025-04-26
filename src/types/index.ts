@@ -1,5 +1,19 @@
 import { Money } from "./money";
 
+export type PaymentMethod = "cash" | "bank" | "mobile_money" | "credit";
+
+export interface CashInHand extends PouchDB.Core.Document<object> {
+  _id: string;
+  _rev: string;
+  type: "cash_in_hand";
+  amount: Money;
+  expectedAmount: Money;
+  difference: Money;
+  timestamp: string; // ISO 8601 format
+  notes?: string;
+  status: "pending" | "synced" | "failed";
+}
+
 // Define the structure for a Product document stored in PouchDB
 export interface ProductDoc extends PouchDB.Core.Document<object> {
   _id: string;
@@ -38,6 +52,7 @@ export interface SaleDoc extends PouchDB.Core.Document<object> {
   totalAmount: Money; // Total amount for all items
   totalCost: Money; // Total cost of items sold
   profit: Money; // Profit from this sale
+  paymentMethod: PaymentMethod;
   cashReceived?: Money; // Optional for non-cash or later payment
   change?: Money; // Optional
   timestamp: string; // ISO 8601 format
@@ -64,6 +79,7 @@ export interface PurchaseDoc extends PouchDB.Core.Document<object> {
   purchaseRunId: string; // Group purchases made together
   items: PurchaseItem[]; // Array of purchase items
   totalAmount: Money; // Total amount for all items
+  paymentMethod: PaymentMethod;
   supplier?: string; // Optional supplier information
   notes?: string; // Optional notes about the purchase
   timestamp: string; // ISO 8601 format

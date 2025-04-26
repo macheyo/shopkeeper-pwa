@@ -34,9 +34,10 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getPurchasesDB, getProductsDB } from "@/lib/databases";
-import { ProductDoc, PurchaseItem } from "@/types";
+import { ProductDoc, PurchaseItem, PaymentMethod } from "@/types";
 import { formatMoney, createMoney, Money } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
+import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
 import dynamic from "next/dynamic";
 
 const BarcodeScanner = dynamic(() => import("@/components/BarcodeScanner"), {
@@ -48,6 +49,7 @@ export default function NewPurchasePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [showScanner, setShowScanner] = useState(false);
   const [products, setProducts] = useState<ProductDoc[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductDoc[]>([]);
@@ -60,6 +62,7 @@ export default function NewPurchasePage() {
     items: PurchaseItem[];
     totalAmount: Money;
     timestamp: string;
+    paymentMethod: PaymentMethod;
   } | null>(null);
 
   const form = useForm({
@@ -320,6 +323,7 @@ export default function NewPurchasePage() {
         items: cartItems,
         totalAmount: totalPrice,
         timestamp: now.toISOString(),
+        paymentMethod: paymentMethod,
         status: "pending", // Will be synced later via WhatsApp
       });
 
@@ -328,6 +332,7 @@ export default function NewPurchasePage() {
         items: cartItems,
         totalAmount: totalPrice,
         timestamp: now.toISOString(),
+        paymentMethod: paymentMethod,
       });
 
       setShowReceipt(true);
@@ -452,6 +457,12 @@ export default function NewPurchasePage() {
               </Card>
             ))}
           </Stack>
+
+          <PaymentMethodSelect
+            value={paymentMethod}
+            onChange={setPaymentMethod}
+            className="mb-4"
+          />
 
           <Card withBorder p="md" mb="md">
             <Group justify="space-between">
@@ -762,6 +773,11 @@ export default function NewPurchasePage() {
             <Group justify="space-between">
               <Text fw={700}>Total Cost:</Text>
               <Text fw={700}>{formatMoney(receiptData.totalAmount)}</Text>
+            </Group>
+
+            <Group justify="space-between">
+              <Text fw={700}>Payment Method:</Text>
+              <Text fw={700}>{receiptData.paymentMethod}</Text>
             </Group>
 
             <Divider my="sm" />
