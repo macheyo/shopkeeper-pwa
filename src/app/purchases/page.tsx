@@ -103,12 +103,14 @@ export default function PurchasesPage() {
                 variant="light"
                 onClick={() => router.push("/products/add")}
                 leftSection={<IconPlus size={16} />}
+                color="teal"
               >
                 Add a Product
               </Button>
               <Button
                 onClick={() => router.push("/purchases/new")}
                 leftSection={<IconPlus size={16} />}
+                color="teal"
               >
                 Record a Purchase
               </Button>
