@@ -318,6 +318,7 @@ export default function ReportsPage() {
                   variant="light"
                   onClick={() => setActiveTab("pl")}
                   leftSection={<IconChartPie3 size={16} />}
+                  color="violet"
                 >
                   P&L
                 </Button>
@@ -327,6 +328,7 @@ export default function ReportsPage() {
                   variant="light"
                   onClick={() => setActiveTab("cf")}
                   leftSection={<IconCash size={16} />}
+                  color="violet"
                 >
                   Cash
                 </Button>
@@ -336,6 +338,7 @@ export default function ReportsPage() {
                   variant="light"
                   onClick={() => setActiveTab("bs")}
                   leftSection={<IconScale size={16} />}
+                  color="violet"
                 >
                   Balance
                 </Button>
@@ -345,6 +348,7 @@ export default function ReportsPage() {
                   variant="light"
                   onClick={() => setActiveTab("accounts")}
                   leftSection={<IconBook size={16} />}
+                  color="violet"
                 >
                   Accounts
                 </Button>

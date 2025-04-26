@@ -318,7 +318,7 @@ export default function NewPurchasePage() {
 
       // Save the purchase
       const purchaseDoc = {
-        _id: `${purchaseRunId}_${now.getTime()}`,
+        _id: `${purchaseRunId}`,
         type: "purchase",
         purchaseRunId,
         items: cartItems,

@@ -83,7 +83,7 @@ export default function PurchasesPage() {
               icon={<IconPlus size={16} />}
               text="New Purchase"
               onClick={() => router.push("/purchases/new")}
-              color="blue"
+              color="teal"
             />
           </Group>
           <Text c="dimmed" mt="xs">
