@@ -225,7 +225,7 @@ export default function SyncPage() {
                     { value: "+252", label: "🇸🇴" },
                     { value: "+257", label: "🇧🇮" },
                   ]}
-                  style={{ width: 120 }}
+                  style={{ width: 80 }}
                 />
                 <TextInput
                   placeholder="WhatsApp number"
