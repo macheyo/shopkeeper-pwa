@@ -23,6 +23,21 @@ import {
 import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 
+// Style constants for consistent display
+const moneyTextStyle = {
+  fontFamily: "monospace",
+  textAlign: "right" as const,
+};
+
+const labelTextStyle = {
+  textAlign: "left" as const,
+};
+
+const titleTextStyle = {
+  textAlign: "left" as const,
+  fontWeight: 500,
+};
+
 export default function AccountsView() {
   const { dateRangeInfo } = useDateFilter();
   const [loading, setLoading] = useState(true);
@@ -89,6 +104,23 @@ export default function AccountsView() {
     return colors[type];
   };
 
+  // Helper components for consistent styling
+  const MoneyText = ({ value }: { value: Money }) => (
+    <Text style={moneyTextStyle}>{formatMoney(value)}</Text>
+  );
+
+  const LabelText = ({ children }: { children: React.ReactNode }) => (
+    <Text size="sm" style={labelTextStyle}>
+      {children}
+    </Text>
+  );
+
+  const TitleText = ({ children }: { children: React.ReactNode }) => (
+    <Text fw={500} style={titleTextStyle}>
+      {children}
+    </Text>
+  );
+
   if (loading) {
     return <Text ta="center">Loading accounts...</Text>;
   }
@@ -125,18 +157,18 @@ export default function AccountsView() {
                       </Badge>
                     </Group>
                     <Group justify="space-between">
-                      <Text size="sm">Debit:</Text>
-                      <Text>{formatMoney(account.debitBalance)}</Text>
+                      <LabelText>Debit:</LabelText>
+                      <MoneyText value={account.debitBalance} />
                     </Group>
                     <Group justify="space-between">
-                      <Text size="sm">Credit:</Text>
-                      <Text>{formatMoney(account.creditBalance)}</Text>
+                      <LabelText>Credit:</LabelText>
+                      <MoneyText value={account.creditBalance} />
                     </Group>
                     <Group justify="space-between">
-                      <Text size="sm" fw={500}>
-                        Balance:
+                      <TitleText>Balance:</TitleText>
+                      <Text fw={500} style={moneyTextStyle}>
+                        {formatMoney(account.netBalance)}
                       </Text>
-                      <Text fw={500}>{formatMoney(account.netBalance)}</Text>
                     </Group>
                   </Stack>
                 </Card>
@@ -147,20 +179,20 @@ export default function AccountsView() {
           {trialBalance && (
             <Card withBorder p="sm">
               <Stack gap="xs">
-                <Text fw={700}>Trial Balance Totals</Text>
+                <Text fw={700} style={titleTextStyle}>
+                  Trial Balance Totals
+                </Text>
                 <Group justify="space-between">
-                  <Text size="sm">Total Debits:</Text>
-                  <Text>{formatMoney(trialBalance.totalDebits)}</Text>
+                  <LabelText>Total Debits:</LabelText>
+                  <MoneyText value={trialBalance.totalDebits} />
                 </Group>
                 <Group justify="space-between">
-                  <Text size="sm">Total Credits:</Text>
-                  <Text>{formatMoney(trialBalance.totalCredits)}</Text>
+                  <LabelText>Total Credits:</LabelText>
+                  <MoneyText value={trialBalance.totalCredits} />
                 </Group>
                 <Group justify="space-between">
-                  <Text size="sm" fw={500}>
-                    Net Balance:
-                  </Text>
-                  <Text fw={500}>
+                  <TitleText>Net Balance:</TitleText>
+                  <Text fw={500} style={moneyTextStyle}>
                     {formatMoney(
                       createMoney(
                         trialBalance.totalDebits.amount -
@@ -179,17 +211,17 @@ export default function AccountsView() {
       {/* Desktop view */}
       <Box visibleFrom="sm">
         <Card withBorder>
-          <Title order={4} mb="md">
+          <Title order={4} mb="md" style={titleTextStyle}>
             Trial Balance
           </Title>
           <Table withTableBorder>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Account</Table.Th>
-                <Table.Th>Type</Table.Th>
-                <Table.Th align="right">Debit</Table.Th>
-                <Table.Th align="right">Credit</Table.Th>
-                <Table.Th align="right">Balance</Table.Th>
+                <Table.Th style={labelTextStyle}>Account</Table.Th>
+                <Table.Th style={labelTextStyle}>Type</Table.Th>
+                <Table.Th style={moneyTextStyle}>Debit</Table.Th>
+                <Table.Th style={moneyTextStyle}>Credit</Table.Th>
+                <Table.Th style={moneyTextStyle}>Balance</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -216,19 +248,13 @@ export default function AccountsView() {
                           {account.type}
                         </Badge>
                       </Table.Td>
-                      <Table.Td
-                        style={{ textAlign: "right", fontFamily: "monospace" }}
-                      >
+                      <Table.Td style={moneyTextStyle}>
                         {formatMoney(account.debitBalance)}
                       </Table.Td>
-                      <Table.Td
-                        style={{ textAlign: "right", fontFamily: "monospace" }}
-                      >
+                      <Table.Td style={moneyTextStyle}>
                         {formatMoney(account.creditBalance)}
                       </Table.Td>
-                      <Table.Td
-                        style={{ textAlign: "right", fontFamily: "monospace" }}
-                      >
+                      <Table.Td style={moneyTextStyle}>
                         {formatMoney(account.netBalance)}
                       </Table.Td>
                     </Table.Tr>
@@ -237,14 +263,16 @@ export default function AccountsView() {
             </Table.Tbody>
             <Table.Tfoot>
               <Table.Tr>
-                <Table.Th colSpan={2}>Total</Table.Th>
-                <Table.Th align="right">
+                <Table.Th colSpan={2} style={titleTextStyle}>
+                  Total
+                </Table.Th>
+                <Table.Th style={moneyTextStyle}>
                   {trialBalance && formatMoney(trialBalance.totalDebits)}
                 </Table.Th>
-                <Table.Th align="right">
+                <Table.Th style={moneyTextStyle}>
                   {trialBalance && formatMoney(trialBalance.totalCredits)}
                 </Table.Th>
-                <Table.Th align="right">
+                <Table.Th style={moneyTextStyle}>
                   {trialBalance &&
                     formatMoney(
                       createMoney(
@@ -294,29 +322,23 @@ export default function AccountsView() {
                     {entry.transactionType === "cash_adjustment" &&
                       "Cash count adjustment"}
                   </Text>
-                  <Box style={{ fontFamily: "monospace" }}>
+                  <Box>
                     {entry.debit.amount > 0 && (
                       <Group justify="space-between">
-                        <Text size="sm">Debit</Text>
-                        <Text style={{ textAlign: "right" }}>
-                          {formatMoney(entry.debit)}
-                        </Text>
+                        <LabelText>Debit</LabelText>
+                        <MoneyText value={entry.debit} />
                       </Group>
                     )}
                     {entry.credit.amount > 0 && (
                       <Group justify="space-between">
-                        <Text size="sm">Credit</Text>
-                        <Text style={{ textAlign: "right" }}>
-                          {formatMoney(entry.credit)}
-                        </Text>
+                        <LabelText>Credit</LabelText>
+                        <MoneyText value={entry.credit} />
                       </Group>
                     )}
                     <Divider my="xs" />
                     <Group justify="space-between">
-                      <Text size="sm" fw={500}>
-                        Balance
-                      </Text>
-                      <Text fw={500} style={{ textAlign: "right" }}>
+                      <TitleText>Balance</TitleText>
+                      <Text fw={500} style={moneyTextStyle}>
                         {formatMoney(entry.balance)}
                       </Text>
                     </Group>
@@ -328,20 +350,20 @@ export default function AccountsView() {
             {/* Account totals */}
             <Card withBorder p="sm">
               <Stack gap="xs">
-                <Text fw={700}>Account Totals</Text>
+                <Text fw={700} style={titleTextStyle}>
+                  Account Totals
+                </Text>
                 <Group justify="space-between">
-                  <Text size="sm">Total Debits:</Text>
-                  <Text>{formatMoney(accountHistory.totalDebits)}</Text>
+                  <LabelText>Total Debits:</LabelText>
+                  <MoneyText value={accountHistory.totalDebits} />
                 </Group>
                 <Group justify="space-between">
-                  <Text size="sm">Total Credits:</Text>
-                  <Text>{formatMoney(accountHistory.totalCredits)}</Text>
+                  <LabelText>Total Credits:</LabelText>
+                  <MoneyText value={accountHistory.totalCredits} />
                 </Group>
                 <Group justify="space-between">
-                  <Text size="sm" fw={500}>
-                    Closing Balance:
-                  </Text>
-                  <Text fw={500}>
+                  <TitleText>Closing Balance:</TitleText>
+                  <Text fw={500} style={moneyTextStyle}>
                     {formatMoney(accountHistory.closingBalance)}
                   </Text>
                 </Group>
@@ -356,7 +378,9 @@ export default function AccountsView() {
         <Box visibleFrom="sm">
           <Card withBorder>
             <Group justify="space-between" mb="md">
-              <Title order={4}>{accountHistory.accountName} History</Title>
+              <Title order={4} style={titleTextStyle}>
+                {accountHistory.accountName} History
+              </Title>
               <Badge
                 color={getAccountTypeColor(accountHistory.accountType)}
                 size="lg"
@@ -368,11 +392,11 @@ export default function AccountsView() {
             <Table withTableBorder>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Date</Table.Th>
-                  <Table.Th>Description</Table.Th>
-                  <Table.Th align="right">Debit</Table.Th>
-                  <Table.Th align="right">Credit</Table.Th>
-                  <Table.Th align="right">Balance</Table.Th>
+                  <Table.Th style={labelTextStyle}>Date</Table.Th>
+                  <Table.Th style={labelTextStyle}>Description</Table.Th>
+                  <Table.Th style={moneyTextStyle}>Debit</Table.Th>
+                  <Table.Th style={moneyTextStyle}>Credit</Table.Th>
+                  <Table.Th style={moneyTextStyle}>Balance</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -382,13 +406,13 @@ export default function AccountsView() {
                       {new Date(entry.timestamp).toLocaleDateString()}
                     </Table.Td>
                     <Table.Td>{entry.description}</Table.Td>
-                    <Table.Td align="right">
+                    <Table.Td style={moneyTextStyle}>
                       {formatMoney(entry.debit)}
                     </Table.Td>
-                    <Table.Td align="right">
+                    <Table.Td style={moneyTextStyle}>
                       {formatMoney(entry.credit)}
                     </Table.Td>
-                    <Table.Td align="right">
+                    <Table.Td style={moneyTextStyle}>
                       {formatMoney(entry.balance)}
                     </Table.Td>
                   </Table.Tr>
@@ -396,14 +420,16 @@ export default function AccountsView() {
               </Table.Tbody>
               <Table.Tfoot>
                 <Table.Tr>
-                  <Table.Th colSpan={2}>Total</Table.Th>
-                  <Table.Th align="right">
+                  <Table.Th colSpan={2} style={titleTextStyle}>
+                    Total
+                  </Table.Th>
+                  <Table.Th style={moneyTextStyle}>
                     {formatMoney(accountHistory.totalDebits)}
                   </Table.Th>
-                  <Table.Th align="right">
+                  <Table.Th style={moneyTextStyle}>
                     {formatMoney(accountHistory.totalCredits)}
                   </Table.Th>
-                  <Table.Th align="right">
+                  <Table.Th style={moneyTextStyle}>
                     {formatMoney(accountHistory.closingBalance)}
                   </Table.Th>
                 </Table.Tr>
