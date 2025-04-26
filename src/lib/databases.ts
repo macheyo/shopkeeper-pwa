@@ -2,6 +2,7 @@ export let productsDB: PouchDB.Database;
 export let salesDB: PouchDB.Database;
 export let purchasesDB: PouchDB.Database;
 export let cashInHandDB: PouchDB.Database;
+export let ledgerDB: PouchDB.Database;
 
 export async function getProductsDB(): Promise<PouchDB.Database> {
   if (!productsDB) {
@@ -104,6 +105,50 @@ export async function getCashInHandDB(): Promise<PouchDB.Database> {
     console.error("Error initializing cash in hand database:", err);
     throw new Error(
       `Failed to initialize cash in hand database: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+}
+
+export async function getLedgerDB(): Promise<PouchDB.Database> {
+  try {
+    if (!ledgerDB) {
+      const PouchDB = (await import("pouchdb-browser")).default;
+      const PouchDBFind = await import("pouchdb-find");
+      const crypto = await import("crypto-pouch");
+
+      PouchDB.plugin(PouchDBFind.default);
+      PouchDB.plugin(crypto.default);
+
+      ledgerDB = new PouchDB("ledger");
+
+      const DB_KEY = process.env.NEXT_PUBLIC_DB_KEY || "default-insecure-key";
+      if (DB_KEY && DB_KEY !== "default-insecure-key") {
+        await ledgerDB.crypto(DB_KEY);
+      }
+
+      // Create indexes for timestamp and transaction type
+      try {
+        await ledgerDB.createIndex({
+          index: {
+            fields: ["timestamp", "type", "transactionType", "status"],
+            name: "ledger_timestamp_index",
+          },
+        });
+      } catch (err) {
+        console.error("Error creating ledger index:", err);
+        // Don't throw here as the index might already exist
+      }
+
+      // Verify database is accessible
+      await ledgerDB.info();
+    }
+    return ledgerDB;
+  } catch (err) {
+    console.error("Error initializing ledger database:", err);
+    throw new Error(
+      `Failed to initialize ledger database: ${
         err instanceof Error ? err.message : String(err)
       }`
     );

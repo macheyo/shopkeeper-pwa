@@ -11,6 +11,7 @@ import {
 } from "@/types/money";
 import { CashInHand, SaleDoc, PurchaseDoc } from "@/types";
 import { getCashInHandDB, getSalesDB, getPurchasesDB } from "@/lib/databases";
+import { createCashAdjustmentEntry } from "@/lib/accounting";
 import MoneyInput from "./MoneyInput";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import {
@@ -185,7 +186,16 @@ export function CashInHandManager() {
         status: "pending",
       };
 
+      // Save the cash count
       await cashInHandDB.put(cashCount);
+
+      // Create ledger entry for the cash adjustment
+      await createCashAdjustmentEntry(
+        cashCount._id,
+        physicalCash,
+        expectedCash,
+        cashCount.timestamp
+      );
 
       // Reset form
       setNotes("");

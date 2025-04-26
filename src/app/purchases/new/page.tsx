@@ -34,6 +34,7 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getPurchasesDB, getProductsDB } from "@/lib/databases";
+import { createPurchaseEntry } from "@/lib/accounting";
 import { ProductDoc, PurchaseItem, PaymentMethod } from "@/types";
 import { formatMoney, createMoney, Money } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
@@ -316,7 +317,7 @@ export default function NewPurchasePage() {
       }
 
       // Save the purchase
-      await purchasesDB.put({
+      const purchaseDoc = {
         _id: `${purchaseRunId}_${now.getTime()}`,
         type: "purchase",
         purchaseRunId,
@@ -325,7 +326,16 @@ export default function NewPurchasePage() {
         timestamp: now.toISOString(),
         paymentMethod: paymentMethod,
         status: "pending", // Will be synced later via WhatsApp
-      });
+      };
+      await purchasesDB.put(purchaseDoc);
+
+      // Create ledger entry for the purchase
+      await createPurchaseEntry(
+        purchaseRunId,
+        totalPrice,
+        paymentMethod,
+        now.toISOString()
+      );
 
       // Set receipt data for display
       setReceiptData({

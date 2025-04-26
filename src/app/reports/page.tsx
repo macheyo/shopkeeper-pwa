@@ -20,12 +20,14 @@ import {
   IconCash,
   IconScale,
   IconWallet,
+  IconBook,
 } from "@tabler/icons-react";
 import { getSalesDB, getPurchasesDB } from "@/lib/databases";
 import { SaleDoc, PurchaseDoc } from "@/types";
 import { formatMoney, createMoney } from "@/types/money";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import ProductManager from "@/components/ProductManager";
+import AccountsView from "@/components/AccountsView";
 
 export default function ReportsPage() {
   const router = useRouter();
@@ -281,6 +283,7 @@ export default function ReportsPage() {
                 { value: "cf", label: "Cash Flow" },
                 { value: "bs", label: "Balance Sheet" },
                 { value: "pa", label: "Purchase Analysis" },
+                { value: "accounts", label: "Accounts" },
                 { value: "products", label: "Products" },
                 { value: "cash", label: "Cash Tracking" },
               ]}
@@ -292,6 +295,7 @@ export default function ReportsPage() {
               {activeTab === "cf" && renderCashFlow()}
               {activeTab === "bs" && renderBalanceSheet()}
               {activeTab === "pa" && renderPurchaseAnalysis()}
+              {activeTab === "accounts" && <AccountsView />}
               {activeTab === "products" && <ProductManager />}
               {activeTab === "cash" && (
                 <Button
@@ -336,6 +340,15 @@ export default function ReportsPage() {
                   Balance
                 </Button>
               )}
+              {activeTab !== "accounts" && (
+                <Button
+                  variant="light"
+                  onClick={() => setActiveTab("accounts")}
+                  leftSection={<IconBook size={16} />}
+                >
+                  Accounts
+                </Button>
+              )}
             </Group>
           </Box>
 
@@ -350,6 +363,7 @@ export default function ReportsPage() {
                 <Tabs.Tab value="cf">Cash Flow</Tabs.Tab>
                 <Tabs.Tab value="bs">Balance Sheet</Tabs.Tab>
                 <Tabs.Tab value="pa">Purchase Analysis</Tabs.Tab>
+                <Tabs.Tab value="accounts">Accounts</Tabs.Tab>
                 <Tabs.Tab value="products">Products</Tabs.Tab>
                 <Tabs.Tab value="cash">Cash Tracking</Tabs.Tab>
               </Tabs.List>
@@ -359,6 +373,9 @@ export default function ReportsPage() {
                 <Tabs.Panel value="cf">{renderCashFlow()}</Tabs.Panel>
                 <Tabs.Panel value="bs">{renderBalanceSheet()}</Tabs.Panel>
                 <Tabs.Panel value="pa">{renderPurchaseAnalysis()}</Tabs.Panel>
+                <Tabs.Panel value="accounts">
+                  <AccountsView />
+                </Tabs.Panel>
                 <Tabs.Panel value="products">
                   <ProductManager />
                 </Tabs.Panel>

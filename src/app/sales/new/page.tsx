@@ -33,6 +33,7 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
+import { createSaleEntry } from "@/lib/accounting";
 import { ProductDoc, SaleItem, PaymentMethod } from "@/types";
 import {
   formatMoney,
@@ -335,7 +336,7 @@ export default function NewSalePage() {
       }
 
       // Save the sale
-      await salesDB.put({
+      const saleDoc = {
         _id: saleId,
         type: "sale",
         items: cartItems,
@@ -347,7 +348,17 @@ export default function NewSalePage() {
         change: paymentMethod === "cash" ? change : undefined,
         timestamp: now.toISOString(),
         status: "pending", // Will be synced later via WhatsApp
-      });
+      };
+      await salesDB.put(saleDoc);
+
+      // Create ledger entry for the sale
+      await createSaleEntry(
+        saleId,
+        totalPrice,
+        totalCost,
+        paymentMethod,
+        now.toISOString()
+      );
 
       // Set receipt data for display
       setReceiptData({
