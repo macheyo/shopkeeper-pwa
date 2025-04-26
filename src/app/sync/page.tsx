@@ -204,7 +204,7 @@ export default function SyncPage() {
                   label: (
                     <Center>
                       <IconCloud size={20} />
-                      <Box ml={10}>CouchDB</Box>
+                      <Box ml={10}>Cloud</Box>
                     </Center>
                   ),
                 },
@@ -217,13 +217,13 @@ export default function SyncPage() {
                   value={countryCode}
                   onChange={(value) => setCountryCode(value || "+254")}
                   data={[
-                    { value: "+254", label: "🇰🇪 +254" },
-                    { value: "+255", label: "🇹🇿 +255" },
-                    { value: "+256", label: "🇺🇬 +256" },
-                    { value: "+250", label: "🇷🇼 +250" },
-                    { value: "+251", label: "🇪🇹 +251" },
-                    { value: "+252", label: "🇸🇴 +252" },
-                    { value: "+257", label: "🇧🇮 +257" },
+                    { value: "+254", label: "🇰🇪" },
+                    { value: "+255", label: "🇹🇿" },
+                    { value: "+256", label: "🇺🇬" },
+                    { value: "+250", label: "🇷🇼" },
+                    { value: "+251", label: "🇪🇹" },
+                    { value: "+252", label: "🇸🇴" },
+                    { value: "+257", label: "🇧🇮" },
                   ]}
                   style={{ width: 120 }}
                 />
