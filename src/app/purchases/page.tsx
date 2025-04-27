@@ -125,7 +125,12 @@ export default function PurchasesPage() {
         ) : (
           <Stack gap="md">
             {purchaseRuns.map((run) => (
-              <Card key={run.purchaseRunId} withBorder shadow="sm">
+              <Card
+                key={run.purchaseRunId}
+                withBorder
+                shadow="sm"
+                onClick={() => router.push(`/purchases/${run.purchaseRunId}`)}
+              >
                 <Group justify="space-between" mb="xs">
                   <div>
                     <Text fw={700} size="lg">
