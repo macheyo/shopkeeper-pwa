@@ -160,7 +160,64 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
           </Accordion.Control>
           <Accordion.Panel>
             <ScrollArea>
-              <Table withTableBorder striped highlightOnHover>
+              <Stack gap="md" hiddenFrom="sm">
+                {purchase.items.map((item, index) => (
+                  <Card
+                    key={`${item.productId}_${index}`}
+                    withBorder
+                    shadow="sm"
+                    p="md"
+                  >
+                    <Group justify="space-between">
+                      <Text fw={500}>{item.productName}</Text>
+                      <Badge variant="light">Qty: {item.qty}</Badge>
+                    </Group>
+                    <Stack gap="xs" mt="sm">
+                      <Group justify="space-between">
+                        <Text size="sm" c="dimmed">
+                          Cost Price
+                        </Text>
+                        <Text>{formatMoney(item.costPrice)}</Text>
+                      </Group>
+                      <Group justify="space-between">
+                        <Text size="sm" c="dimmed">
+                          Selling Price
+                        </Text>
+                        <Text>{formatMoney(item.intendedSellingPrice)}</Text>
+                      </Group>
+                      <Group justify="space-between">
+                        <Text size="sm" c="dimmed">
+                          Expected Profit
+                        </Text>
+                        <Text c="green">
+                          {formatMoney({
+                            ...item.expectedProfit,
+                            amount: item.expectedProfit.amount * item.qty,
+                          })}
+                        </Text>
+                      </Group>
+                      <Group justify="space-between">
+                        <Text size="sm" c="dimmed">
+                          Total
+                        </Text>
+                        <Text fw={500}>
+                          {formatMoney({
+                            ...item.costPrice,
+                            amount: item.costPrice.amount * item.qty,
+                          })}
+                        </Text>
+                      </Group>
+                    </Stack>
+                  </Card>
+                ))}
+                <Card withBorder p="md" bg="var(--mantine-color-gray-0)">
+                  <Group justify="space-between">
+                    <Text fw={500}>Total Purchase</Text>
+                    <Text fw={700}>{formatMoney(purchase.totalAmount)}</Text>
+                  </Group>
+                </Card>
+              </Stack>
+              <Table withTableBorder striped highlightOnHover visibleFrom="sm">
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Product</Table.Th>
