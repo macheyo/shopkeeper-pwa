@@ -94,7 +94,13 @@ export default function PurchasesPage() {
         {loading ? (
           <Text ta="center">Loading purchases...</Text>
         ) : purchaseRuns.length === 0 ? (
-          <Stack align="center" py="xl">
+          <Stack
+            align="center"
+            py="xl"
+            style={{
+              animation: "fadeIn 0.5s ease-out",
+            }}
+          >
             <Text ta="center">
               No purchases found for the selected date range.
             </Text>
