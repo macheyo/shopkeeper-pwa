@@ -5,31 +5,52 @@ export let cashInHandDB: PouchDB.Database;
 export let ledgerDB: PouchDB.Database;
 
 export async function getProductsDB(): Promise<PouchDB.Database> {
-  if (!productsDB) {
-    const PouchDB = (await import("pouchdb-browser")).default;
-    const PouchDBFind = await import("pouchdb-find");
-    const crypto = await import("crypto-pouch");
+  try {
+    if (!productsDB) {
+      if (typeof window === "undefined") {
+        throw new Error(
+          "PouchDB operations are only supported in browser environment. For server-side operations, consider using a different database or API endpoints."
+        );
+      }
 
-    PouchDB.plugin(PouchDBFind.default);
-    PouchDB.plugin(crypto.default);
+      // Browser environment
+      const PouchDB = (await import("pouchdb-browser")).default;
+      const PouchDBFind = await import("pouchdb-find");
+      const crypto = await import("crypto-pouch");
+      PouchDB.plugin(PouchDBFind.default);
+      PouchDB.plugin(crypto.default);
 
-    productsDB = new PouchDB("products");
+      productsDB = new PouchDB("products");
 
-    const DB_KEY = process.env.NEXT_PUBLIC_DB_KEY || "default-insecure-key";
-    if (DB_KEY && DB_KEY !== "default-insecure-key") {
-      await productsDB.crypto(DB_KEY);
+      const DB_KEY = process.env.NEXT_PUBLIC_DB_KEY || "default-insecure-key";
+      if (DB_KEY && DB_KEY !== "default-insecure-key") {
+        await productsDB.crypto(DB_KEY);
+      }
     }
+    return productsDB;
+  } catch (err) {
+    console.error("Error initializing products database:", err);
+    throw new Error(
+      `Failed to initialize products database: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
   }
-  return productsDB;
 }
 
 export async function getSalesDB(): Promise<PouchDB.Database> {
   try {
     if (!salesDB) {
+      if (typeof window === "undefined") {
+        throw new Error(
+          "PouchDB operations are only supported in browser environment. For server-side operations, consider using a different database or API endpoints."
+        );
+      }
+
+      // Browser environment
       const PouchDB = (await import("pouchdb-browser")).default;
       const PouchDBFind = await import("pouchdb-find");
       const crypto = await import("crypto-pouch");
-
       PouchDB.plugin(PouchDBFind.default);
       PouchDB.plugin(crypto.default);
 
@@ -70,10 +91,16 @@ export async function getSalesDB(): Promise<PouchDB.Database> {
 export async function getCashInHandDB(): Promise<PouchDB.Database> {
   try {
     if (!cashInHandDB) {
+      if (typeof window === "undefined") {
+        throw new Error(
+          "PouchDB operations are only supported in browser environment. For server-side operations, consider using a different database or API endpoints."
+        );
+      }
+
+      // Browser environment
       const PouchDB = (await import("pouchdb-browser")).default;
       const PouchDBFind = await import("pouchdb-find");
       const crypto = await import("crypto-pouch");
-
       PouchDB.plugin(PouchDBFind.default);
       PouchDB.plugin(crypto.default);
 
@@ -114,10 +141,16 @@ export async function getCashInHandDB(): Promise<PouchDB.Database> {
 export async function getLedgerDB(): Promise<PouchDB.Database> {
   try {
     if (!ledgerDB) {
+      if (typeof window === "undefined") {
+        throw new Error(
+          "PouchDB operations are only supported in browser environment. For server-side operations, consider using a different database or API endpoints."
+        );
+      }
+
+      // Browser environment
       const PouchDB = (await import("pouchdb-browser")).default;
       const PouchDBFind = await import("pouchdb-find");
       const crypto = await import("crypto-pouch");
-
       PouchDB.plugin(PouchDBFind.default);
       PouchDB.plugin(crypto.default);
 
@@ -158,10 +191,16 @@ export async function getLedgerDB(): Promise<PouchDB.Database> {
 export async function getPurchasesDB(): Promise<PouchDB.Database> {
   try {
     if (!purchasesDB) {
+      if (typeof window === "undefined") {
+        throw new Error(
+          "PouchDB operations are only supported in browser environment. For server-side operations, consider using a different database or API endpoints."
+        );
+      }
+
+      // Browser environment
       const PouchDB = (await import("pouchdb-browser")).default;
       const PouchDBFind = await import("pouchdb-find");
       const crypto = await import("crypto-pouch");
-
       PouchDB.plugin(PouchDBFind.default);
       PouchDB.plugin(crypto.default);
 

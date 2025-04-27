@@ -155,7 +155,7 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
       <Accordion variant="separated">
         {/* Items Section */}
         <Accordion.Item value="items">
-          <Accordion.Control icon={<IconChartBar size={rem(20)} />}>
+          <Accordion.Control icon={<IconChartBar />}>
             Purchase Items
           </Accordion.Control>
           <Accordion.Panel>

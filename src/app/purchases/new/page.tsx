@@ -51,6 +51,7 @@ export default function NewPurchasePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [supplierName, setSupplierName] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [products, setProducts] = useState<ProductDoc[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductDoc[]>([]);
@@ -64,6 +65,7 @@ export default function NewPurchasePage() {
     totalAmount: Money;
     timestamp: string;
     paymentMethod: PaymentMethod;
+    supplierName: string;
   } | null>(null);
 
   const form = useForm({
@@ -325,6 +327,7 @@ export default function NewPurchasePage() {
         totalAmount: totalPrice,
         timestamp: now.toISOString(),
         paymentMethod: paymentMethod,
+        supplierName: supplierName,
         status: "pending", // Will be synced later via WhatsApp
       };
       await purchasesDB.put(purchaseDoc);
@@ -343,6 +346,7 @@ export default function NewPurchasePage() {
         totalAmount: totalPrice,
         timestamp: now.toISOString(),
         paymentMethod: paymentMethod,
+        supplierName: supplierName,
       });
 
       setShowReceipt(true);
@@ -468,6 +472,13 @@ export default function NewPurchasePage() {
             ))}
           </Stack>
 
+          <TextInput
+            label="Supplier Name"
+            placeholder="Enter supplier name"
+            value={supplierName}
+            onChange={(e) => setSupplierName(e.currentTarget.value)}
+            mb="md"
+          />
           <PaymentMethodSelect
             value={paymentMethod}
             onChange={setPaymentMethod}

@@ -25,6 +25,7 @@ export function PaymentMethodSelect({
         { value: "credit", label: "Credit" },
       ]}
       className={className}
+      mb="md"
     />
   );
 }
