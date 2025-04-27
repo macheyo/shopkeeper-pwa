@@ -57,33 +57,18 @@ export default function SalesPage() {
 
       const salesDB = await getSalesDB();
 
-      // Get all documents
-      const result = await salesDB.allDocs({
-        include_docs: true,
+      // Get sales for the selected date range
+      const result = await salesDB.find({
+        selector: {
+          type: "sale",
+          timestamp: {
+            $gte: startDateISOString,
+            $lt: endDateISOString,
+          },
+        },
       });
 
-      // Filter for sales documents within the selected date range
-      const filteredSales = result.rows
-        .map((row) => row.doc)
-        .filter((doc): doc is SaleDoc => {
-          // Make sure it's a sale document with a timestamp
-          if (
-            !doc ||
-            typeof doc !== "object" ||
-            !("type" in doc) ||
-            doc.type !== "sale" ||
-            !("timestamp" in doc)
-          ) {
-            return false;
-          }
-
-          // Check if it's within the date range
-          const docDate = new Date(doc.timestamp as string);
-          return (
-            docDate >= new Date(startDateISOString) &&
-            docDate < new Date(endDateISOString)
-          );
-        });
+      const filteredSales = result.docs as SaleDoc[];
 
       // Calculate total revenue
       let totalAmount = 0;

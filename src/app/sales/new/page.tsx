@@ -35,13 +35,7 @@ import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
 import { createSaleEntry } from "@/lib/accounting";
 import { ProductDoc, SaleItem, PaymentMethod } from "@/types";
-import {
-  formatMoney,
-  createMoney,
-  BASE_CURRENCY,
-  Money,
-  CurrencyCode,
-} from "@/types/money";
+import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
 import dynamic from "next/dynamic";
@@ -196,7 +190,7 @@ export default function NewSalePage() {
         qty: quantity,
         price: product.price,
         total: itemTotal,
-        costPrice: product.purchasePrice || createMoney(0),
+        costPrice: product.costPrice || createMoney(0),
         purchaseDate: product.purchaseDate,
       };
     });
@@ -251,16 +245,6 @@ export default function NewSalePage() {
       currency: BASE_CURRENCY,
       exchangeRate: 1,
     };
-  };
-
-  // Convert from base currency to target currency
-  const convertFromBaseCurrency = (
-    money: Money,
-    targetCurrency: CurrencyCode,
-    targetExchangeRate: number
-  ): number => {
-    if (money.currency === targetCurrency) return money.amount;
-    return money.amount * targetExchangeRate;
   };
 
   // Check if payment is sufficient
@@ -502,23 +486,12 @@ export default function NewSalePage() {
               size="xl"
               value={cashReceivedMoney}
               onChange={(value) => {
-                setCashReceivedMoney(value);
-                form.setFieldValue("cashReceived", value.amount);
-
-                // Show expected amount when currency changes
-                if (value.currency !== totalPrice.currency) {
-                  // First convert total price to base currency (USD)
-                  const totalInBaseCurrency = convertToBaseCurrency(totalPrice);
-
-                  // Then convert from base currency to the selected payment currency
-                  const totalInPaymentCurrency = convertFromBaseCurrency(
-                    totalInBaseCurrency,
-                    value.currency,
-                    value.exchangeRate
-                  );
-
-                  form.setFieldValue("cashReceived", totalInPaymentCurrency);
-                }
+                const newMoney =
+                  typeof value === "number"
+                    ? { ...cashReceivedMoney, amount: value }
+                    : value;
+                setCashReceivedMoney(newMoney);
+                form.setFieldValue("cashReceived", newMoney.amount);
               }}
             />
           )}

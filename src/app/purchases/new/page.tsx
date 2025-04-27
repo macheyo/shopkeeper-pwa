@@ -145,8 +145,8 @@ export default function NewPurchasePage() {
         ...productDetails,
         [product._id]: {
           quantity: 1,
-          costPrice: product.purchasePrice || createMoney(0),
-          sellingPrice: product.price,
+          costPrice: product.costPrice || createMoney(0),
+          sellingPrice: product.price, // Use current selling price as initial value
         },
       });
     } else {
@@ -310,7 +310,7 @@ export default function NewPurchasePage() {
           await productsDB.put({
             ...product,
             stockQuantity: (product.stockQuantity || 0) + item.qty,
-            purchasePrice: item.costPrice,
+            costPrice: item.costPrice,
             price: item.intendedSellingPrice,
             purchaseDate: now.toISOString(),
             updatedAt: now.toISOString(),
@@ -589,9 +589,9 @@ export default function NewPurchasePage() {
                         Current Stock: {product.stockQuantity || 0} units
                       </Text>
                       <Text size="sm" c="dimmed">
-                        Last Purchase Price:{" "}
-                        {product.purchasePrice
-                          ? formatMoney(product.purchasePrice)
+                        Last Cost Price:{" "}
+                        {product.costPrice
+                          ? formatMoney(product.costPrice)
                           : "N/A"}
                       </Text>
                     </div>
@@ -672,7 +672,17 @@ export default function NewPurchasePage() {
                       productDetails[product._id]?.costPrice || createMoney(0)
                     }
                     onChange={(value) =>
-                      handleDetailsChange(product._id, "costPrice", value)
+                      handleDetailsChange(
+                        product._id,
+                        "costPrice",
+                        typeof value === "number"
+                          ? {
+                              ...(productDetails[product._id]?.costPrice ||
+                                createMoney(0)),
+                              amount: value,
+                            }
+                          : value
+                      )
                     }
                     size="md"
                   />
@@ -684,7 +694,17 @@ export default function NewPurchasePage() {
                       productDetails[product._id]?.sellingPrice || product.price
                     }
                     onChange={(value) =>
-                      handleDetailsChange(product._id, "sellingPrice", value)
+                      handleDetailsChange(
+                        product._id,
+                        "sellingPrice",
+                        typeof value === "number"
+                          ? {
+                              ...(productDetails[product._id]?.sellingPrice ||
+                                product.price),
+                              amount: value,
+                            }
+                          : value
+                      )
                     }
                     size="md"
                   />

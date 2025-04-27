@@ -131,7 +131,11 @@ export function CashInHandManager() {
       const totalCashSales = (salesResult.docs as SaleDoc[]).reduce(
         (total: number, sale: SaleDoc) => {
           // Convert each sale amount to base currency
-          const saleInBase = convertMoney(sale.totalAmount, BASE_CURRENCY, 1);
+          const saleInBase = convertMoney(
+            sale.totalAmount,
+            BASE_CURRENCY,
+            DEFAULT_EXCHANGE_RATES[BASE_CURRENCY]
+          );
           return total + saleInBase.amount;
         },
         0
@@ -144,7 +148,7 @@ export function CashInHandManager() {
           const purchaseInBase = convertMoney(
             purchase.totalAmount,
             BASE_CURRENCY,
-            1
+            DEFAULT_EXCHANGE_RATES[BASE_CURRENCY]
           );
           return total + purchaseInBase.amount;
         },
@@ -157,7 +161,11 @@ export function CashInHandManager() {
       // Convert expected amount to selected currency
       setExpectedCash(
         convertMoney(
-          createMoney(expectedAmountBase, BASE_CURRENCY, 1),
+          createMoney(
+            expectedAmountBase,
+            BASE_CURRENCY,
+            DEFAULT_EXCHANGE_RATES[BASE_CURRENCY]
+          ),
           selectedCurrency,
           DEFAULT_EXCHANGE_RATES[selectedCurrency]
         )
@@ -262,7 +270,21 @@ export function CashInHandManager() {
       <Paper shadow="sm" p="md" withBorder>
         <Stack gap="md">
           <Text fw={500}>Physical Cash Count</Text>
-          <MoneyInput value={physicalCash} onChange={setPhysicalCash} />
+          <MoneyInput
+            value={physicalCash}
+            onChange={(value) => {
+              const newValue =
+                typeof value === "number"
+                  ? {
+                      amount: value,
+                      currency: selectedCurrency,
+                      exchangeRate: DEFAULT_EXCHANGE_RATES[selectedCurrency],
+                    }
+                  : value;
+              setPhysicalCash(() => newValue);
+            }}
+            currency={selectedCurrency}
+          />
         </Stack>
       </Paper>
 
@@ -280,7 +302,13 @@ export function CashInHandManager() {
           {/* Base Currency Equivalent */}
           {selectedCurrency !== BASE_CURRENCY && (
             <Text size="sm" c="dimmed">
-              {formatMoney(convertMoney(expectedCash, BASE_CURRENCY, 1))}{" "}
+              {formatMoney(
+                convertMoney(
+                  expectedCash,
+                  BASE_CURRENCY,
+                  DEFAULT_EXCHANGE_RATES[BASE_CURRENCY]
+                )
+              )}{" "}
               {BASE_CURRENCY}
             </Text>
           )}
@@ -308,7 +336,13 @@ export function CashInHandManager() {
             {/* Base Currency Equivalent */}
             {selectedCurrency !== BASE_CURRENCY && (
               <Text size="sm" c="dimmed">
-                {formatMoney(convertMoney(difference, BASE_CURRENCY, 1))}{" "}
+                {formatMoney(
+                  convertMoney(
+                    difference,
+                    BASE_CURRENCY,
+                    DEFAULT_EXCHANGE_RATES[BASE_CURRENCY]
+                  )
+                )}{" "}
                 {BASE_CURRENCY}
               </Text>
             )}

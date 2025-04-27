@@ -7,6 +7,7 @@ import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import PWADebug from "@/components/PWADebug";
 import ClientOnly from "@/components/ClientOnly";
 import { DateFilterProvider } from "@/contexts/DateFilterContext";
+import { OnboardingProvider } from "@/contexts/OnboardingContext";
 import "@mantine/core/styles.css";
 import "./globals.css";
 
@@ -95,16 +96,18 @@ export default function RootLayout({
       >
         <ClientOnly>
           <MantineProvider defaultColorScheme="auto">
-            <DateFilterProvider>
-              <ShopkeeperAppShell>{children}</ShopkeeperAppShell>
-              <PWAInstallPrompt
-                debug={false}
-                title="Install ShopKeeper"
-                description="Install this app on your device for offline access and faster performance!"
-              />
-              <PWARegistration />
-              {process.env.NODE_ENV === "development" && <PWADebug />}
-            </DateFilterProvider>
+            <OnboardingProvider>
+              <DateFilterProvider>
+                <ShopkeeperAppShell>{children}</ShopkeeperAppShell>
+                <PWAInstallPrompt
+                  debug={false}
+                  title="Install ShopKeeper"
+                  description="Install this app on your device for offline access and faster performance!"
+                />
+                <PWARegistration />
+                {process.env.NODE_ENV === "development" && <PWADebug />}
+              </DateFilterProvider>
+            </OnboardingProvider>
           </MantineProvider>
         </ClientOnly>
       </body>

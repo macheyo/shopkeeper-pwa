@@ -83,7 +83,12 @@ export default function ReportsPage() {
       0
     );
     const costOfGoodsSold = sales.reduce(
-      (acc, sale) => acc + sale.totalCost.amount,
+      (acc, sale) =>
+        acc +
+        sale.items.reduce(
+          (itemAcc, item) => itemAcc + item.costPrice.amount * item.qty,
+          0
+        ),
       0
     );
     const grossProfit = revenue - costOfGoodsSold;

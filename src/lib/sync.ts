@@ -43,27 +43,29 @@ export async function generateDailyReport(
 
     // Filter for pending sales documents within the selected date range
     const pendingSales = result.rows
-      .map((row) => row.doc)
-      .filter((doc): doc is SaleDoc => {
-        // Make sure it's a sale document with a timestamp and pending status
-        if (
-          !doc ||
-          typeof doc !== "object" ||
-          !("type" in doc) ||
-          doc.type !== "sale" ||
-          !("timestamp" in doc) ||
-          !("status" in doc) ||
-          doc.status !== "pending"
-        ) {
-          return false;
+      .map((row) => row.doc as unknown)
+      .filter(
+        (doc): doc is { type: string; timestamp: string; status: string } => {
+          return (
+            doc !== null &&
+            typeof doc === "object" &&
+            "type" in doc &&
+            doc.type === "sale" &&
+            "timestamp" in doc &&
+            typeof doc.timestamp === "string" &&
+            "status" in doc &&
+            doc.status === "pending"
+          );
         }
-
+      )
+      .filter((doc) => {
         // Check if it's within the date range
-        const docDate = new Date(doc.timestamp as string);
+        const docDate = new Date(doc.timestamp);
         return (
           docDate >= new Date(startDateISO) && docDate < new Date(endDateISO)
         );
-      });
+      })
+      .map((doc) => doc as unknown as SaleDoc);
 
     if (pendingSales.length === 0) {
       console.log(`No pending sales found for the selected date range.`);
@@ -207,30 +209,28 @@ export async function markSalesAsSynced(saleIds: string[]): Promise<void> {
       docs: saleIds.map((id) => ({ id })),
     });
 
-    const updatedDocs: SaleDoc[] = [];
-    const errors: { id: string; error: unknown }[] = []; // Use unknown
+    const updatedDocs: Array<PouchDB.Core.PutDocument<SaleDoc>> = [];
+    const errors: { id: string; error: unknown }[] = [];
 
     docsToUpdate.results.forEach((result) => {
-      // bulkGet returns results for each doc ID provided
-      const docResult = result.docs[0]; // Access the actual doc or error info
+      const docResult = result.docs[0];
       if (docResult && "ok" in docResult && docResult.ok) {
-        // Successfully fetched doc
-        const doc = docResult.ok as SaleDoc;
+        const doc = docResult.ok as unknown as SaleDoc;
         if (doc.status !== "synced") {
           updatedDocs.push({
             ...doc,
             status: "synced",
+            _id: doc._id,
+            _rev: doc._rev,
           });
         }
       } else if (docResult && "error" in docResult) {
-        // Error fetching doc
         errors.push({ id: result.id, error: docResult.error });
         console.error(
           `Error fetching sale doc ${result.id} for update:`,
           docResult.error
         );
       } else {
-        // Unexpected result format
         console.error(
           `Unexpected result format for sale doc ${result.id}:`,
           docResult

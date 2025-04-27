@@ -1,6 +1,9 @@
 "use client";
 
+"use client";
+
 import React from "react";
+import { useOnboarding } from "@/contexts/OnboardingContext";
 import {
   AppShell,
   Group,
@@ -32,6 +35,7 @@ interface AppShellProps {
 
 export default function ShopkeeperAppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const { hasCompletedOnboarding } = useOnboarding();
 
   // Status indicators for WhatsApp and GCP connections
   const getConnectionStatus = () => {
@@ -275,33 +279,35 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        {/* Global Date Filter - Fixed position for mobile and desktop */}
-        <Box
-          style={{
-            position: "sticky",
-            top: 70, // Below the header
-            zIndex: 100,
-            width: "100%",
-            backgroundColor: "var(--mantine-color-body)",
-            boxShadow: "var(--mantine-shadow-xs)",
-            padding: "12px 16px",
-            borderBottom: "1px solid var(--mantine-color-default-border)",
-            marginBottom: "16px",
-            transition: "all 0.3s ease",
-            backdropFilter: "blur(10px)",
-            background: "var(--mantine-color-dark-filled)",
-          }}
-        >
-          <DateFilter />
-        </Box>
+        {/* Global Date Filter - Fixed position for mobile and desktop, hidden during onboarding */}
+        {hasCompletedOnboarding && (
+          <Box
+            style={{
+              position: "sticky",
+              top: 70, // Below the header
+              zIndex: 100,
+              width: "100%",
+              backgroundColor: "var(--mantine-color-body)",
+              boxShadow: "var(--mantine-shadow-xs)",
+              padding: "12px 16px",
+              borderBottom: "1px solid var(--mantine-color-default-border)",
+              marginBottom: "16px",
+              transition: "all 0.3s ease",
+              backdropFilter: "blur(10px)",
+              background: "var(--mantine-color-dark-filled)",
+            }}
+          >
+            <DateFilter />
+          </Box>
+        )}
 
         <Container size="xl">
           {/* Add padding at the bottom on mobile to account for the bottom nav */}
           <Box pb={{ base: "60px", sm: 0 }}>{children}</Box>
         </Container>
 
-        {/* Bottom navigation for mobile */}
-        <BottomNav />
+        {/* Bottom navigation for mobile, hidden during onboarding */}
+        {hasCompletedOnboarding && <BottomNav />}
       </AppShell.Main>
     </AppShell>
   );

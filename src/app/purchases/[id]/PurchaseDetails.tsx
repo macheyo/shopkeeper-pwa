@@ -16,6 +16,7 @@ import {
   Modal,
   ScrollArea,
   rem,
+  Select,
 } from "@mantine/core";
 import {
   IconArrowLeft,
@@ -28,7 +29,12 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { PurchaseDoc } from "@/types";
-import { formatMoney } from "@/types/money";
+import {
+  formatMoney,
+  CurrencyCode,
+  CURRENCY_INFO,
+  useMoneyOperations,
+} from "@/types/money";
 
 interface PurchaseDetailsProps {
   purchase: PurchaseDoc;
@@ -37,14 +43,90 @@ interface PurchaseDetailsProps {
 export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
   const router = useRouter();
   const [showPrintModal, setShowPrintModal] = useState(false);
+  // Currency states for different price types
+  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode>(
+    purchase.totalAmount.currency
+  );
+  const [costPriceCurrency, setCostPriceCurrency] = useState<CurrencyCode>(
+    purchase.totalAmount.currency
+  );
+  const [sellingPriceCurrency, setSellingPriceCurrency] =
+    useState<CurrencyCode>(purchase.totalAmount.currency);
 
-  // Calculate total expected profit
+  const { convertMoney, exchangeRates } = useMoneyOperations();
+
+  // Function to convert money to a specific currency
+  const convertToDisplayCurrency = (money: typeof purchase.totalAmount) => {
+    return convertMoney(money, displayCurrency, exchangeRates[displayCurrency]);
+  };
+
+  // Function to display amount with original value
+  const displayAmount = (money: typeof purchase.totalAmount) => {
+    if (displayCurrency === money.currency) {
+      return formatMoney(money);
+    }
+    const converted = convertToDisplayCurrency(money);
+    return (
+      <Stack gap={0}>
+        <Text>{formatMoney(converted)}</Text>
+        <Text size="xs" c="dimmed">
+          ({formatMoney(money)})
+        </Text>
+      </Stack>
+    );
+  };
+
+  // Function to calculate item total in display currency
+  const calculateItemTotal = (item: (typeof purchase.items)[0]) => {
+    // Convert cost price to display currency
+    const convertedCostPrice = convertToDisplayCurrency({
+      ...item.costPrice,
+      amount: item.costPrice.amount * item.qty,
+    });
+    return convertedCostPrice;
+  };
+
+  // Function to calculate expected profit in display currency
+  const calculateItemProfit = (item: (typeof purchase.items)[0]) => {
+    // Convert both prices to display currency first
+    const costPriceInDisplay = convertToDisplayCurrency(item.costPrice);
+    const sellingPriceInDisplay = convertToDisplayCurrency(
+      item.intendedSellingPrice
+    );
+
+    // Calculate profit in display currency
+    return {
+      ...costPriceInDisplay,
+      amount:
+        (sellingPriceInDisplay.amount - costPriceInDisplay.amount) * item.qty,
+    };
+  };
+
+  // Calculate totals in display currency
+  const totalCost = purchase?.items.reduce(
+    (acc, item) => {
+      const itemTotal = calculateItemTotal(item);
+      return {
+        ...itemTotal,
+        amount: acc.amount + itemTotal.amount,
+      };
+    },
+    { ...purchase?.items[0]?.costPrice, amount: 0, currency: displayCurrency }
+  );
+
   const totalExpectedProfit = purchase?.items.reduce(
-    (acc, item) => ({
-      ...item.expectedProfit,
-      amount: acc.amount + item.expectedProfit.amount * item.qty,
-    }),
-    { ...purchase?.items[0]?.expectedProfit, amount: 0 }
+    (acc, item) => {
+      const itemProfit = calculateItemProfit(item);
+      return {
+        ...itemProfit,
+        amount: acc.amount + itemProfit.amount,
+      };
+    },
+    {
+      ...purchase?.items[0]?.expectedProfit,
+      amount: 0,
+      currency: displayCurrency,
+    }
   );
 
   if (!purchase) {
@@ -85,6 +167,47 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
           Back
         </Button>
         <Group>
+          <Group>
+            <Select
+              label="Cost Price Currency"
+              value={costPriceCurrency}
+              onChange={(value) =>
+                value && setCostPriceCurrency(value as CurrencyCode)
+              }
+              data={Object.values(CURRENCY_INFO).map((currency) => ({
+                value: currency.code,
+                label: `${currency.flag} ${currency.code} - ${currency.name}`,
+              }))}
+              searchable
+              maxDropdownHeight={400}
+            />
+            <Select
+              label="Selling Price Currency"
+              value={sellingPriceCurrency}
+              onChange={(value) =>
+                value && setSellingPriceCurrency(value as CurrencyCode)
+              }
+              data={Object.values(CURRENCY_INFO).map((currency) => ({
+                value: currency.code,
+                label: `${currency.flag} ${currency.code} - ${currency.name}`,
+              }))}
+              searchable
+              maxDropdownHeight={400}
+            />
+            <Select
+              label="Display Currency"
+              value={displayCurrency}
+              onChange={(value) =>
+                value && setDisplayCurrency(value as CurrencyCode)
+              }
+              data={Object.values(CURRENCY_INFO).map((currency) => ({
+                value: currency.code,
+                label: `${currency.flag} ${currency.code} - ${currency.name}`,
+              }))}
+              searchable
+              maxDropdownHeight={400}
+            />
+          </Group>
           <Tooltip label="Print Purchase Details">
             <ActionIcon
               variant="light"
@@ -120,14 +243,14 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
             <Text size="sm" c="dimmed">
               Total Amount
             </Text>
-            <Text fw={500}>{formatMoney(purchase.totalAmount)}</Text>
+            <Text fw={500}>{displayAmount(totalCost)}</Text>
           </Stack>
           <Stack gap="xs">
             <Text size="sm" c="dimmed">
               Expected Profit
             </Text>
             <Text fw={500} c="green">
-              {formatMoney(totalExpectedProfit)}
+              {displayAmount(totalExpectedProfit)}
             </Text>
           </Stack>
           <Stack gap="xs">
@@ -177,23 +300,30 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
                         <Text size="sm" c="dimmed">
                           Cost Price
                         </Text>
-                        <Text>{formatMoney(item.costPrice)}</Text>
+                        <Text>
+                          {displayAmount({
+                            ...item.costPrice,
+                            currency: costPriceCurrency,
+                          })}
+                        </Text>
                       </Group>
                       <Group justify="space-between">
                         <Text size="sm" c="dimmed">
                           Selling Price
                         </Text>
-                        <Text>{formatMoney(item.intendedSellingPrice)}</Text>
+                        <Text>
+                          {displayAmount({
+                            ...item.intendedSellingPrice,
+                            currency: sellingPriceCurrency,
+                          })}
+                        </Text>
                       </Group>
                       <Group justify="space-between">
                         <Text size="sm" c="dimmed">
                           Expected Profit
                         </Text>
                         <Text c="green">
-                          {formatMoney({
-                            ...item.expectedProfit,
-                            amount: item.expectedProfit.amount * item.qty,
-                          })}
+                          {displayAmount(calculateItemProfit(item))}
                         </Text>
                       </Group>
                       <Group justify="space-between">
@@ -201,10 +331,7 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
                           Total
                         </Text>
                         <Text fw={500}>
-                          {formatMoney({
-                            ...item.costPrice,
-                            amount: item.costPrice.amount * item.qty,
-                          })}
+                          {displayAmount(calculateItemTotal(item))}
                         </Text>
                       </Group>
                     </Stack>
@@ -213,7 +340,7 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
                 <Card withBorder p="md" bg="var(--mantine-color-gray-0)">
                   <Group justify="space-between">
                     <Text fw={500}>Total Purchase</Text>
-                    <Text fw={700}>{formatMoney(purchase.totalAmount)}</Text>
+                    <Text fw={700}>{displayAmount(totalCost)}</Text>
                   </Group>
                 </Card>
               </Stack>
@@ -233,21 +360,23 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
                     <Table.Tr key={`${item.productId}_${index}`}>
                       <Table.Td>{item.productName}</Table.Td>
                       <Table.Td>{item.qty}</Table.Td>
-                      <Table.Td>{formatMoney(item.costPrice)}</Table.Td>
                       <Table.Td>
-                        {formatMoney(item.intendedSellingPrice)}
-                      </Table.Td>
-                      <Table.Td>
-                        {formatMoney({
-                          ...item.expectedProfit,
-                          amount: item.expectedProfit.amount * item.qty,
-                        })}
-                      </Table.Td>
-                      <Table.Td>
-                        {formatMoney({
+                        {displayAmount({
                           ...item.costPrice,
-                          amount: item.costPrice.amount * item.qty,
+                          currency: costPriceCurrency,
                         })}
+                      </Table.Td>
+                      <Table.Td>
+                        {displayAmount({
+                          ...item.intendedSellingPrice,
+                          currency: sellingPriceCurrency,
+                        })}
+                      </Table.Td>
+                      <Table.Td>
+                        {displayAmount(calculateItemProfit(item))}
+                      </Table.Td>
+                      <Table.Td>
+                        {displayAmount(calculateItemTotal(item))}
                       </Table.Td>
                     </Table.Tr>
                   ))}
@@ -256,7 +385,7 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
                       <Text fw={500}>Total:</Text>
                     </Table.Td>
                     <Table.Td>
-                      <Text fw={700}>{formatMoney(purchase.totalAmount)}</Text>
+                      <Text fw={700}>{displayAmount(totalCost)}</Text>
                     </Table.Td>
                   </Table.Tr>
                 </Table.Tbody>

@@ -172,7 +172,12 @@ export default function AddProductPage() {
               required
               size="lg"
               value={moneyValue}
-              onChange={setMoneyValue}
+              onChange={(value) =>
+                setMoneyValue((prev) => ({
+                  ...prev,
+                  amount: typeof value === "number" ? value : value.amount,
+                }))
+              }
             />
 
             <Divider
