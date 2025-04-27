@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, Suspense } from "react";
+import { useOnboarding } from "@/contexts/OnboardingContext";
+import OnboardingWizard from "@/components/OnboardingWizard";
 import {
   Button,
   Card,
@@ -77,16 +79,19 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 export default function Home() {
-  const router = useRouter();
-  const { dateRangeInfo, dateRange, customDateRange } = useDateFilter();
-  const { startDate, endDate, label } = dateRangeInfo;
+  const { hasCompletedOnboarding, completeOnboarding } = useOnboarding();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
   const [syncStatus, setSyncStatus] = useState<"synced" | "pending" | "error">(
     "synced"
   );
+  const router = useRouter();
+  const { dateRangeInfo, dateRange, customDateRange } = useDateFilter();
+  const { startDate, endDate, label } = dateRangeInfo;
 
   // State for actual data with individual loading states
   const [productCount, setProductCount] = useState<number>(0);
@@ -330,9 +335,8 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // Only run in browser environment
     if (typeof window === "undefined") {
-      return () => {}; // Return empty cleanup function if window is undefined
+      return () => {};
     }
 
     let productsChangeListener: { cancel(): void } | null = null;
@@ -661,6 +665,15 @@ export default function Home() {
     );
   };
 
+  // Show onboarding wizard if onboarding is not complete
+  if (!hasCompletedOnboarding) {
+    return (
+      <Suspense fallback={<div>Loading...</div>}>
+        <OnboardingWizard onComplete={completeOnboarding} />
+      </Suspense>
+    );
+  }
+
   return (
     <div>
       <Container size="md" py="md">
@@ -959,6 +972,7 @@ export default function Home() {
                 </Group>
               </Stack>
             </Tabs.Panel>
+
             <Tabs.Panel value="weekly" pt="xs">
               <Stack mt="md">
                 <Text size="sm">

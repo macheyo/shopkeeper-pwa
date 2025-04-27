@@ -1,4 +1,19 @@
 // Define supported currencies
+// Default base currency
+export const BASE_CURRENCY: CurrencyCode = "USD";
+
+// Default exchange rates relative to USD (1 USD = X units of currency)
+export const DEFAULT_EXCHANGE_RATES = {
+  USD: 1, // Base currency
+  EUR: 0.92, // 1 USD = 0.92 EUR
+  KES: 138.5, // 1 USD = 138.50 KES
+  ZWL: 6550, // 1 USD = 6550 ZWL
+  ZAR: 19.15, // 1 USD = 19.15 ZAR
+  BWP: 13.85, // 1 USD = 13.85 BWP
+  ZMW: 26.95, // 1 USD = 26.95 ZMW
+  MZN: 64.25, // 1 USD = 64.25 MZN
+} as const satisfies Record<CurrencyCode, number>;
+
 export type CurrencyCode =
   | "USD" // United States Dollar
   | "EUR" // Euro
@@ -36,10 +51,65 @@ export interface Money {
   exchangeRate: number; // Rate relative to USD (e.g., 1 USD = X of this currency)
 }
 
-// Default base currency
-export const BASE_CURRENCY: CurrencyCode = "USD";
+import { useMoneyContext } from "@/contexts/MoneyContext";
 
-// Helper function to create a Money object
+// Custom hook for money operations
+export function useMoneyOperations() {
+  const { baseCurrency, exchangeRates } = useMoneyContext();
+
+  const createMoney = (
+    amount: number,
+    currency?: CurrencyCode,
+    exchangeRate?: number
+  ): Money => {
+    const actualCurrency = currency || baseCurrency;
+    const actualRate = exchangeRate || exchangeRates[actualCurrency];
+
+    return {
+      amount,
+      currency: actualCurrency,
+      exchangeRate: actualRate,
+    };
+  };
+
+  const convertMoney = (
+    money: Money,
+    targetCurrency: CurrencyCode,
+    targetExchangeRate?: number
+  ): Money => {
+    if (money.currency === targetCurrency) {
+      return money;
+    }
+
+    const actualTargetRate =
+      targetExchangeRate || exchangeRates[targetCurrency];
+
+    // Convert to base currency first (if not already in base currency)
+    const valueInBaseCurrency =
+      money.currency === baseCurrency
+        ? money.amount
+        : money.amount / money.exchangeRate;
+
+    // Then convert from base currency to target currency
+    const valueInTargetCurrency = valueInBaseCurrency * actualTargetRate;
+
+    return {
+      amount: valueInTargetCurrency,
+      currency: targetCurrency,
+      exchangeRate: actualTargetRate,
+    };
+  };
+
+  return {
+    createMoney,
+    convertMoney,
+    baseCurrency,
+    exchangeRates,
+  };
+}
+
+// Helper functions for use outside React components
+// Export the createMoney function for use outside React components
 export function createMoney(
   amount: number,
   currency: CurrencyCode = BASE_CURRENCY,
@@ -52,7 +122,19 @@ export function createMoney(
   };
 }
 
-// Helper function to convert Money to a different currency
+export function createMoneyWithRates(
+  amount: number,
+  currency: CurrencyCode,
+  exchangeRate: number
+): Money {
+  return {
+    amount,
+    currency,
+    exchangeRate,
+  };
+}
+
+// Helper function to convert Money
 export function convertMoney(
   money: Money,
   targetCurrency: CurrencyCode,
@@ -62,9 +144,31 @@ export function convertMoney(
     return money;
   }
 
+  // Convert to target currency
+  const valueInTargetCurrency =
+    money.amount * (targetExchangeRate / money.exchangeRate);
+
+  return {
+    amount: valueInTargetCurrency,
+    currency: targetCurrency,
+    exchangeRate: targetExchangeRate,
+  };
+}
+
+// Helper function to convert Money without context
+export function convertMoneyWithRates(
+  money: Money,
+  targetCurrency: CurrencyCode,
+  targetExchangeRate: number,
+  baseCurrency: CurrencyCode
+): Money {
+  if (money.currency === targetCurrency) {
+    return money;
+  }
+
   // Convert to base currency first (if not already in base currency)
   const valueInBaseCurrency =
-    money.currency === BASE_CURRENCY
+    money.currency === baseCurrency
       ? money.amount
       : money.amount / money.exchangeRate;
 
@@ -100,15 +204,3 @@ export function formatNumberWithCommas(value: number): string {
     useGrouping: true,
   }).format(value);
 }
-
-// Sample exchange rates (to be replaced with actual rates from an API or user input)
-export const DEFAULT_EXCHANGE_RATES: Record<CurrencyCode, number> = {
-  USD: 1, // USD is the reference currency
-  EUR: 0.92,
-  ZWL: 3250.5,
-  ZAR: 18.65,
-  BWP: 13.75,
-  ZMW: 26.3,
-  MZN: 63.85,
-  KES: 138.5,
-};

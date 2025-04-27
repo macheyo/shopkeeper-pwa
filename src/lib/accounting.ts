@@ -1,5 +1,11 @@
 import { getLedgerDB } from "./databases";
-import { Money, createMoney, convertMoney, BASE_CURRENCY } from "@/types/money";
+import {
+  Money,
+  CurrencyCode,
+  createMoneyWithRates,
+  convertMoneyWithRates,
+} from "@/types/money";
+import { getShopSettings } from "@/lib/settingsDB";
 import {
   AccountCode,
   LedgerEntryDoc,
@@ -10,18 +16,154 @@ import {
 } from "@/types/accounting";
 
 // Validate that total debits equal total credits
-function validateDoubleEntry(lines: LedgerEntryLine[]): boolean {
+function validateDoubleEntry(
+  lines: LedgerEntryLine[],
+  baseCurrency: string,
+  exchangeRates: Record<string, number>
+): boolean {
   const totalDebits = lines.reduce(
-    (sum, line) => sum + convertMoney(line.debit, BASE_CURRENCY, 1).amount,
+    (sum, line) =>
+      sum +
+      convertMoneyWithRates(
+        line.debit,
+        baseCurrency as CurrencyCode,
+        exchangeRates[baseCurrency],
+        baseCurrency as CurrencyCode
+      ).amount,
     0
   );
   const totalCredits = lines.reduce(
-    (sum, line) => sum + convertMoney(line.credit, BASE_CURRENCY, 1).amount,
+    (sum, line) =>
+      sum +
+      convertMoneyWithRates(
+        line.credit,
+        baseCurrency as CurrencyCode,
+        exchangeRates[baseCurrency],
+        baseCurrency as CurrencyCode
+      ).amount,
     0
   );
 
   // Use a small epsilon for floating point comparison
   return Math.abs(totalDebits - totalCredits) < 0.0001;
+}
+
+// Create opening balance entries for accounts
+export async function createOpeningBalanceEntries(
+  accounts: Array<{
+    accountCode: AccountCode;
+    balance: Money;
+  }>,
+  timestamp: string
+): Promise<LedgerEntryDoc | null> {
+  const ledgerDB = await getLedgerDB();
+  const settings = await getShopSettings();
+  if (!settings) {
+    throw new Error("Shop settings not found");
+  }
+  const baseCurrency = settings.baseCurrency as CurrencyCode;
+  const exchangeRates = settings.currencies.reduce((acc, curr) => {
+    acc[curr.code as CurrencyCode] = curr.exchangeRate;
+    return acc;
+  }, {} as Record<CurrencyCode, number>);
+  exchangeRates[baseCurrency] = 1;
+
+  // Create ledger entry lines
+  const lines: LedgerEntryLine[] = [];
+
+  for (const account of accounts) {
+    const balanceInBase = convertMoneyWithRates(
+      account.balance,
+      baseCurrency,
+      exchangeRates[baseCurrency],
+      baseCurrency
+    );
+
+    if (balanceInBase.amount > 0) {
+      // For positive balances
+      lines.push(
+        {
+          accountCode: account.accountCode,
+          description: "Opening balance",
+          debit: balanceInBase,
+          credit: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+        },
+        {
+          accountCode: AccountCode.OWNERS_EQUITY,
+          description: "Opening balance contra",
+          debit: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+          credit: balanceInBase,
+        }
+      );
+    } else if (balanceInBase.amount < 0) {
+      // For negative balances
+      const positiveAmount = createMoneyWithRates(
+        Math.abs(balanceInBase.amount),
+        baseCurrency,
+        exchangeRates[baseCurrency]
+      );
+      lines.push(
+        {
+          accountCode: AccountCode.OWNERS_EQUITY,
+          description: "Opening balance",
+          debit: positiveAmount,
+          credit: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+        },
+        {
+          accountCode: account.accountCode,
+          description: "Opening balance contra",
+          debit: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+          credit: positiveAmount,
+        }
+      );
+    }
+  }
+
+  // If no lines were created, return null
+  if (lines.length === 0) {
+    return null;
+  }
+
+  // Validate double-entry accounting principle
+  if (!validateDoubleEntry(lines, baseCurrency, exchangeRates)) {
+    throw new Error("Invalid ledger entry: Debits do not equal credits");
+  }
+
+  // Create the ledger entry
+  const entry: LedgerEntryDoc = {
+    _id: `${timestamp}_opening_balance`,
+    type: "ledger_entry",
+    transactionId: "opening_balance",
+    transactionType: "opening_balance",
+    timestamp,
+    postingDate: new Date().toISOString(),
+    description: "Opening balance entries",
+    lines,
+    status: "posted",
+    metadata: {
+      isOpeningBalance: true,
+    },
+  };
+
+  // Save to database
+  await ledgerDB.put(entry);
+  return entry;
 }
 
 // Create a ledger entry for a sale
@@ -34,11 +176,35 @@ export async function createSaleEntry(
 ): Promise<LedgerEntryDoc | null> {
   const ledgerDB = await getLedgerDB();
 
+  // Get settings for currency conversion
+  const settings = await getShopSettings();
+  if (!settings) {
+    throw new Error("Shop settings not found");
+  }
+  const baseCurrency = settings.baseCurrency as CurrencyCode;
+  const exchangeRates = settings.currencies.reduce((acc, curr) => {
+    acc[curr.code as CurrencyCode] = curr.exchangeRate;
+    return acc;
+  }, {} as Record<CurrencyCode, number>);
+  exchangeRates[baseCurrency] = 1;
+
   // Convert amounts to base currency for consistency
-  const saleAmountBase = convertMoney(totalAmount, BASE_CURRENCY, 1);
-  const costOfGoodsBase = convertMoney(costOfGoods, BASE_CURRENCY, 1);
-  const profitBase = createMoney(
-    saleAmountBase.amount - costOfGoodsBase.amount
+  const saleAmountBase = convertMoneyWithRates(
+    totalAmount,
+    baseCurrency,
+    exchangeRates[baseCurrency],
+    baseCurrency
+  );
+  const costOfGoodsBase = convertMoneyWithRates(
+    costOfGoods,
+    baseCurrency,
+    exchangeRates[baseCurrency],
+    baseCurrency
+  );
+  const profitBase = createMoneyWithRates(
+    saleAmountBase.amount - costOfGoodsBase.amount,
+    baseCurrency,
+    exchangeRates[baseCurrency]
   );
 
   // Create ledger entry lines
@@ -51,13 +217,17 @@ export async function createSaleEntry(
           : AccountCode.ACCOUNTS_RECEIVABLE,
       description: "Sale payment",
       debit: saleAmountBase,
-      credit: createMoney(0),
+      credit: createMoneyWithRates(
+        0,
+        baseCurrency,
+        exchangeRates[baseCurrency]
+      ),
     },
     // Credit sales revenue
     {
       accountCode: AccountCode.SALES_REVENUE,
       description: "Sales revenue",
-      debit: createMoney(0),
+      debit: createMoneyWithRates(0, baseCurrency, exchangeRates[baseCurrency]),
       credit: saleAmountBase,
     },
     // Debit cost of goods sold
@@ -65,19 +235,23 @@ export async function createSaleEntry(
       accountCode: AccountCode.COST_OF_GOODS_SOLD,
       description: "Cost of goods sold",
       debit: costOfGoodsBase,
-      credit: createMoney(0),
+      credit: createMoneyWithRates(
+        0,
+        baseCurrency,
+        exchangeRates[baseCurrency]
+      ),
     },
     // Credit inventory
     {
       accountCode: AccountCode.INVENTORY,
       description: "Reduce inventory",
-      debit: createMoney(0),
+      debit: createMoneyWithRates(0, baseCurrency, exchangeRates[baseCurrency]),
       credit: costOfGoodsBase,
     },
   ];
 
   // Validate double-entry accounting principle
-  if (!validateDoubleEntry(lines)) {
+  if (!validateDoubleEntry(lines, baseCurrency, exchangeRates)) {
     throw new Error("Invalid ledger entry: Debits do not equal credits");
   }
 
@@ -114,8 +288,25 @@ export async function createPurchaseEntry(
 ): Promise<LedgerEntryDoc | null> {
   const ledgerDB = await getLedgerDB();
 
+  // Get settings for currency conversion
+  const settings = await getShopSettings();
+  if (!settings) {
+    throw new Error("Shop settings not found");
+  }
+  const baseCurrency = settings.baseCurrency as CurrencyCode;
+  const exchangeRates = settings.currencies.reduce((acc, curr) => {
+    acc[curr.code as CurrencyCode] = curr.exchangeRate;
+    return acc;
+  }, {} as Record<CurrencyCode, number>);
+  exchangeRates[baseCurrency] = 1;
+
   // Convert amount to base currency
-  const purchaseAmountBase = convertMoney(totalAmount, BASE_CURRENCY, 1);
+  const purchaseAmountBase = convertMoneyWithRates(
+    totalAmount,
+    baseCurrency,
+    exchangeRates[baseCurrency],
+    baseCurrency
+  );
 
   // Create ledger entry lines
   const lines: LedgerEntryLine[] = [
@@ -124,7 +315,11 @@ export async function createPurchaseEntry(
       accountCode: AccountCode.INVENTORY,
       description: "Purchase inventory",
       debit: purchaseAmountBase,
-      credit: createMoney(0),
+      credit: createMoneyWithRates(
+        0,
+        baseCurrency,
+        exchangeRates[baseCurrency]
+      ),
     },
     // Credit the appropriate account based on payment method
     {
@@ -133,13 +328,13 @@ export async function createPurchaseEntry(
           ? AccountCode.CASH
           : AccountCode.ACCOUNTS_PAYABLE,
       description: "Purchase payment",
-      debit: createMoney(0),
+      debit: createMoneyWithRates(0, baseCurrency, exchangeRates[baseCurrency]),
       credit: purchaseAmountBase,
     },
   ];
 
   // Validate double-entry accounting principle
-  if (!validateDoubleEntry(lines)) {
+  if (!validateDoubleEntry(lines, baseCurrency, exchangeRates)) {
     throw new Error("Invalid ledger entry: Debits do not equal credits");
   }
 
@@ -174,9 +369,31 @@ export async function createCashAdjustmentEntry(
 ): Promise<LedgerEntryDoc | null> {
   const ledgerDB = await getLedgerDB();
 
+  // Get settings for currency conversion
+  const settings = await getShopSettings();
+  if (!settings) {
+    throw new Error("Shop settings not found");
+  }
+  const baseCurrency = settings.baseCurrency as CurrencyCode;
+  const exchangeRates = settings.currencies.reduce((acc, curr) => {
+    acc[curr.code as CurrencyCode] = curr.exchangeRate;
+    return acc;
+  }, {} as Record<CurrencyCode, number>);
+  exchangeRates[baseCurrency] = 1;
+
   // Convert amounts to base currency
-  const physicalBase = convertMoney(physicalAmount, BASE_CURRENCY, 1);
-  const expectedBase = convertMoney(expectedAmount, BASE_CURRENCY, 1);
+  const physicalBase = convertMoneyWithRates(
+    physicalAmount,
+    baseCurrency,
+    exchangeRates[baseCurrency],
+    baseCurrency
+  );
+  const expectedBase = convertMoneyWithRates(
+    expectedAmount,
+    baseCurrency,
+    exchangeRates[baseCurrency],
+    baseCurrency
+  );
   const difference = physicalBase.amount - expectedBase.amount;
 
   // Create ledger entry lines based on whether there's a surplus or shortage
@@ -190,14 +407,30 @@ export async function createCashAdjustmentEntry(
         {
           accountCode: AccountCode.CASH,
           description: "Cash surplus adjustment",
-          debit: createMoney(difference),
-          credit: createMoney(0),
+          debit: createMoneyWithRates(
+            difference,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+          credit: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
         },
         {
           accountCode: AccountCode.OPERATING_EXPENSES,
           description: "Cash surplus adjustment",
-          debit: createMoney(0),
-          credit: createMoney(difference),
+          debit: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+          credit: createMoneyWithRates(
+            difference,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
         }
       );
     } else {
@@ -207,14 +440,30 @@ export async function createCashAdjustmentEntry(
         {
           accountCode: AccountCode.OPERATING_EXPENSES,
           description: "Cash shortage adjustment",
-          debit: createMoney(shortageAmount),
-          credit: createMoney(0),
+          debit: createMoneyWithRates(
+            shortageAmount,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+          credit: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
         },
         {
           accountCode: AccountCode.CASH,
           description: "Cash shortage adjustment",
-          debit: createMoney(0),
-          credit: createMoney(shortageAmount),
+          debit: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+          credit: createMoneyWithRates(
+            shortageAmount,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
         }
       );
     }
@@ -226,7 +475,7 @@ export async function createCashAdjustmentEntry(
   }
 
   // Validate double-entry accounting principle
-  if (!validateDoubleEntry(lines)) {
+  if (!validateDoubleEntry(lines, baseCurrency, exchangeRates)) {
     throw new Error("Invalid ledger entry: Debits do not equal credits");
   }
 
@@ -272,6 +521,18 @@ export async function generateTrialBalance(
     },
   });
 
+  // Get settings for currency conversion
+  const settings = await getShopSettings();
+  if (!settings) {
+    throw new Error("Shop settings not found");
+  }
+  const baseCurrency = settings.baseCurrency as CurrencyCode;
+  const exchangeRates = settings.currencies.reduce((acc, curr) => {
+    acc[curr.code as CurrencyCode] = curr.exchangeRate;
+    return acc;
+  }, {} as Record<CurrencyCode, number>);
+  exchangeRates[baseCurrency] = 1;
+
   // Initialize accounts totals
   const accounts: TrialBalance["accounts"] = {};
 
@@ -285,44 +546,70 @@ export async function generateTrialBalance(
         accounts[accountCode] = {
           name: CHART_OF_ACCOUNTS[accountCode as AccountCode].name,
           type: CHART_OF_ACCOUNTS[accountCode as AccountCode].type,
-          debitBalance: createMoney(0),
-          creditBalance: createMoney(0),
-          netBalance: createMoney(0),
+          debitBalance: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+          creditBalance: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
+          netBalance: createMoneyWithRates(
+            0,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
         };
       }
 
       // Add debits and credits
-      accounts[accountCode].debitBalance.amount += convertMoney(
+      accounts[accountCode].debitBalance.amount += convertMoneyWithRates(
         debit,
-        BASE_CURRENCY,
-        1
+        baseCurrency,
+        exchangeRates[baseCurrency],
+        baseCurrency
       ).amount;
-      accounts[accountCode].creditBalance.amount += convertMoney(
+      accounts[accountCode].creditBalance.amount += convertMoneyWithRates(
         credit,
-        BASE_CURRENCY,
-        1
+        baseCurrency,
+        exchangeRates[baseCurrency],
+        baseCurrency
       ).amount;
 
       // Calculate net balance based on account type
       const netAmount =
         accounts[accountCode].debitBalance.amount -
         accounts[accountCode].creditBalance.amount;
-      accounts[accountCode].netBalance = createMoney(netAmount);
+      accounts[accountCode].netBalance = createMoneyWithRates(
+        netAmount,
+        baseCurrency,
+        exchangeRates[baseCurrency]
+      );
     }
   }
 
   // Calculate totals
-  const totalDebits = createMoney(
-    Object.values(accounts).reduce(
-      (sum, account) => sum + account.debitBalance.amount,
-      0
-    )
+
+  const totalDebitsAmount = Object.values(accounts).reduce(
+    (sum, account) => sum + account.debitBalance.amount,
+    0
   );
-  const totalCredits = createMoney(
-    Object.values(accounts).reduce(
-      (sum, account) => sum + account.creditBalance.amount,
-      0
-    )
+  const totalCreditsAmount = Object.values(accounts).reduce(
+    (sum, account) => sum + account.creditBalance.amount,
+    0
+  );
+
+  const totalDebits = createMoneyWithRates(
+    totalDebitsAmount,
+    baseCurrency,
+    exchangeRates[baseCurrency]
+  );
+  const totalCredits = createMoneyWithRates(
+    totalCreditsAmount,
+    baseCurrency,
+    exchangeRates[baseCurrency]
   );
 
   return {
@@ -359,6 +646,18 @@ export async function getAccountHistory(
     doc.lines.some((line) => line.accountCode === accountCode)
   );
 
+  // Get settings for currency conversion
+  const settings = await getShopSettings();
+  if (!settings) {
+    throw new Error("Shop settings not found");
+  }
+  const baseCurrency = settings.baseCurrency as CurrencyCode;
+  const exchangeRates = settings.currencies.reduce((acc, curr) => {
+    acc[curr.code as CurrencyCode] = curr.exchangeRate;
+    return acc;
+  }, {} as Record<CurrencyCode, number>);
+  exchangeRates[baseCurrency] = 1;
+
   const entries = [];
   let balance = 0;
   let totalDebits = 0;
@@ -372,8 +671,18 @@ export async function getAccountHistory(
   for (const doc of sortedDocs) {
     for (const line of doc.lines) {
       if (line.accountCode === accountCode) {
-        const debitAmount = convertMoney(line.debit, BASE_CURRENCY, 1).amount;
-        const creditAmount = convertMoney(line.credit, BASE_CURRENCY, 1).amount;
+        const debitAmount = convertMoneyWithRates(
+          line.debit,
+          baseCurrency,
+          exchangeRates[baseCurrency],
+          baseCurrency
+        ).amount;
+        const creditAmount = convertMoneyWithRates(
+          line.credit,
+          baseCurrency,
+          exchangeRates[baseCurrency],
+          baseCurrency
+        ).amount;
 
         totalDebits += debitAmount;
         totalCredits += creditAmount;
@@ -384,7 +693,11 @@ export async function getAccountHistory(
           description: doc.description,
           debit: line.debit,
           credit: line.credit,
-          balance: createMoney(balance),
+          balance: createMoneyWithRates(
+            balance,
+            baseCurrency,
+            exchangeRates[baseCurrency]
+          ),
           transactionType: doc.transactionType as
             | "sale"
             | "purchase"
@@ -401,9 +714,25 @@ export async function getAccountHistory(
     accountName: CHART_OF_ACCOUNTS[accountCode].name,
     accountType: CHART_OF_ACCOUNTS[accountCode].type,
     entries,
-    openingBalance: createMoney(0), // This should be calculated from previous periods
-    closingBalance: createMoney(balance),
-    totalDebits: createMoney(totalDebits),
-    totalCredits: createMoney(totalCredits),
+    openingBalance: createMoneyWithRates(
+      0,
+      baseCurrency,
+      exchangeRates[baseCurrency]
+    ), // This should be calculated from previous periods
+    closingBalance: createMoneyWithRates(
+      balance,
+      baseCurrency,
+      exchangeRates[baseCurrency]
+    ),
+    totalDebits: createMoneyWithRates(
+      totalDebits,
+      baseCurrency,
+      exchangeRates[baseCurrency]
+    ),
+    totalCredits: createMoneyWithRates(
+      totalCredits,
+      baseCurrency,
+      exchangeRates[baseCurrency]
+    ),
   };
 }

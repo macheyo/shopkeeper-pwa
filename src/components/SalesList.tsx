@@ -74,26 +74,26 @@ export default function SalesList() {
 
           // Filter for sales documents within the selected date range
           const filteredDocs = result.rows
-            .map((row) => row.doc)
-            .filter((doc): doc is SaleDoc => {
-              // Make sure it's a sale document with a timestamp
-              if (
-                !doc ||
-                typeof doc !== "object" ||
-                !("type" in doc) ||
-                doc.type !== "sale" ||
-                !("timestamp" in doc)
-              ) {
-                return false;
-              }
-
+            .map((row) => row.doc as unknown)
+            .filter((doc): doc is { type: string; timestamp: string } => {
+              return (
+                doc !== null &&
+                typeof doc === "object" &&
+                "type" in doc &&
+                doc.type === "sale" &&
+                "timestamp" in doc &&
+                typeof doc.timestamp === "string"
+              );
+            })
+            .filter((doc) => {
               // Check if it's within the date range
-              const docDate = new Date(doc.timestamp as string);
+              const docDate = new Date(doc.timestamp);
               return (
                 docDate >= new Date(startDateISOString) &&
                 docDate < new Date(endDateISOString)
               );
             })
+            .map((doc) => doc as unknown as SaleDoc)
             // Sort by timestamp in descending order
             .sort(
               (a, b) =>
