@@ -3,9 +3,9 @@
 import { getPurchasesDB } from "@/lib/databases";
 import type { PurchaseDoc } from "@/types";
 import { useEffect, useState } from "react";
-import { Loader, Stack, Text } from "@mantine/core";
 import { notFound } from "next/navigation";
 import PurchaseDetails from "./PurchaseDetails";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 interface Props {
   id: string;
@@ -45,15 +45,6 @@ async function getPurchaseDetails(id: string): Promise<PurchaseDoc> {
   }
 }
 
-function LoadingState() {
-  return (
-    <Stack align="center" justify="center" h="100vh" gap="md">
-      <Loader size="xl" />
-      <Text size="lg">Loading purchase details...</Text>
-    </Stack>
-  );
-}
-
 export default function PurchaseLoader({ id }: Props) {
   const [purchase, setPurchase] = useState<PurchaseDoc | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +67,7 @@ export default function PurchaseLoader({ id }: Props) {
   }, [id]);
 
   if (loading) {
-    return <LoadingState />;
+    return <LoadingSpinner message="Loading purchase details..." size="md" />;
   }
 
   if (error || !purchase) {

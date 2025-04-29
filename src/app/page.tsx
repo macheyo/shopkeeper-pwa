@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useOnboarding } from "@/contexts/OnboardingContext";
 import OnboardingWizard from "@/components/OnboardingWizard";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import {
   Button,
   Card,
@@ -668,7 +669,11 @@ export default function Home() {
   // Show onboarding wizard if onboarding is not complete
   if (!hasCompletedOnboarding) {
     return (
-      <Suspense fallback={<div>Loading...</div>}>
+      <Suspense
+        fallback={
+          <LoadingSpinner message="Loading onboarding wizard..." size="md" />
+        }
+      >
         <OnboardingWizard onComplete={completeOnboarding} />
       </Suspense>
     );

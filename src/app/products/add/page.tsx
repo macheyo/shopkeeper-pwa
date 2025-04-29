@@ -168,9 +168,7 @@ export default function AddProductPage() {
               label="Price"
               description="The selling price of the product"
               placeholder="0"
-              min={0}
               required
-              size="lg"
               value={moneyValue}
               onChange={(value) =>
                 setMoneyValue((prev) => ({

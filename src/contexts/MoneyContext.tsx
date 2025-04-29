@@ -1,10 +1,14 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+"use client"; // Mark as client component
+
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { CurrencyCode } from "@/types/money";
 import { getShopSettings } from "@/lib/settingsDB";
 
-interface MoneyContextType {
+// Define the MoneyContextType clearly
+export interface MoneyContextType {
   baseCurrency: CurrencyCode;
   exchangeRates: Record<CurrencyCode, number>;
+  availableCurrencies: CurrencyCode[];
   isLoading: boolean;
 }
 
@@ -20,32 +24,69 @@ const DEFAULT_EXCHANGE_RATES: Record<CurrencyCode, number> = {
   KES: 1,
 };
 
+// Create context with default values
 const MoneyContext = createContext<MoneyContextType>({
   baseCurrency: "USD",
   exchangeRates: DEFAULT_EXCHANGE_RATES,
+  availableCurrencies: Object.keys(DEFAULT_EXCHANGE_RATES) as CurrencyCode[],
   isLoading: true,
 });
 
+// Export the hook
 export function useMoneyContext() {
   return useContext(MoneyContext);
 }
 
-export function MoneyProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<MoneyContextType>({
-    baseCurrency: "USD",
-    exchangeRates: DEFAULT_EXCHANGE_RATES,
-    isLoading: true,
-  });
+// Define props interface for the provider
+export interface MoneyProviderProps {
+  children: React.ReactNode;
+  initialSettings?: MoneyContextType;
+}
 
+// Export the provider component
+export function MoneyProvider({
+  children,
+  initialSettings,
+}: MoneyProviderProps) {
+  const [state, setState] = useState<MoneyContextType>(
+    initialSettings || {
+      baseCurrency: "USD",
+      exchangeRates: DEFAULT_EXCHANGE_RATES,
+      availableCurrencies: Object.keys(
+        DEFAULT_EXCHANGE_RATES
+      ) as CurrencyCode[],
+      isLoading: !initialSettings, // Only show loading if no initial settings
+    }
+  );
+
+  // Only fetch settings if no initialSettings were provided
   useEffect(() => {
+    // Skip loading if we already have initial settings
+    if (initialSettings) return;
+
     async function loadSettings() {
       try {
         const settings = await getShopSettings();
+
         if (settings) {
           // Start with default rates
           const rates = { ...DEFAULT_EXCHANGE_RATES };
+
           // Set base currency rate to 1
           rates[settings.baseCurrency as CurrencyCode] = 1;
+
+          // Get available currencies from settings
+          const availableCurrencies = settings.currencies.map(
+            (c) => c.code as CurrencyCode
+          );
+
+          // Make sure base currency is included
+          if (
+            !availableCurrencies.includes(settings.baseCurrency as CurrencyCode)
+          ) {
+            availableCurrencies.push(settings.baseCurrency as CurrencyCode);
+          }
+
           // Update rates from settings
           settings.currencies.forEach((c) => {
             rates[c.code as CurrencyCode] = c.exchangeRate;
@@ -54,6 +95,7 @@ export function MoneyProvider({ children }: { children: React.ReactNode }) {
           setState({
             baseCurrency: settings.baseCurrency as CurrencyCode,
             exchangeRates: rates,
+            availableCurrencies,
             isLoading: false,
           });
         } else {
@@ -66,7 +108,7 @@ export function MoneyProvider({ children }: { children: React.ReactNode }) {
     }
 
     loadSettings();
-  }, []);
+  }, [initialSettings]);
 
   return (
     <MoneyContext.Provider value={state}>{children}</MoneyContext.Provider>

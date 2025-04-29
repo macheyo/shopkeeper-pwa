@@ -22,6 +22,7 @@ import {
 } from "@/types/accounting";
 import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
 import { useDateFilter } from "@/contexts/DateFilterContext";
+import LoadingSpinner from "./LoadingSpinner";
 
 // Style constants for consistent display
 const moneyTextStyle = {
@@ -122,7 +123,13 @@ export default function AccountsView() {
   );
 
   if (loading) {
-    return <Text ta="center">Loading accounts...</Text>;
+    return (
+      <LoadingSpinner
+        message="Loading accounts..."
+        size="md"
+        fullScreen={false}
+      />
+    );
   }
 
   return (

@@ -276,9 +276,7 @@ export default function OnboardingWizard({
                         typeof value === "number" ? value : value.amount
                       )
                     }
-                    min={0}
                     precision={4}
-                    style={{ width: 120 }}
                   />
                   <ActionIcon
                     color="red"
@@ -346,8 +344,6 @@ export default function OnboardingWizard({
                         typeof value === "number" ? value : value.amount
                       )
                     }
-                    min={0}
-                    style={{ width: 120 }}
                   />
                   <Select
                     label="Currency"
