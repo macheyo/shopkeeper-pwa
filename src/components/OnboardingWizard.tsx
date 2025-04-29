@@ -11,7 +11,10 @@ import {
   Card,
   ActionIcon,
   Alert,
+  Box,
+  useMantineTheme,
 } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { CurrencyCode, CURRENCY_INFO, Money } from "@/types/money";
@@ -177,10 +180,15 @@ export default function OnboardingWizard({
     }
   };
 
+  const theme = useMantineTheme();
+  const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
+
   return (
-    <Stack gap="xl" p="xl">
-      <Title order={1}>Welcome to ShopKeeper!</Title>
-      <Text size="lg">
+    <Stack gap="xl" p={isMobile ? "xs" : "xl"}>
+      <Title order={1} size={isMobile ? "h2" : "h1"}>
+        Welcome to ShopKeeper!
+      </Title>
+      <Text size={isMobile ? "md" : "lg"}>
         Let&apos;s get your shop set up. This wizard will guide you through
         setting up your shop&apos;s basic information, currencies, and accounts.
       </Text>
@@ -191,18 +199,24 @@ export default function OnboardingWizard({
         </Alert>
       )}
 
-      <Stepper active={active} onStepClick={setActive}>
+      <Stepper
+        active={active}
+        onStepClick={setActive}
+        orientation={isMobile ? "vertical" : "horizontal"}
+        size={isMobile ? "sm" : "md"}
+      >
         <Stepper.Step
           label="Shop Details"
           description="Basic information about your shop"
         >
-          <Stack gap="md" mt="xl">
+          <Stack gap="md" mt={isMobile ? "md" : "xl"}>
             <TextInput
               label="Shop Name"
               placeholder="Enter your shop name"
               value={shopName}
               onChange={(e) => setShopName(e.target.value)}
               required
+              size={isMobile ? "sm" : "md"}
             />
             <Select
               label="Business Type"
@@ -217,6 +231,7 @@ export default function OnboardingWizard({
                 { value: "other", label: "Other" },
               ]}
               required
+              size={isMobile ? "sm" : "md"}
             />
           </Stack>
         </Stepper.Step>
@@ -225,7 +240,7 @@ export default function OnboardingWizard({
           label="Currency Settings"
           description="Set up your currencies"
         >
-          <Stack gap="md" mt="xl">
+          <Stack gap="md" mt={isMobile ? "md" : "xl"}>
             <Select
               label="Base Currency"
               description="All transactions will be converted to this currency"
@@ -239,6 +254,7 @@ export default function OnboardingWizard({
               }))}
               searchable
               required
+              size={isMobile ? "sm" : "md"}
             />
 
             <Text size="sm" fw={500}>
@@ -249,8 +265,8 @@ export default function OnboardingWizard({
               </Text>
             </Text>
             {currencies.map((currency, index) => (
-              <Card key={index} withBorder>
-                <Group>
+              <Card key={index} withBorder p={isMobile ? "xs" : "md"}>
+                <Stack gap={isMobile ? "xs" : "md"}>
                   <Select
                     label="Currency"
                     value={currency.code}
@@ -263,29 +279,34 @@ export default function OnboardingWizard({
                       label: `${c.flag} ${c.code} - ${c.name}`,
                     }))}
                     searchable
-                    style={{ flex: 1 }}
+                    size={isMobile ? "sm" : "md"}
                   />
-                  <MoneyInput
-                    label="Exchange Rate"
-                    description={`1 ${baseCurrency} = X ${currency.code}`}
-                    value={currency.exchangeRate}
-                    onChange={(value) =>
-                      handleCurrencyChange(
-                        index,
-                        "exchangeRate",
-                        typeof value === "number" ? value : value.amount
-                      )
-                    }
-                    precision={4}
-                  />
-                  <ActionIcon
-                    color="red"
-                    onClick={() => handleRemoveCurrency(index)}
-                    mt={24}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                </Group>
+                  <Group align="flex-start" grow>
+                    <MoneyInput
+                      label="Exchange Rate"
+                      description={`1 ${baseCurrency} = X ${currency.code}`}
+                      value={currency.exchangeRate}
+                      onChange={(value) =>
+                        handleCurrencyChange(
+                          index,
+                          "exchangeRate",
+                          typeof value === "number" ? value : value.amount
+                        )
+                      }
+                      precision={4}
+                    />
+                    <Box style={{ display: "flex", alignItems: "flex-end" }}>
+                      <ActionIcon
+                        color="red"
+                        onClick={() => handleRemoveCurrency(index)}
+                        size={isMobile ? "md" : "lg"}
+                        mt={isMobile ? 16 : 24}
+                      >
+                        <IconTrash size={isMobile ? 14 : 16} />
+                      </ActionIcon>
+                    </Box>
+                  </Group>
+                </Stack>
               </Card>
             ))}
             <Button
@@ -302,7 +323,7 @@ export default function OnboardingWizard({
           label="Opening Balances"
           description="Set up your accounts"
         >
-          <Stack gap="md" mt="xl">
+          <Stack gap="md" mt={isMobile ? "md" : "xl"}>
             <Text size="sm" fw={500}>
               Cash and Bank Accounts
               <Text size="xs" c="dimmed">
@@ -311,67 +332,76 @@ export default function OnboardingWizard({
               </Text>
             </Text>
             {accounts.map((account, index) => (
-              <Card key={index} withBorder>
-                <Group>
+              <Card key={index} withBorder p={isMobile ? "xs" : "md"}>
+                <Stack gap={isMobile ? "xs" : "md"}>
                   <TextInput
                     label="Account Name"
                     value={account.name}
                     onChange={(e) =>
                       handleAccountChange(index, "name", e.target.value)
                     }
-                    style={{ flex: 1 }}
+                    size={isMobile ? "sm" : "md"}
                   />
-                  <Select
-                    label="Account Type"
-                    value={account.type}
-                    onChange={(value) =>
-                      value && handleAccountChange(index, "type", value)
-                    }
-                    data={[
-                      { value: "cash", label: "Cash" },
-                      { value: "mobile_money", label: "Mobile Money" },
-                      { value: "bank", label: "Bank Account" },
-                    ]}
-                    style={{ width: 150 }}
-                  />
-                  <MoneyInput
-                    label="Balance"
-                    value={account.balance}
-                    onChange={(value) =>
-                      handleAccountChange(
-                        index,
-                        "balance",
-                        typeof value === "number" ? value : value.amount
-                      )
-                    }
-                  />
-                  <Select
-                    label="Currency"
-                    value={account.currency}
-                    onChange={(value) =>
-                      value &&
-                      handleAccountChange(
-                        index,
-                        "currency",
-                        value as CurrencyCode
-                      )
-                    }
-                    data={[baseCurrency, ...currencies.map((c) => c.code)].map(
-                      (code) => ({
+                  <Group grow align="flex-start">
+                    <Select
+                      label="Account Type"
+                      value={account.type}
+                      onChange={(value) =>
+                        value && handleAccountChange(index, "type", value)
+                      }
+                      data={[
+                        { value: "cash", label: "Cash" },
+                        { value: "mobile_money", label: "Mobile Money" },
+                        { value: "bank", label: "Bank Account" },
+                      ]}
+                      size={isMobile ? "sm" : "md"}
+                    />
+                    <MoneyInput
+                      label="Balance"
+                      value={account.balance}
+                      onChange={(value) =>
+                        handleAccountChange(
+                          index,
+                          "balance",
+                          typeof value === "number" ? value : value.amount
+                        )
+                      }
+                    />
+                  </Group>
+                  <Group align="flex-start">
+                    <Select
+                      label="Currency"
+                      value={account.currency}
+                      onChange={(value) =>
+                        value &&
+                        handleAccountChange(
+                          index,
+                          "currency",
+                          value as CurrencyCode
+                        )
+                      }
+                      data={[
+                        baseCurrency,
+                        ...currencies.map((c) => c.code),
+                      ].map((code) => ({
                         value: code,
                         label: `${CURRENCY_INFO[code].flag} ${code}`,
-                      })
-                    )}
-                    style={{ width: 120 }}
-                  />
-                  <ActionIcon
-                    color="red"
-                    onClick={() => handleRemoveAccount(index)}
-                    mt={24}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                </Group>
+                      }))}
+                      style={{ flex: 1 }}
+                      size={isMobile ? "sm" : "md"}
+                    />
+                    <Box style={{ display: "flex", alignItems: "flex-end" }}>
+                      <ActionIcon
+                        color="red"
+                        onClick={() => handleRemoveAccount(index)}
+                        mt={isMobile ? 16 : 24}
+                        size={isMobile ? "md" : "lg"}
+                      >
+                        <IconTrash size={isMobile ? 14 : 16} />
+                      </ActionIcon>
+                    </Box>
+                  </Group>
+                </Stack>
               </Card>
             ))}
             <Button
@@ -385,9 +415,11 @@ export default function OnboardingWizard({
         </Stepper.Step>
 
         <Stepper.Completed>
-          <Stack gap="md" mt="xl">
-            <Title order={2}>All Set!</Title>
-            <Text>
+          <Stack gap="md" mt={isMobile ? "md" : "xl"}>
+            <Title order={2} size={isMobile ? "h3" : "h2"}>
+              All Set!
+            </Title>
+            <Text size={isMobile ? "sm" : "md"}>
               You&apos;ve completed the initial setup! Your shop is now ready to
               go. Click finish to start managing your business with ShopKeeper.
             </Text>
@@ -402,7 +434,7 @@ export default function OnboardingWizard({
           bottom: 0,
           left: 0,
           right: 0,
-          padding: "1.5rem",
+          padding: isMobile ? "1rem" : "1.5rem",
           background: "var(--mantine-color-body)",
           borderTop: "1px solid var(--mantine-color-gray-3)",
           zIndex: 100,
@@ -411,13 +443,18 @@ export default function OnboardingWizard({
         }}
       >
         {active > 0 && (
-          <Button variant="default" onClick={prevStep}>
+          <Button
+            variant="default"
+            onClick={prevStep}
+            size={isMobile ? "sm" : "md"}
+          >
             Back
           </Button>
         )}
         {active < 3 && (
           <Button
             onClick={nextStep}
+            size={isMobile ? "sm" : "md"}
             disabled={
               (active === 0 && (!shopName || !businessType)) ||
               (active === 1 && !baseCurrency) ||
@@ -435,13 +472,14 @@ export default function OnboardingWizard({
             color="blue"
             loading={isLoading}
             disabled={isLoading}
+            size={isMobile ? "sm" : "md"}
           >
             Finish
           </Button>
         )}
       </Group>
       {/* Add padding at the bottom to prevent content from being hidden behind fixed buttons */}
-      <div style={{ height: "100px" }} />
+      <div style={{ height: isMobile ? "80px" : "100px" }} />
     </Stack>
   );
 }
