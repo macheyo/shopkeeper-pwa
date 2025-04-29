@@ -1,13 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { MantineProvider } from "@mantine/core";
-import PWARegistration from "@/components/PWARegistration";
-import ShopkeeperAppShell from "@/components/AppShell";
-import PWAInstallPrompt from "@/components/PWAInstallPrompt";
-import PWADebug from "@/components/PWADebug";
-import ClientOnly from "@/components/ClientOnly";
-import { DateFilterProvider } from "@/contexts/DateFilterContext";
-import { OnboardingProvider } from "@/contexts/OnboardingContext";
+import ClientProviders from "@/components/ClientProviders";
+import { getInitialMoneySettings } from "@/lib/getInitialSettings";
 import "@mantine/core/styles.css";
 import "./globals.css";
 
@@ -50,11 +44,15 @@ export const viewport: Viewport = {
   minimumScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Fetch server-side default settings
+  // This doesn't try to use PouchDB (which is browser-only)
+  const initialMoneySettings = await getInitialMoneySettings();
+
   return (
     <html lang="en">
       <head>
@@ -88,28 +86,13 @@ export default function RootLayout({
 
         {/* Safari specific tags */}
         <meta name="theme-color" content="#007bff" />
-
-        {/* Add other head elements like favicons here */}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ClientOnly>
-          <MantineProvider defaultColorScheme="auto">
-            <OnboardingProvider>
-              <DateFilterProvider>
-                <ShopkeeperAppShell>{children}</ShopkeeperAppShell>
-                <PWAInstallPrompt
-                  debug={false}
-                  title="Install ShopKeeper"
-                  description="Install this app on your device for offline access and faster performance!"
-                />
-                <PWARegistration />
-                {process.env.NODE_ENV === "development" && <PWADebug />}
-              </DateFilterProvider>
-            </OnboardingProvider>
-          </MantineProvider>
-        </ClientOnly>
+        <ClientProviders initialMoneySettings={initialMoneySettings}>
+          {children}
+        </ClientProviders>
       </body>
     </html>
   );

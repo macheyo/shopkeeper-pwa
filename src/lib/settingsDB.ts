@@ -1,7 +1,6 @@
-import PouchDB from "pouchdb-browser";
-import PouchDBFind from "pouchdb-find";
-import crypto from "crypto-pouch";
+"use client"; // Mark as client-only code
 
+// Don't import PouchDB at the top level to avoid server-side issues
 export let settingsDB: PouchDB.Database;
 
 export interface ShopSettings {
@@ -30,14 +29,20 @@ export interface ShopSettings {
 export async function getSettingsDB(): Promise<PouchDB.Database> {
   try {
     if (!settingsDB) {
+      // This is a browser-only module
       if (typeof window === "undefined") {
         throw new Error(
           "PouchDB operations are only supported in browser environment."
         );
       }
 
-      PouchDB.plugin(PouchDBFind);
-      PouchDB.plugin(crypto);
+      // Dynamically import PouchDB only in browser environment
+      const PouchDB = (await import("pouchdb-browser")).default;
+      const PouchDBFind = await import("pouchdb-find");
+      const crypto = await import("crypto-pouch");
+
+      PouchDB.plugin(PouchDBFind.default);
+      PouchDB.plugin(crypto.default);
 
       settingsDB = new PouchDB("settings");
 
@@ -74,6 +79,11 @@ export async function getSettingsDB(): Promise<PouchDB.Database> {
 
 export async function getShopSettings(): Promise<ShopSettings | null> {
   try {
+    // Only run in browser environment
+    if (typeof window === "undefined") {
+      return getDefaultSettings();
+    }
+
     const db = await getSettingsDB();
     const result = await db.find({
       selector: { type: "settings" },
@@ -83,17 +93,43 @@ export async function getShopSettings(): Promise<ShopSettings | null> {
     const doc = result.docs[0] as PouchDB.Core.ExistingDocument<
       Omit<ShopSettings, "_id" | "_rev">
     >;
-    return doc ? { ...doc, _id: doc._id, _rev: doc._rev } : null;
+    return doc
+      ? { ...doc, _id: doc._id, _rev: doc._rev }
+      : getDefaultSettings();
   } catch (err) {
     console.error("Error fetching shop settings:", err);
-    return null;
+    return getDefaultSettings();
   }
+}
+
+// Return default settings if running on server or if error occurs
+function getDefaultSettings(): ShopSettings {
+  return {
+    _id: "shop_settings",
+    type: "settings",
+    shopName: "Default Shop",
+    businessType: "retail",
+    baseCurrency: "USD",
+    currencies: [
+      { code: "USD", exchangeRate: 1 },
+      { code: "EUR", exchangeRate: 0.85 },
+    ],
+    accounts: [],
+    hasCompletedOnboarding: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export async function saveShopSettings(
   settings: Omit<ShopSettings, "_id">
 ): Promise<ShopSettings> {
   try {
+    // Only run in browser environment
+    if (typeof window === "undefined") {
+      throw new Error("Cannot save settings on server side");
+    }
+
     const db = await getSettingsDB();
     const doc = {
       _id: "shop_settings",

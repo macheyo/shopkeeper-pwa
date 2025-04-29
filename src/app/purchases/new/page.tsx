@@ -36,7 +36,7 @@ import { useRouter } from "next/navigation";
 import { getPurchasesDB, getProductsDB } from "@/lib/databases";
 import { createPurchaseEntry } from "@/lib/accounting";
 import { ProductDoc, PurchaseItem, PaymentMethod } from "@/types";
-import { formatMoney, createMoney, Money } from "@/types/money";
+import { formatMoney, createMoney, Money, BASE_CURRENCY } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
 import dynamic from "next/dynamic";
@@ -257,26 +257,35 @@ export default function NewPurchasePage() {
   };
 
   // Calculate total price for all items in the cart
+  // Convert money to base currency
+  const convertToBaseCurrency = (money: Money): Money => {
+    if (money.currency === BASE_CURRENCY) return money;
+    return {
+      amount: money.amount / money.exchangeRate,
+      currency: BASE_CURRENCY,
+      exchangeRate: 1,
+    };
+  };
+
+  // Calculate total price in base currency
   const calculateTotalPrice = () => {
     if (cartItems.length === 0) {
       return createMoney(0);
     }
 
-    // Start with the first item's currency as the target currency
-    const targetCurrency = cartItems[0].total.currency;
-    const targetExchangeRate = cartItems[0].total.exchangeRate;
+    let totalInBase = 0;
 
-    let totalAmount = 0;
-
-    // Sum up all items (they should all be in the same currency)
+    // Convert each item's total to base currency and sum
     cartItems.forEach((item) => {
-      totalAmount += item.total.amount;
+      const itemTotalInBase = convertToBaseCurrency(item.total);
+      totalInBase += itemTotalInBase.amount;
     });
 
+    // Return total in base currency
     return {
-      amount: totalAmount,
-      currency: targetCurrency,
-      exchangeRate: targetExchangeRate,
+      amount: totalInBase,
+      currency: BASE_CURRENCY,
+      exchangeRate: 1,
     };
   };
 
@@ -684,7 +693,6 @@ export default function NewPurchasePage() {
                           : value
                       )
                     }
-                    size="md"
                   />
 
                   <MoneyInput
@@ -706,7 +714,6 @@ export default function NewPurchasePage() {
                           : value
                       )
                     }
-                    size="md"
                   />
 
                   {productDetails[product._id] && (

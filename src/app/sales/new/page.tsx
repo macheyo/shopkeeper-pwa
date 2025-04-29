@@ -482,8 +482,6 @@ export default function NewSalePage() {
             <MoneyInput
               label="Cash Received"
               description="Amount of cash given by customer (can be in any currency)"
-              min={0}
-              size="xl"
               value={cashReceivedMoney}
               onChange={(value) => {
                 const newMoney =

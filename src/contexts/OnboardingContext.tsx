@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { getShopSettings, saveShopSettings } from "@/lib/settingsDB";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 interface OnboardingContextType {
   hasCompletedOnboarding: boolean;
@@ -68,7 +69,11 @@ export function OnboardingProvider({
     <OnboardingContext.Provider
       value={{ hasCompletedOnboarding, isLoading, completeOnboarding }}
     >
-      {children}
+      {isLoading ? (
+        <LoadingSpinner size="md" message="Checking onboarding status..." />
+      ) : (
+        children
+      )}
     </OnboardingContext.Provider>
   );
 }
