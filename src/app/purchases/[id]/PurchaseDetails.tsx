@@ -35,6 +35,7 @@ import {
   CURRENCY_INFO,
   useMoneyOperations,
 } from "@/types/money";
+import { useMoneyContext } from "@/contexts/MoneyContext";
 
 interface PurchaseDetailsProps {
   purchase: PurchaseDoc;
@@ -54,18 +55,60 @@ export default function PurchaseDetails({ purchase }: PurchaseDetailsProps) {
     useState<CurrencyCode>(purchase.totalAmount.currency);
 
   const { convertMoney, exchangeRates } = useMoneyOperations();
+  const { baseCurrency } = useMoneyContext();
 
   // Function to convert money to a specific currency
   const convertToDisplayCurrency = (money: typeof purchase.totalAmount) => {
     return convertMoney(money, displayCurrency, exchangeRates[displayCurrency]);
   };
 
-  // Function to display amount with original value
+  // Function to display amount with original value and base currency equivalent
   const displayAmount = (money: typeof purchase.totalAmount) => {
+    // If already in display currency, just show it
     if (displayCurrency === money.currency) {
+      // If not in base currency, show base currency equivalent
+      if (money.currency !== baseCurrency) {
+        const baseEquivalent = convertMoney(
+          money,
+          baseCurrency,
+          exchangeRates[baseCurrency]
+        );
+        return (
+          <Stack gap={0}>
+            <Text>{formatMoney(money)}</Text>
+            <Text size="xs" c="dimmed">
+              ({formatMoney(baseEquivalent)})
+            </Text>
+          </Stack>
+        );
+      }
       return formatMoney(money);
     }
+
+    // Convert to display currency
     const converted = convertToDisplayCurrency(money);
+
+    // Also convert to base currency if display currency is not base currency
+    if (displayCurrency !== baseCurrency) {
+      const baseEquivalent = convertMoney(
+        money,
+        baseCurrency,
+        exchangeRates[baseCurrency]
+      );
+      return (
+        <Stack gap={0}>
+          <Text>{formatMoney(converted)}</Text>
+          <Text size="xs" c="dimmed">
+            ({formatMoney(money)})
+          </Text>
+          <Text size="xs" c="blue">
+            {formatMoney(baseEquivalent)}
+          </Text>
+        </Stack>
+      );
+    }
+
+    // If display currency is base currency, just show converted and original
     return (
       <Stack gap={0}>
         <Text>{formatMoney(converted)}</Text>

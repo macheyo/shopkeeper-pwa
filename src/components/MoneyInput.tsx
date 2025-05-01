@@ -39,11 +39,14 @@ export default function MoneyInput({
 
   // Handle both Money objects and plain numbers
   const amount = typeof value === "number" ? value : value.amount;
+
+  // Determine the current currency - prioritize the currency from the Money object
+  // This ensures that when currency is changed via the dropdown, it's reflected immediately
   const currency =
-    propCurrency ||
-    (typeof value === "object" && value !== null
+    typeof value === "object" && value !== null
       ? value.currency
-      : baseCurrency);
+      : propCurrency || baseCurrency;
+
   const exchangeRate = exchangeRates[currency] || 1;
 
   // Calculate step based on precision

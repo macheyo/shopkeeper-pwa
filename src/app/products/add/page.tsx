@@ -170,12 +170,17 @@ export default function AddProductPage() {
               placeholder="0"
               required
               value={moneyValue}
-              onChange={(value) =>
-                setMoneyValue((prev) => ({
-                  ...prev,
-                  amount: typeof value === "number" ? value : value.amount,
-                }))
-              }
+              onChange={(value) => {
+                if (typeof value === "number") {
+                  setMoneyValue((prev) => ({
+                    ...prev,
+                    amount: value,
+                  }));
+                } else {
+                  // Handle both amount and currency changes
+                  setMoneyValue(value);
+                }
+              }}
             />
 
             <Divider

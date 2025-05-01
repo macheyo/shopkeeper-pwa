@@ -281,7 +281,7 @@ export function CashInHandManager() {
                       exchangeRate: DEFAULT_EXCHANGE_RATES[selectedCurrency],
                     }
                   : value;
-              setPhysicalCash(() => newValue);
+              setPhysicalCash(newValue);
             }}
             currency={selectedCurrency}
           />

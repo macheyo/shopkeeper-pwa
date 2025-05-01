@@ -222,10 +222,18 @@ export default function NewPurchasePage() {
         amount: details.costPrice.amount * quantity,
       };
 
-      // Calculate expected profit per unit
+      // Calculate expected profit per unit with currency conversion
+      // Convert both to base currency for accurate profit calculation
+      const costPriceInBase = convertToBaseCurrency(details.costPrice);
+      const sellingPriceInBase = convertToBaseCurrency(details.sellingPrice);
+
+      // Calculate profit in base currency
+      const profitInBase = sellingPriceInBase.amount - costPriceInBase.amount;
+
+      // Convert profit back to selling price currency for display
       const expectedProfit = {
         ...details.sellingPrice,
-        amount: details.sellingPrice.amount - details.costPrice.amount,
+        amount: profitInBase * details.sellingPrice.exchangeRate,
       };
 
       return {
@@ -463,19 +471,55 @@ export default function NewPurchasePage() {
                 </Group>
                 <Group justify="space-between" mb="xs">
                   <Text size="sm">Cost Price:</Text>
-                  <Text>{formatMoney(item.costPrice)}</Text>
+                  <Stack gap={0}>
+                    <Text>{formatMoney(item.costPrice)}</Text>
+                    {item.costPrice.currency !== BASE_CURRENCY && (
+                      <Text size="xs" c="dimmed">
+                        ({formatMoney(convertToBaseCurrency(item.costPrice))})
+                      </Text>
+                    )}
+                  </Stack>
                 </Group>
                 <Group justify="space-between" mb="xs">
                   <Text size="sm">Selling Price:</Text>
-                  <Text>{formatMoney(item.intendedSellingPrice)}</Text>
+                  <Stack gap={0}>
+                    <Text>{formatMoney(item.intendedSellingPrice)}</Text>
+                    {item.intendedSellingPrice.currency !== BASE_CURRENCY && (
+                      <Text size="xs" c="dimmed">
+                        (
+                        {formatMoney(
+                          convertToBaseCurrency(item.intendedSellingPrice)
+                        )}
+                        )
+                      </Text>
+                    )}
+                  </Stack>
                 </Group>
                 <Group justify="space-between" mb="xs">
                   <Text size="sm">Expected Profit:</Text>
-                  <Text c="green">{formatMoney(item.expectedProfit)}</Text>
+                  <Stack gap={0}>
+                    <Text c="green">{formatMoney(item.expectedProfit)}</Text>
+                    {item.expectedProfit.currency !== BASE_CURRENCY && (
+                      <Text size="xs" c="dimmed">
+                        (
+                        {formatMoney(
+                          convertToBaseCurrency(item.expectedProfit)
+                        )}
+                        )
+                      </Text>
+                    )}
+                  </Stack>
                 </Group>
                 <Group justify="space-between">
                   <Text size="sm">Total Cost:</Text>
-                  <Text fw={700}>{formatMoney(item.total)}</Text>
+                  <Stack gap={0}>
+                    <Text fw={700}>{formatMoney(item.total)}</Text>
+                    {item.total.currency !== BASE_CURRENCY && (
+                      <Text size="xs" c="dimmed">
+                        ({formatMoney(convertToBaseCurrency(item.total))})
+                      </Text>
+                    )}
+                  </Stack>
                 </Group>
               </Card>
             ))}
@@ -499,9 +543,16 @@ export default function NewPurchasePage() {
               <Text fw={700} size="lg">
                 Total Cost:
               </Text>
-              <Text fw={700} size="lg">
-                {formatMoney(totalPrice)}
-              </Text>
+              <Stack gap={0}>
+                <Text fw={700} size="lg">
+                  {formatMoney(totalPrice)}
+                </Text>
+                {totalPrice.currency !== BASE_CURRENCY && (
+                  <Text size="xs" c="dimmed">
+                    ({formatMoney(convertToBaseCurrency(totalPrice))})
+                  </Text>
+                )}
+              </Stack>
             </Group>
           </Card>
 
@@ -605,9 +656,17 @@ export default function NewPurchasePage() {
                       </Text>
                     </div>
                     <div>
-                      <Text fw={700} size="xl">
-                        {formatMoney(product.price)}
-                      </Text>
+                      <Stack gap={0}>
+                        <Text fw={700} size="xl">
+                          {formatMoney(product.price)}
+                        </Text>
+                        {product.price.currency !== BASE_CURRENCY && (
+                          <Text size="xs" c="dimmed">
+                            ({formatMoney(convertToBaseCurrency(product.price))}
+                            )
+                          </Text>
+                        )}
+                      </Stack>
                     </div>
                   </Group>
                 </Card>
@@ -690,7 +749,7 @@ export default function NewPurchasePage() {
                                 createMoney(0)),
                               amount: value,
                             }
-                          : value
+                          : value // Pass the entire Money object when currency changes
                       )
                     }
                   />
@@ -711,7 +770,7 @@ export default function NewPurchasePage() {
                                 product.price),
                               amount: value,
                             }
-                          : value
+                          : value // Pass the entire Money object when currency changes
                       )
                     }
                   />
@@ -720,26 +779,81 @@ export default function NewPurchasePage() {
                     <>
                       <Group justify="space-between">
                         <Text fw={500}>Total Cost:</Text>
-                        <Text fw={700}>
-                          {formatMoney({
-                            ...productDetails[product._id].costPrice,
-                            amount:
-                              productDetails[product._id].costPrice.amount *
-                              productDetails[product._id].quantity,
-                          })}
-                        </Text>
+                        <Stack gap={0}>
+                          {(() => {
+                            const totalCost = {
+                              ...productDetails[product._id].costPrice,
+                              amount:
+                                productDetails[product._id].costPrice.amount *
+                                productDetails[product._id].quantity,
+                            };
+
+                            return (
+                              <>
+                                <Text fw={700}>{formatMoney(totalCost)}</Text>
+                                {totalCost.currency !== BASE_CURRENCY && (
+                                  <Text size="xs" c="dimmed">
+                                    (
+                                    {formatMoney(
+                                      convertToBaseCurrency(totalCost)
+                                    )}
+                                    )
+                                  </Text>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </Stack>
                       </Group>
 
                       <Group justify="space-between">
                         <Text fw={500}>Expected Profit per Unit:</Text>
-                        <Text fw={700} c="green">
-                          {formatMoney({
-                            ...productDetails[product._id].sellingPrice,
-                            amount:
-                              productDetails[product._id].sellingPrice.amount -
-                              productDetails[product._id].costPrice.amount,
-                          })}
-                        </Text>
+                        <Stack gap={0}>
+                          {(() => {
+                            // Calculate expected profit with currency conversion
+                            const costPrice =
+                              productDetails[product._id].costPrice;
+                            const sellingPrice =
+                              productDetails[product._id].sellingPrice;
+
+                            // Convert both to base currency for accurate profit calculation
+                            const costPriceInBase =
+                              convertToBaseCurrency(costPrice);
+                            const sellingPriceInBase =
+                              convertToBaseCurrency(sellingPrice);
+
+                            // Calculate profit in base currency
+                            const profitInBase =
+                              sellingPriceInBase.amount -
+                              costPriceInBase.amount;
+
+                            // Convert profit back to selling price currency for display
+                            const profitInSellingCurrency = {
+                              ...sellingPrice,
+                              amount: profitInBase * sellingPrice.exchangeRate,
+                            };
+
+                            // Create profit in base currency for display
+                            const profitInBaseCurrency = {
+                              amount: profitInBase,
+                              currency: BASE_CURRENCY,
+                              exchangeRate: 1,
+                            };
+
+                            return (
+                              <>
+                                <Text fw={700} c="green">
+                                  {formatMoney(profitInSellingCurrency)}
+                                </Text>
+                                {sellingPrice.currency !== BASE_CURRENCY && (
+                                  <Text size="xs" c="dimmed">
+                                    ({formatMoney(profitInBaseCurrency)})
+                                  </Text>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </Stack>
                       </Group>
                     </>
                   )}
@@ -809,8 +923,28 @@ export default function NewPurchasePage() {
                   <Table.Tr key={index}>
                     <Table.Td>{item.productName}</Table.Td>
                     <Table.Td>{item.qty}</Table.Td>
-                    <Table.Td>{formatMoney(item.costPrice)}</Table.Td>
-                    <Table.Td>{formatMoney(item.total)}</Table.Td>
+                    <Table.Td>
+                      <Stack gap={0}>
+                        <Text>{formatMoney(item.costPrice)}</Text>
+                        {item.costPrice.currency !== BASE_CURRENCY && (
+                          <Text size="xs" c="dimmed">
+                            (
+                            {formatMoney(convertToBaseCurrency(item.costPrice))}
+                            )
+                          </Text>
+                        )}
+                      </Stack>
+                    </Table.Td>
+                    <Table.Td>
+                      <Stack gap={0}>
+                        <Text>{formatMoney(item.total)}</Text>
+                        {item.total.currency !== BASE_CURRENCY && (
+                          <Text size="xs" c="dimmed">
+                            ({formatMoney(convertToBaseCurrency(item.total))})
+                          </Text>
+                        )}
+                      </Stack>
+                    </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
@@ -820,7 +954,18 @@ export default function NewPurchasePage() {
 
             <Group justify="space-between">
               <Text fw={700}>Total Cost:</Text>
-              <Text fw={700}>{formatMoney(receiptData.totalAmount)}</Text>
+              <Stack gap={0}>
+                <Text fw={700}>{formatMoney(receiptData.totalAmount)}</Text>
+                {receiptData.totalAmount.currency !== BASE_CURRENCY && (
+                  <Text size="xs" c="dimmed">
+                    (
+                    {formatMoney(
+                      convertToBaseCurrency(receiptData.totalAmount)
+                    )}
+                    )
+                  </Text>
+                )}
+              </Stack>
             </Group>
 
             <Group justify="space-between">
