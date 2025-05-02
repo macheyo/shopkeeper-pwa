@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Title,
   Button,
@@ -30,10 +30,15 @@ import {
   IconCheck,
   IconTrash,
   IconReceipt,
+  IconMicrophone,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
 import { createSaleEntry } from "@/lib/accounting";
+import {
+  parseSpeechToTransaction,
+  createDefaultProduct,
+} from "@/lib/speechParser";
 import { ProductDoc, SaleItem, PaymentMethod } from "@/types";
 import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
@@ -44,6 +49,13 @@ const BarcodeScanner = dynamic(() => import("@/components/BarcodeScanner"), {
   ssr: false,
 });
 
+const SpeechRecognition = dynamic(
+  () => import("@/components/SpeechRecognition"),
+  {
+    ssr: false,
+  }
+);
+
 export default function NewSalePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -51,6 +63,7 @@ export default function NewSalePage() {
   const [success, setSuccess] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [showScanner, setShowScanner] = useState(false);
+  const [showSpeechRecognition, setShowSpeechRecognition] = useState(false);
   const [products, setProducts] = useState<ProductDoc[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductDoc[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<ProductDoc[]>([]);
@@ -135,6 +148,63 @@ export default function NewSalePage() {
       );
     }
   };
+
+  const handleSpeechResult = useCallback(
+    async (text: string) => {
+      if (typeof window === "undefined") return;
+
+      setShowSpeechRecognition(false);
+      setError(null);
+
+      try {
+        // Parse the speech into transaction data
+        const transaction = await parseSpeechToTransaction(text);
+
+        if (!transaction) {
+          setError("Could not understand the speech. Please try again.");
+          return;
+        }
+
+        // Only process sales in this page
+        if (transaction.type !== "sale") {
+          setError(
+            "This is for sales only. For purchases, please go to the purchases page."
+          );
+          return;
+        }
+
+        // If we have a matched product, add it to the selected products
+        if (transaction.matchedProduct) {
+          // Add to selected products if not already selected
+          if (
+            !selectedProducts.some(
+              (p) => p._id === transaction.matchedProduct!._id
+            )
+          ) {
+            const product = transaction.matchedProduct;
+            setSelectedProducts([product]);
+            form.setFieldValue("quantity", transaction.quantity);
+            setQuantityDrawerOpen(true);
+          }
+        } else {
+          // No matching product found, show error
+          setError(
+            `No product found matching "${transaction.productName}". Please select a product manually.`
+          );
+          // Set search term to help find the product
+          setSearchTerm(transaction.productName);
+        }
+      } catch (err) {
+        console.error("Error processing speech:", err);
+        setError(
+          `Error processing speech: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    },
+    [form, selectedProducts]
+  );
 
   const handleBarcodeScanned = async (barcode: string) => {
     if (typeof window === "undefined") return;
@@ -539,17 +609,33 @@ export default function NewSalePage() {
           {cartItems.length > 0 ? "Add More Products" : "Find Products"}
         </Title>
 
-        <Button
-          fullWidth
-          size="xl"
-          mb="lg"
-          leftSection={<IconBarcode size={24} />}
-          onClick={() => setShowScanner(!showScanner)}
-          color="blue"
-          h={60}
-        >
-          {showScanner ? "Hide Scanner" : "Scan Barcode"}
-        </Button>
+        <Group grow mb="lg">
+          <Button
+            size="xl"
+            leftSection={<IconBarcode size={24} />}
+            onClick={() => {
+              setShowScanner(!showScanner);
+              setShowSpeechRecognition(false);
+            }}
+            color="blue"
+            h={60}
+          >
+            {showScanner ? "Hide Scanner" : "Scan Barcode"}
+          </Button>
+
+          <Button
+            size="xl"
+            leftSection={<IconMicrophone size={24} />}
+            onClick={() => {
+              setShowSpeechRecognition(!showSpeechRecognition);
+              setShowScanner(false);
+            }}
+            color="teal"
+            h={60}
+          >
+            {showSpeechRecognition ? "Hide Voice" : "Voice Input"}
+          </Button>
+        </Group>
 
         {showScanner && (
           <Box mb="lg">
@@ -557,6 +643,20 @@ export default function NewSalePage() {
               Point camera at barcode
             </Text>
             <BarcodeScanner onScan={handleBarcodeScanned} />
+          </Box>
+        )}
+
+        {showSpeechRecognition && (
+          <Box mb="lg">
+            <Text size="md" fw={500} mb="xs" ta="center">
+              Say something like "sold 2 bags of rice"
+            </Text>
+            <SpeechRecognition
+              onResult={handleSpeechResult}
+              placeholder="Listening for sales..."
+              buttonText="Start Voice Input"
+              stopButtonText="Stop Voice Input"
+            />
           </Box>
         )}
 

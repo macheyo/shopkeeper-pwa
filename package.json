@@ -13,8 +13,10 @@
     "@mantine/form": "^7.17.3",
     "@mantine/hooks": "^7.17.3",
     "@tabler/icons-react": "^3.31.0",
+    "@tensorflow/tfjs-node": "^4.22.0",
     "@zxing/browser": "^0.1.5",
     "crypto-pouch": "^4.0.2",
+    "deepspeech": "^0.9.3",
     "lottie-react": "^2.4.1",
     "lottie-web": "^5.12.2",
     "next": "15.2.4",
@@ -24,6 +26,7 @@
     "pouchdb-find": "^9.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-mic": "^12.4.6",
     "workbox-window": "^7.0.0"
   },
   "devDependencies": {

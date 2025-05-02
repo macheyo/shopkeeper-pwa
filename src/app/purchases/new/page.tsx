@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Title,
   Button,
@@ -31,10 +31,15 @@ import {
   IconCheck,
   IconTrash,
   IconReceipt,
+  IconMicrophone,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getPurchasesDB, getProductsDB } from "@/lib/databases";
 import { createPurchaseEntry } from "@/lib/accounting";
+import {
+  parseSpeechToTransaction,
+  createDefaultProduct,
+} from "@/lib/speechParser";
 import { ProductDoc, PurchaseItem, PaymentMethod } from "@/types";
 import { formatMoney, createMoney, Money, BASE_CURRENCY } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
@@ -45,6 +50,13 @@ const BarcodeScanner = dynamic(() => import("@/components/BarcodeScanner"), {
   ssr: false,
 });
 
+const SpeechRecognition = dynamic(
+  () => import("@/components/SpeechRecognition"),
+  {
+    ssr: false,
+  }
+);
+
 export default function NewPurchasePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -53,6 +65,7 @@ export default function NewPurchasePage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [supplierName, setSupplierName] = useState("");
   const [showScanner, setShowScanner] = useState(false);
+  const [showSpeechRecognition, setShowSpeechRecognition] = useState(false);
   const [products, setProducts] = useState<ProductDoc[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductDoc[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<ProductDoc[]>([]);
@@ -159,6 +172,87 @@ export default function NewPurchasePage() {
       setProductDetails(newDetails);
     }
   };
+
+  const handleSpeechResult = useCallback(
+    async (text: string) => {
+      if (typeof window === "undefined") return;
+
+      setShowSpeechRecognition(false);
+      setError(null);
+
+      try {
+        // Parse the speech into transaction data
+        const transaction = await parseSpeechToTransaction(text);
+
+        if (!transaction) {
+          setError("Could not understand the speech. Please try again.");
+          return;
+        }
+
+        // Only process purchases in this page
+        if (transaction.type !== "purchase") {
+          setError(
+            "This is for purchases only. For sales, please go to the sales page."
+          );
+          return;
+        }
+
+        // If we have a matched product, add it to the selected products
+        if (transaction.matchedProduct) {
+          // Add to selected products if not already selected
+          if (
+            !selectedProducts.some(
+              (p) => p._id === transaction.matchedProduct!._id
+            )
+          ) {
+            const product = transaction.matchedProduct;
+            setSelectedProducts([product]);
+
+            // Initialize details for the product
+            setProductDetails({
+              ...productDetails,
+              [product._id]: {
+                quantity: transaction.quantity,
+                costPrice: product.costPrice || createMoney(0),
+                sellingPrice: product.price,
+              },
+            });
+
+            setQuantityDrawerOpen(true);
+          }
+        } else {
+          // No matching product found, create a new one
+          const newProduct = createDefaultProduct(
+            transaction.productName,
+            false
+          );
+
+          // Add to selected products
+          setSelectedProducts([newProduct]);
+
+          // Initialize details for the new product
+          setProductDetails({
+            ...productDetails,
+            [newProduct._id]: {
+              quantity: transaction.quantity,
+              costPrice: createMoney(0),
+              sellingPrice: createMoney(0),
+            },
+          });
+
+          setQuantityDrawerOpen(true);
+        }
+      } catch (err) {
+        console.error("Error processing speech:", err);
+        setError(
+          `Error processing speech: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    },
+    [productDetails, selectedProducts]
+  );
 
   const handleBarcodeScanned = async (barcode: string) => {
     if (typeof window === "undefined") return;
@@ -577,17 +671,33 @@ export default function NewPurchasePage() {
           {cartItems.length > 0 ? "Add More Products" : "Find Products"}
         </Title>
 
-        <Button
-          fullWidth
-          size="xl"
-          mb="lg"
-          leftSection={<IconBarcode size={24} />}
-          onClick={() => setShowScanner(!showScanner)}
-          color="blue"
-          h={60}
-        >
-          {showScanner ? "Hide Scanner" : "Scan Barcode"}
-        </Button>
+        <Group grow mb="lg">
+          <Button
+            size="xl"
+            leftSection={<IconBarcode size={24} />}
+            onClick={() => {
+              setShowScanner(!showScanner);
+              setShowSpeechRecognition(false);
+            }}
+            color="blue"
+            h={60}
+          >
+            {showScanner ? "Hide Scanner" : "Scan Barcode"}
+          </Button>
+
+          <Button
+            size="xl"
+            leftSection={<IconMicrophone size={24} />}
+            onClick={() => {
+              setShowSpeechRecognition(!showSpeechRecognition);
+              setShowScanner(false);
+            }}
+            color="teal"
+            h={60}
+          >
+            {showSpeechRecognition ? "Hide Voice" : "Voice Input"}
+          </Button>
+        </Group>
 
         {showScanner && (
           <Box mb="lg">
@@ -595,6 +705,20 @@ export default function NewPurchasePage() {
               Point camera at barcode
             </Text>
             <BarcodeScanner onScan={handleBarcodeScanned} />
+          </Box>
+        )}
+
+        {showSpeechRecognition && (
+          <Box mb="lg">
+            <Text size="md" fw={500} mb="xs" ta="center">
+              Say something like "purchased 5 bags of rice"
+            </Text>
+            <SpeechRecognition
+              onResult={handleSpeechResult}
+              placeholder="Listening for purchases..."
+              buttonText="Start Voice Input"
+              stopButtonText="Stop Voice Input"
+            />
           </Box>
         )}
 
