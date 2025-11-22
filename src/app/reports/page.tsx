@@ -22,13 +22,27 @@ import {
   IconWallet,
   IconBook,
 } from "@tabler/icons-react";
-import { getSalesDB, getPurchasesDB } from "@/lib/databases";
+import { getSalesDB, getPurchasesDB, getLedgerDB } from "@/lib/databases";
 import { SaleDoc, PurchaseDoc } from "@/types";
-import { formatMoney, Money, CurrencyCode, CURRENCY_INFO } from "@/types/money";
+import {
+  formatMoney,
+  Money,
+  CurrencyCode,
+  CURRENCY_INFO,
+  createMoney,
+} from "@/types/money";
 import { useMoneyContext } from "@/contexts/MoneyContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import ProductManager from "@/components/ProductManager";
 import AccountsView from "@/components/AccountsView";
+import { generateTrialBalance } from "@/lib/accounting";
+import {
+  TrialBalance,
+  AccountType,
+  AccountCode,
+  LedgerEntryDoc,
+} from "@/types/accounting";
+import { convertMoneyWithRates } from "@/types/money";
 
 export default function ReportsPage() {
   const router = useRouter();
@@ -37,6 +51,12 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<SaleDoc[]>([]);
   const [purchases, setPurchases] = useState<PurchaseDoc[]>([]);
+  const [trialBalance, setTrialBalance] = useState<TrialBalance | null>(null);
+  const [cashFlowData, setCashFlowData] = useState<{
+    openingCashBalance: Money;
+    cashFromEquity: Money;
+    closingCashBalance: Money;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<string>("pl");
   const [reportingCurrency, setReportingCurrency] =
     useState<CurrencyCode>(baseCurrency);
@@ -107,6 +127,65 @@ export default function ReportsPage() {
           },
         });
         setPurchases(purchasesResult.docs as PurchaseDoc[]);
+
+        // Fetch trial balance from ledger
+        const balance = await generateTrialBalance(
+          dateRangeInfo.startDate.toISOString(),
+          dateRangeInfo.endDate.toISOString()
+        );
+        setTrialBalance(balance);
+
+        // Fetch cash flow data
+        const openingTrialBalance = await generateTrialBalance(
+          new Date(0).toISOString(),
+          dateRangeInfo.startDate.toISOString()
+        );
+        const openingCashAccount =
+          openingTrialBalance.accounts[AccountCode.CASH];
+        const openingCashBalance = openingCashAccount
+          ? convertToReportingCurrency(openingCashAccount.netBalance)
+          : createMoney(0, reportingCurrency, exchangeRates[reportingCurrency]);
+
+        // Get opening balance entries to calculate cash from equity
+        const ledgerDB = await getLedgerDB();
+        const openingBalanceEntries = await ledgerDB.find({
+          selector: {
+            type: "ledger_entry",
+            transactionType: "opening_balance",
+            status: "posted",
+          },
+        });
+
+        // Sum up cash contributions from opening balance entries
+        let totalCashFromEquity = 0;
+        (openingBalanceEntries.docs as LedgerEntryDoc[]).forEach((entry) => {
+          entry.lines.forEach((line) => {
+            if (
+              line.accountCode === AccountCode.CASH &&
+              line.debit.amount > 0
+            ) {
+              const converted = convertToReportingCurrency(line.debit);
+              totalCashFromEquity += converted.amount;
+            }
+          });
+        });
+        const cashFromEquity = {
+          amount: totalCashFromEquity,
+          currency: reportingCurrency,
+          exchangeRate: exchangeRates[reportingCurrency],
+        };
+
+        // Get closing cash balance
+        const closingCashAccount = balance.accounts[AccountCode.CASH];
+        const closingCashBalance = closingCashAccount
+          ? convertToReportingCurrency(closingCashAccount.netBalance)
+          : openingCashBalance;
+
+        setCashFlowData({
+          openingCashBalance,
+          cashFromEquity,
+          closingCashBalance,
+        });
       } catch (err) {
         console.error("Error fetching data:", err);
       } finally {
@@ -115,7 +194,12 @@ export default function ReportsPage() {
     };
 
     fetchData();
-  }, [dateRangeInfo.startDate, dateRangeInfo.endDate]);
+  }, [
+    dateRangeInfo.startDate,
+    dateRangeInfo.endDate,
+    reportingCurrency,
+    exchangeRates,
+  ]);
 
   const renderProfitLoss = () => {
     // Convert all sales totals to reporting currency and sum
@@ -182,6 +266,17 @@ export default function ReportsPage() {
   };
 
   const renderCashFlow = () => {
+    if (!cashFlowData) {
+      return (
+        <Text ta="center" c="dimmed">
+          Loading cash flow data...
+        </Text>
+      );
+    }
+
+    const { openingCashBalance, cashFromEquity, closingCashBalance } =
+      cashFlowData;
+
     // Convert all sales amounts to reporting currency and sum
     const cashFromSales = sumMoney(sales.map((sale) => sale.totalAmount));
 
@@ -197,8 +292,52 @@ export default function ReportsPage() {
       exchangeRate: exchangeRates[reportingCurrency],
     };
 
+    // Calculate net change in cash
+    const netChangeInCash = {
+      amount: closingCashBalance.amount - openingCashBalance.amount,
+      currency: reportingCurrency,
+      exchangeRate: exchangeRates[reportingCurrency],
+    };
+
     return (
       <Stack gap="md">
+        <Card withBorder>
+          <Title order={4} mb="md">
+            Opening Cash Balance
+          </Title>
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text>Beginning Cash</Text>
+              <Text fw={500}>{formatMoney(openingCashBalance)}</Text>
+            </Group>
+          </Stack>
+        </Card>
+
+        <Card withBorder>
+          <Title order={4} mb="md">
+            Financing Activities
+          </Title>
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text>Cash from Owner&apos;s Equity</Text>
+              <Text fw={500} c="green">
+                {formatMoney(cashFromEquity)}
+              </Text>
+            </Group>
+            <Group
+              justify="space-between"
+              mt="xs"
+              pt="xs"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text fw={700}>Net Financing Cash</Text>
+              <Text fw={700} c="green">
+                {formatMoney(cashFromEquity)}
+              </Text>
+            </Group>
+          </Stack>
+        </Card>
+
         <Card withBorder>
           <Title order={4} mb="md">
             Operating Activities
@@ -216,11 +355,60 @@ export default function ReportsPage() {
                 {formatMoney(cashForPurchases)}
               </Text>
             </Group>
-            <Group justify="space-between">
-              <Text>Net Operating Cash</Text>
+            <Group
+              justify="space-between"
+              mt="xs"
+              pt="xs"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text fw={700}>Net Operating Cash</Text>
               <Text fw={700} c={netOperatingCash.amount >= 0 ? "green" : "red"}>
                 {formatMoney(netOperatingCash)}
               </Text>
+            </Group>
+          </Stack>
+        </Card>
+
+        <Card withBorder>
+          <Title order={4} mb="md">
+            Cash Flow Summary
+          </Title>
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text>Opening Cash Balance</Text>
+              <Text fw={500}>{formatMoney(openingCashBalance)}</Text>
+            </Group>
+            <Group justify="space-between">
+              <Text>Cash from Financing</Text>
+              <Text fw={500} c="green">
+                {formatMoney(cashFromEquity)}
+              </Text>
+            </Group>
+            <Group justify="space-between">
+              <Text>Cash from Operations</Text>
+              <Text fw={500} c={netOperatingCash.amount >= 0 ? "green" : "red"}>
+                {formatMoney(netOperatingCash)}
+              </Text>
+            </Group>
+            <Group
+              justify="space-between"
+              mt="xs"
+              pt="xs"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text fw={700}>Net Change in Cash</Text>
+              <Text fw={700} c={netChangeInCash.amount >= 0 ? "green" : "red"}>
+                {formatMoney(netChangeInCash)}
+              </Text>
+            </Group>
+            <Group
+              justify="space-between"
+              mt="xs"
+              pt="xs"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text fw={700}>Closing Cash Balance</Text>
+              <Text fw={700}>{formatMoney(closingCashBalance)}</Text>
             </Group>
           </Stack>
         </Card>
@@ -229,22 +417,124 @@ export default function ReportsPage() {
   };
 
   const renderBalanceSheet = () => {
-    // Calculate inventory value in reporting currency
-    const inventoryValue = sumMoney(
-      purchases.flatMap((purchase) =>
-        purchase.items.map((item) => ({
-          ...item.costPrice,
-          amount: item.costPrice.amount * item.qty,
-        }))
-      )
+    if (!trialBalance) {
+      return (
+        <Text ta="center" c="dimmed">
+          No balance sheet data available
+        </Text>
+      );
+    }
+
+    // Group accounts by type and convert to reporting currency
+    const assets: Array<{ name: string; balance: Money }> = [];
+    const liabilities: Array<{ name: string; balance: Money }> = [];
+    const equity: Array<{ name: string; balance: Money }> = [];
+
+    // Calculate Retained Earnings from Revenue and Expenses
+    let retainedEarnings = createMoney(
+      0,
+      reportingCurrency,
+      exchangeRates[reportingCurrency]
     );
 
-    // Calculate cash in reporting currency
-    const cash = sumMoney(sales.map((sale) => sale.totalAmount));
+    // Get revenue accounts (credit balance = revenue)
+    const salesRevenueAccount =
+      trialBalance.accounts[AccountCode.SALES_REVENUE];
+    const revenueAmount = salesRevenueAccount
+      ? convertToReportingCurrency({
+          ...salesRevenueAccount.netBalance,
+          amount: -salesRevenueAccount.netBalance.amount, // Flip sign for credit balance
+        }).amount
+      : 0;
 
-    // Calculate total assets in reporting currency
+    // Get expense accounts (debit balance = expenses)
+    const cogsAccount = trialBalance.accounts[AccountCode.COST_OF_GOODS_SOLD];
+    const cogsAmount = cogsAccount
+      ? convertToReportingCurrency(cogsAccount.netBalance).amount
+      : 0;
+
+    const operatingExpensesAccount =
+      trialBalance.accounts[AccountCode.OPERATING_EXPENSES];
+    const operatingExpensesAmount = operatingExpensesAccount
+      ? convertToReportingCurrency(operatingExpensesAccount.netBalance).amount
+      : 0;
+
+    // Retained Earnings = Revenue - Expenses
+    const netIncome = revenueAmount - cogsAmount - operatingExpensesAmount;
+    retainedEarnings = {
+      amount: netIncome,
+      currency: reportingCurrency,
+      exchangeRate: exchangeRates[reportingCurrency],
+    };
+
+    Object.entries(trialBalance.accounts).forEach(([code, account]) => {
+      // Skip revenue and expense accounts - they're used to calculate Retained Earnings
+      if (
+        code === AccountCode.SALES_REVENUE ||
+        code === AccountCode.COST_OF_GOODS_SOLD ||
+        code === AccountCode.OPERATING_EXPENSES
+      ) {
+        return;
+      }
+
+      // For Balance Sheet display:
+      // - Assets: normal balance is Debit (positive netBalance) - use as-is
+      // - Liabilities: normal balance is Credit (negative netBalance) - flip sign
+      // - Equity: normal balance is Credit (negative netBalance) - flip sign
+      let balanceForDisplay = account.netBalance;
+
+      if (account.type === "liability" || account.type === "equity") {
+        // Flip the sign for credit-balance accounts
+        balanceForDisplay = {
+          ...account.netBalance,
+          amount: -account.netBalance.amount,
+        };
+      }
+
+      const convertedBalance = convertToReportingCurrency(balanceForDisplay);
+      const accountData = {
+        name: account.name,
+        balance: convertedBalance,
+      };
+
+      if (account.type === "asset") {
+        assets.push(accountData);
+      } else if (account.type === "liability") {
+        liabilities.push(accountData);
+      } else if (account.type === "equity") {
+        equity.push(accountData);
+      }
+    });
+
+    // Add calculated Retained Earnings to equity
+    if (retainedEarnings.amount !== 0) {
+      equity.push({
+        name: "Retained Earnings",
+        balance: retainedEarnings,
+      });
+    }
+
+    // Calculate totals
     const totalAssets = {
-      amount: inventoryValue.amount + cash.amount,
+      amount: assets.reduce((sum, acc) => sum + acc.balance.amount, 0),
+      currency: reportingCurrency,
+      exchangeRate: exchangeRates[reportingCurrency],
+    };
+
+    const totalLiabilities = {
+      amount: liabilities.reduce((sum, acc) => sum + acc.balance.amount, 0),
+      currency: reportingCurrency,
+      exchangeRate: exchangeRates[reportingCurrency],
+    };
+
+    const totalEquity = {
+      amount: equity.reduce((sum, acc) => sum + acc.balance.amount, 0),
+      currency: reportingCurrency,
+      exchangeRate: exchangeRates[reportingCurrency],
+    };
+
+    const totalLiabilitiesAndEquity = {
+      amount: totalLiabilities.amount + totalEquity.amount,
       currency: reportingCurrency,
       exchangeRate: exchangeRates[reportingCurrency],
     };
@@ -256,17 +546,130 @@ export default function ReportsPage() {
             Assets
           </Title>
           <Stack gap="xs">
-            <Group justify="space-between">
-              <Text>Inventory</Text>
-              <Text fw={500}>{formatMoney(inventoryValue)}</Text>
+            {assets.length > 0 ? (
+              assets.map((asset) => (
+                <Group key={asset.name} justify="space-between">
+                  <Text>{asset.name}</Text>
+                  <Text fw={500}>{formatMoney(asset.balance)}</Text>
+                </Group>
+              ))
+            ) : (
+              <Text size="sm" c="dimmed">
+                No assets
+              </Text>
+            )}
+            <Group
+              justify="space-between"
+              mt="xs"
+              pt="xs"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text fw={700}>Total Assets</Text>
+              <Text fw={700}>{formatMoney(totalAssets)}</Text>
             </Group>
+          </Stack>
+        </Card>
+
+        <Card withBorder>
+          <Title order={4} mb="md">
+            Liabilities
+          </Title>
+          <Stack gap="xs">
+            {liabilities.length > 0 ? (
+              liabilities.map((liability) => (
+                <Group key={liability.name} justify="space-between">
+                  <Text>{liability.name}</Text>
+                  <Text fw={500}>{formatMoney(liability.balance)}</Text>
+                </Group>
+              ))
+            ) : (
+              <Text size="sm" c="dimmed">
+                No liabilities
+              </Text>
+            )}
+            <Group
+              justify="space-between"
+              mt="xs"
+              pt="xs"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text fw={700}>Total Liabilities</Text>
+              <Text fw={700}>{formatMoney(totalLiabilities)}</Text>
+            </Group>
+          </Stack>
+        </Card>
+
+        <Card withBorder>
+          <Title order={4} mb="md">
+            Equity
+          </Title>
+          <Stack gap="xs">
+            {equity.length > 0 ? (
+              equity.map((equityItem) => (
+                <Group key={equityItem.name} justify="space-between">
+                  <Text>{equityItem.name}</Text>
+                  <Text fw={500}>{formatMoney(equityItem.balance)}</Text>
+                </Group>
+              ))
+            ) : (
+              <Text size="sm" c="dimmed">
+                No equity accounts
+              </Text>
+            )}
+            <Group
+              justify="space-between"
+              mt="xs"
+              pt="xs"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text fw={700}>Total Equity</Text>
+              <Text fw={700}>{formatMoney(totalEquity)}</Text>
+            </Group>
+          </Stack>
+        </Card>
+
+        <Card withBorder>
+          <Title order={4} mb="md">
+            Balance Sheet Equation
+          </Title>
+          <Stack gap="xs">
             <Group justify="space-between">
-              <Text>Cash</Text>
-              <Text fw={500}>{formatMoney(cash)}</Text>
+              <Text>Total Liabilities + Equity</Text>
+              <Text fw={500}>{formatMoney(totalLiabilitiesAndEquity)}</Text>
             </Group>
             <Group justify="space-between">
               <Text>Total Assets</Text>
-              <Text fw={700}>{formatMoney(totalAssets)}</Text>
+              <Text fw={500}>{formatMoney(totalAssets)}</Text>
+            </Group>
+            <Group
+              justify="space-between"
+              mt="xs"
+              pt="xs"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-3)" }}
+            >
+              <Text fw={700}>
+                {Math.abs(
+                  totalAssets.amount - totalLiabilitiesAndEquity.amount
+                ) < 0.01
+                  ? "✓ Balanced"
+                  : "⚠ Difference"}
+              </Text>
+              <Text
+                fw={700}
+                c={
+                  Math.abs(
+                    totalAssets.amount - totalLiabilitiesAndEquity.amount
+                  ) < 0.01
+                    ? "green"
+                    : "red"
+                }
+              >
+                {formatMoney({
+                  amount: totalAssets.amount - totalLiabilitiesAndEquity.amount,
+                  currency: reportingCurrency,
+                  exchangeRate: exchangeRates[reportingCurrency],
+                })}
+              </Text>
             </Group>
           </Stack>
         </Card>
@@ -275,6 +678,15 @@ export default function ReportsPage() {
   };
 
   const renderPurchaseAnalysis = () => {
+    if (purchases.length === 0) {
+      return (
+        <Text ta="center" c="dimmed">
+          No purchases found for the selected period
+        </Text>
+      );
+    }
+
+    // Group purchases by purchaseRunId
     const purchaseRuns = purchases.reduce((acc, purchase) => {
       const run = acc.find((r) => r.purchaseRunId === purchase.purchaseRunId);
       if (run) {
@@ -289,37 +701,280 @@ export default function ReportsPage() {
       return acc;
     }, [] as { purchaseRunId: string; timestamp: string; purchases: PurchaseDoc[] }[]);
 
+    // Calculate summary statistics
+    const totalPurchases = sumMoney(purchases.map((p) => p.totalAmount));
+    const totalItems = purchases.reduce(
+      (sum, p) =>
+        sum + p.items.reduce((itemSum, item) => itemSum + item.qty, 0),
+      0
+    );
+    // Calculate total expected profit: (sellingPrice - costPrice) * qty for each item
+    const totalExpectedProfit = sumMoney(
+      purchases.flatMap((p) =>
+        p.items.map((item) => {
+          // expectedProfit is per unit, so multiply by quantity
+          const profitPerUnit = item.expectedProfit
+            ? convertToReportingCurrency(item.expectedProfit)
+            : {
+                amount:
+                  convertToReportingCurrency(item.intendedSellingPrice).amount -
+                  convertToReportingCurrency(item.costPrice).amount,
+                currency: reportingCurrency,
+                exchangeRate: exchangeRates[reportingCurrency],
+              };
+          return {
+            ...profitPerUnit,
+            amount: profitPerUnit.amount * item.qty,
+          };
+        })
+      )
+    );
+    const averagePurchaseSize =
+      purchases.length > 0 ? totalPurchases.amount / purchases.length : 0;
+
     return (
-      <Stack gap="md">
+      <Stack gap="lg">
+        {/* Summary Statistics */}
+        <Card withBorder p="md">
+          <Title order={4} mb="md">
+            Summary
+          </Title>
+          <Table withTableBorder>
+            <Table.Tbody>
+              <Table.Tr>
+                <Table.Td fw={500}>Total Purchase Runs</Table.Td>
+                <Table.Td align="right">{purchaseRuns.length}</Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td fw={500}>Total Purchases</Table.Td>
+                <Table.Td align="right">{purchases.length}</Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td fw={500}>Total Purchase Cost</Table.Td>
+                <Table.Td align="right" fw={700}>
+                  {formatMoney(totalPurchases)}
+                </Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td fw={500}>Total Items Purchased</Table.Td>
+                <Table.Td align="right">{totalItems} units</Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td fw={500}>Average Purchase Size</Table.Td>
+                <Table.Td align="right">
+                  {formatMoney({
+                    amount: averagePurchaseSize,
+                    currency: reportingCurrency,
+                    exchangeRate: exchangeRates[reportingCurrency],
+                  })}
+                </Table.Td>
+              </Table.Tr>
+              <Table.Tr>
+                <Table.Td fw={500}>Total Expected Profit</Table.Td>
+                <Table.Td align="right" fw={700} c="green">
+                  {formatMoney(totalExpectedProfit)}
+                </Table.Td>
+              </Table.Tr>
+            </Table.Tbody>
+          </Table>
+        </Card>
+
+        {/* Detailed Purchase Runs */}
+        <Title order={4}>Purchase Runs</Title>
         {purchaseRuns.map((run) => {
           // Convert all purchase amounts to reporting currency and sum
           const totalPurchaseAmount = sumMoney(
             run.purchases.map((p) => p.totalAmount)
           );
 
-          return (
-            <Card key={run.purchaseRunId} withBorder>
-              <Group justify="space-between" mb="md">
-                <div>
-                  <Text fw={700}>
-                    Purchase Run #{run.purchaseRunId.split("_")[1]}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    {new Date(run.timestamp).toLocaleString()}
-                  </Text>
-                </div>
-              </Group>
+          // Calculate totals for this run
+          const runTotalItems = run.purchases.reduce(
+            (sum, p) =>
+              sum + p.items.reduce((itemSum, item) => itemSum + item.qty, 0),
+            0
+          );
+          // Calculate expected profit for this run: (sellingPrice - costPrice) * qty for each item
+          const runExpectedProfit = sumMoney(
+            run.purchases.flatMap((p) =>
+              p.items.map((item) => {
+                // expectedProfit is per unit, so multiply by quantity
+                const profitPerUnit = item.expectedProfit
+                  ? convertToReportingCurrency(item.expectedProfit)
+                  : {
+                      amount:
+                        convertToReportingCurrency(item.intendedSellingPrice)
+                          .amount -
+                        convertToReportingCurrency(item.costPrice).amount,
+                      currency: reportingCurrency,
+                      exchangeRate: exchangeRates[reportingCurrency],
+                    };
+                return {
+                  ...profitPerUnit,
+                  amount: profitPerUnit.amount * item.qty,
+                };
+              })
+            )
+          );
 
-              <Table withTableBorder>
-                <Table.Tbody>
-                  <Table.Tr>
-                    <Table.Td>Total Purchase Cost</Table.Td>
-                    <Table.Td align="right">
+          // Get supplier and payment method (from first purchase in run)
+          const firstPurchase = run.purchases[0];
+          // Check both supplier and supplierName fields (for backward compatibility with old purchases)
+          const supplier =
+            firstPurchase.supplier ||
+            (firstPurchase as any).supplierName ||
+            "Not specified";
+          const paymentMethod = firstPurchase.paymentMethod;
+
+          return (
+            <Card key={run.purchaseRunId} withBorder p="md">
+              <Stack gap="md">
+                {/* Header */}
+                <Group justify="space-between" align="flex-start">
+                  <div>
+                    <Text fw={700} size="lg">
+                      Purchase Run #{run.purchaseRunId.split("_")[1]}
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                      {new Date(run.timestamp).toLocaleString()}
+                    </Text>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <Text size="sm" c="dimmed">
+                      Total Cost
+                    </Text>
+                    <Text fw={700} size="lg">
                       {formatMoney(totalPurchaseAmount)}
-                    </Table.Td>
-                  </Table.Tr>
-                </Table.Tbody>
-              </Table>
+                    </Text>
+                  </div>
+                </Group>
+
+                {/* Purchase Info */}
+                <Group gap="xl">
+                  <div>
+                    <Text size="sm" c="dimmed">
+                      Supplier
+                    </Text>
+                    <Text fw={500}>{supplier}</Text>
+                  </div>
+                  <div>
+                    <Text size="sm" c="dimmed">
+                      Payment Method
+                    </Text>
+                    <Text fw={500} tt="capitalize">
+                      {paymentMethod.replace("_", " ")}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text size="sm" c="dimmed">
+                      Items
+                    </Text>
+                    <Text fw={500}>{runTotalItems} units</Text>
+                  </div>
+                  <div>
+                    <Text size="sm" c="dimmed">
+                      Expected Profit
+                    </Text>
+                    <Text fw={500} c="green">
+                      {formatMoney(runExpectedProfit)}
+                    </Text>
+                  </div>
+                </Group>
+
+                {/* Items Table */}
+                <Table withTableBorder>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Product</Table.Th>
+                      <Table.Th>Code</Table.Th>
+                      <Table.Th align="right">Qty</Table.Th>
+                      <Table.Th align="right">Cost Price</Table.Th>
+                      <Table.Th align="right">Selling Price</Table.Th>
+                      <Table.Th align="right">Expected Profit</Table.Th>
+                      <Table.Th align="right">Total Cost</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {run.purchases.flatMap((purchase) =>
+                      purchase.items.map((item, idx) => {
+                        const costPrice = convertToReportingCurrency(
+                          item.costPrice
+                        );
+                        const sellingPrice = convertToReportingCurrency(
+                          item.intendedSellingPrice
+                        );
+                        const expectedProfit = item.expectedProfit
+                          ? convertToReportingCurrency(item.expectedProfit)
+                          : {
+                              amount: sellingPrice.amount - costPrice.amount,
+                              currency: reportingCurrency,
+                              exchangeRate: exchangeRates[reportingCurrency],
+                            };
+                        const totalCost = {
+                          amount: costPrice.amount * item.qty,
+                          currency: reportingCurrency,
+                          exchangeRate: exchangeRates[reportingCurrency],
+                        };
+                        const profitMargin =
+                          sellingPrice.amount > 0
+                            ? (
+                                (expectedProfit.amount / sellingPrice.amount) *
+                                100
+                              ).toFixed(1)
+                            : "0.0";
+
+                        return (
+                          <Table.Tr key={`${purchase._id}_${idx}`}>
+                            <Table.Td>{item.productName}</Table.Td>
+                            <Table.Td>
+                              <Text size="sm" c="dimmed">
+                                {item.productCode}
+                              </Text>
+                            </Table.Td>
+                            <Table.Td align="right">{item.qty}</Table.Td>
+                            <Table.Td align="right">
+                              {formatMoney(costPrice)}
+                            </Table.Td>
+                            <Table.Td align="right">
+                              {formatMoney(sellingPrice)}
+                            </Table.Td>
+                            <Table.Td align="right">
+                              <Text c="green" fw={500}>
+                                {formatMoney(expectedProfit)}
+                              </Text>
+                              <Text size="xs" c="dimmed">
+                                ({profitMargin}%)
+                              </Text>
+                            </Table.Td>
+                            <Table.Td align="right" fw={500}>
+                              {formatMoney(totalCost)}
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })
+                    )}
+                  </Table.Tbody>
+                  <Table.Tfoot>
+                    <Table.Tr>
+                      <Table.Th colSpan={6} align="right">
+                        Total
+                      </Table.Th>
+                      <Table.Th align="right" fw={700}>
+                        {formatMoney(totalPurchaseAmount)}
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Tfoot>
+                </Table>
+
+                {/* Notes if available */}
+                {firstPurchase.notes && (
+                  <div>
+                    <Text size="sm" c="dimmed" mb="xs">
+                      Notes
+                    </Text>
+                    <Text size="sm">{firstPurchase.notes}</Text>
+                  </div>
+                )}
+              </Stack>
             </Card>
           );
         })}

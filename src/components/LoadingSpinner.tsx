@@ -177,12 +177,12 @@ export default function LoadingSpinner({
               width: selectedSize.containerWidth,
               height: selectedSize.containerHeight,
               borderRadius: theme.radius.lg,
-              background: `rgba(48,14,95,255)`,
+              background: theme.colors.blue[0],
               backdropFilter: "blur(12px)",
               WebkitBackdropFilter: "blur(12px)",
               boxShadow: "0 8px 32px rgba(0, 0, 0, 0.15)",
               justifyContent: "center",
-              border: `1px solid rgba(48,14,95,255)`,
+              border: `1px solid ${theme.colors.blue[3]}`,
               position: "relative",
             }}
           >

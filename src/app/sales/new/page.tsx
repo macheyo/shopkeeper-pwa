@@ -491,6 +491,8 @@ export default function NewSalePage() {
                 setCashReceivedMoney(newMoney);
                 form.setFieldValue("cashReceived", newMoney.amount);
               }}
+              variant="light"
+              size="md"
             />
           )}
 
@@ -643,7 +645,7 @@ export default function NewSalePage() {
       <Drawer
         opened={quantityDrawerOpen}
         onClose={() => setQuantityDrawerOpen(false)}
-        title={<Title order={3}>Set Quantity</Title>}
+        title="Set Quantity"
         position="bottom"
         size="lg"
       >

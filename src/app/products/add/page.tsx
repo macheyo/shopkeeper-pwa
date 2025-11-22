@@ -174,8 +174,18 @@ export default function AddProductPage() {
                 setMoneyValue((prev) => ({
                   ...prev,
                   amount: typeof value === "number" ? value : value.amount,
+                  currency:
+                    typeof value === "object" && value !== null
+                      ? value.currency
+                      : prev.currency,
+                  exchangeRate:
+                    typeof value === "object" && value !== null
+                      ? value.exchangeRate
+                      : prev.exchangeRate,
                 }))
               }
+              variant="light"
+              size="lg"
             />
 
             <Divider

@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { IconAlertCircle } from "@tabler/icons-react";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconX } from "@tabler/icons-react";
 import { CurrencyCode, CURRENCY_INFO, Money } from "@/types/money";
 import { saveShopSettings } from "@/lib/settingsDB";
 import { createOpeningBalanceEntries } from "@/lib/accounting";
@@ -259,14 +259,39 @@ export default function OnboardingWizard({
 
             <Text size="sm" fw={500}>
               Additional Currencies (Optional)
-              <Text size="xs" c="dimmed">
+              <Text size="xs" c="dimmed" component="span">
                 Add any other currencies you&apos;ll be dealing with. You can
                 always add more later.
               </Text>
             </Text>
             {currencies.map((currency, index) => (
-              <Card key={index} withBorder p={isMobile ? "xs" : "md"}>
-                <Stack gap={isMobile ? "xs" : "md"}>
+              <Card
+                key={index}
+                withBorder
+                p={isMobile ? "xs" : "md"}
+                style={{ position: "relative" }}
+              >
+                <Box
+                  style={{
+                    position: "absolute",
+                    top: isMobile ? "8px" : "12px",
+                    right: isMobile ? "8px" : "12px",
+                    zIndex: 10,
+                    padding: "4px",
+                  }}
+                >
+                  <ActionIcon
+                    color="red"
+                    onClick={() => handleRemoveCurrency(index)}
+                    size={isMobile ? "md" : "lg"}
+                  >
+                    <IconX size={isMobile ? 14 : 16} />
+                  </ActionIcon>
+                </Box>
+                <Stack
+                  gap={isMobile ? "xs" : "md"}
+                  style={{ paddingRight: isMobile ? "48px" : "56px" }}
+                >
                   <Select
                     label="Currency"
                     value={currency.code}
@@ -281,31 +306,22 @@ export default function OnboardingWizard({
                     searchable
                     size={isMobile ? "sm" : "md"}
                   />
-                  <Group align="flex-start" grow>
-                    <MoneyInput
-                      label="Exchange Rate"
-                      description={`1 ${baseCurrency} = X ${currency.code}`}
-                      value={currency.exchangeRate}
-                      onChange={(value) =>
-                        handleCurrencyChange(
-                          index,
-                          "exchangeRate",
-                          typeof value === "number" ? value : value.amount
-                        )
-                      }
-                      precision={4}
-                    />
-                    <Box style={{ display: "flex", alignItems: "flex-end" }}>
-                      <ActionIcon
-                        color="red"
-                        onClick={() => handleRemoveCurrency(index)}
-                        size={isMobile ? "md" : "lg"}
-                        mt={isMobile ? 16 : 24}
-                      >
-                        <IconTrash size={isMobile ? 14 : 16} />
-                      </ActionIcon>
-                    </Box>
-                  </Group>
+                  <MoneyInput
+                    label="Exchange Rate"
+                    description={`1 ${baseCurrency} = X ${currency.code}`}
+                    value={currency.exchangeRate}
+                    onChange={(value) =>
+                      handleCurrencyChange(
+                        index,
+                        "exchangeRate",
+                        typeof value === "number" ? value : value.amount
+                      )
+                    }
+                    precision={4}
+                    variant="light"
+                    showCurrencySelect={false}
+                    size={isMobile ? "sm" : "md"}
+                  />
                 </Stack>
               </Card>
             ))}
@@ -326,14 +342,39 @@ export default function OnboardingWizard({
           <Stack gap="md" mt={isMobile ? "md" : "xl"}>
             <Text size="sm" fw={500}>
               Cash and Bank Accounts
-              <Text size="xs" c="dimmed">
+              <Text size="xs" c="dimmed" component="span">
                 Add your cash, mobile money, and bank accounts with their
                 opening balances.
               </Text>
             </Text>
             {accounts.map((account, index) => (
-              <Card key={index} withBorder p={isMobile ? "xs" : "md"}>
-                <Stack gap={isMobile ? "xs" : "md"}>
+              <Card
+                key={index}
+                withBorder
+                p={isMobile ? "xs" : "md"}
+                style={{ position: "relative" }}
+              >
+                <Box
+                  style={{
+                    position: "absolute",
+                    top: isMobile ? "8px" : "12px",
+                    right: isMobile ? "8px" : "12px",
+                    zIndex: 10,
+                    padding: "4px",
+                  }}
+                >
+                  <ActionIcon
+                    color="red"
+                    onClick={() => handleRemoveAccount(index)}
+                    size={isMobile ? "md" : "lg"}
+                  >
+                    <IconX size={isMobile ? 14 : 16} />
+                  </ActionIcon>
+                </Box>
+                <Stack
+                  gap={isMobile ? "xs" : "md"}
+                  style={{ paddingRight: isMobile ? "48px" : "56px" }}
+                >
                   <TextInput
                     label="Account Name"
                     value={account.name}
@@ -359,47 +400,29 @@ export default function OnboardingWizard({
                     <MoneyInput
                       label="Balance"
                       value={account.balance}
-                      onChange={(value) =>
-                        handleAccountChange(
-                          index,
-                          "balance",
-                          typeof value === "number" ? value : value.amount
-                        )
-                      }
-                    />
-                  </Group>
-                  <Group align="flex-start">
-                    <Select
-                      label="Currency"
-                      value={account.currency}
-                      onChange={(value) =>
-                        value &&
-                        handleAccountChange(
-                          index,
-                          "currency",
-                          value as CurrencyCode
-                        )
-                      }
-                      data={[
+                      currency={account.currency}
+                      onChange={(value) => {
+                        if (typeof value === "object" && value !== null) {
+                          // If it's a Money object, update both balance and currency
+                          handleAccountChange(index, "balance", value.amount);
+                          handleAccountChange(
+                            index,
+                            "currency",
+                            value.currency
+                          );
+                        } else {
+                          // If it's just a number, only update balance
+                          handleAccountChange(index, "balance", value);
+                        }
+                      }}
+                      variant="light"
+                      showCurrencySelect={true}
+                      size={isMobile ? "sm" : "md"}
+                      customCurrencies={[
                         baseCurrency,
                         ...currencies.map((c) => c.code),
-                      ].map((code) => ({
-                        value: code,
-                        label: `${CURRENCY_INFO[code].flag} ${code}`,
-                      }))}
-                      style={{ flex: 1 }}
-                      size={isMobile ? "sm" : "md"}
+                      ]}
                     />
-                    <Box style={{ display: "flex", alignItems: "flex-end" }}>
-                      <ActionIcon
-                        color="red"
-                        onClick={() => handleRemoveAccount(index)}
-                        mt={isMobile ? 16 : 24}
-                        size={isMobile ? "md" : "lg"}
-                      >
-                        <IconTrash size={isMobile ? 14 : 16} />
-                      </ActionIcon>
-                    </Box>
                   </Group>
                 </Stack>
               </Card>

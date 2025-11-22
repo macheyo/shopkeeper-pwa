@@ -336,8 +336,10 @@ export default function NewPurchasePage() {
         totalAmount: totalPrice,
         timestamp: now.toISOString(),
         paymentMethod: paymentMethod,
-        supplierName: supplierName,
+        supplier: supplierName || undefined, // Use supplier to match type definition
         status: "pending", // Will be synced later via WhatsApp
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
       };
       await purchasesDB.put(purchaseDoc);
 
@@ -693,6 +695,8 @@ export default function NewPurchasePage() {
                           : value
                       )
                     }
+                    variant="light"
+                    size="md"
                   />
 
                   <MoneyInput
@@ -714,6 +718,8 @@ export default function NewPurchasePage() {
                           : value
                       )
                     }
+                    variant="light"
+                    size="md"
                   />
 
                   {productDetails[product._id] && (

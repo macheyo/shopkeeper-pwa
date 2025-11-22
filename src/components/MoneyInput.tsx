@@ -1,5 +1,13 @@
-import React, { useEffect } from "react";
-import { NumberInput, Group, Select, Text } from "@mantine/core";
+import React, { useEffect, useState } from "react";
+import {
+  NumberInput,
+  Group,
+  Select,
+  Text,
+  useMantineTheme,
+  Input,
+  TextInput,
+} from "@mantine/core";
 import { Money, CurrencyCode, CURRENCY_INFO } from "@/types/money";
 import { useMoneyContext } from "@/contexts/MoneyContext";
 import { IconExchange } from "@tabler/icons-react";
@@ -17,6 +25,9 @@ interface MoneyInputProps {
   disabled?: boolean;
   required?: boolean;
   error?: React.ReactNode;
+  variant?: "dark" | "light";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
+  customCurrencies?: CurrencyCode[];
 }
 
 export default function MoneyInput({
@@ -32,10 +43,30 @@ export default function MoneyInput({
   disabled,
   required,
   error,
+  variant = "dark",
+  size = "md",
+  customCurrencies,
 }: MoneyInputProps) {
+  const theme = useMantineTheme();
   // Get currency context
   const { baseCurrency, exchangeRates, availableCurrencies } =
     useMoneyContext();
+
+  // Use custom currencies if provided, otherwise use availableCurrencies from context
+  const currenciesToUse = customCurrencies || availableCurrencies;
+
+  // Theme colors based on variant
+  const isLight = variant === "light";
+  const borderColor = error
+    ? "red"
+    : isLight
+    ? theme.colors.gray[3]
+    : "#313131";
+  const backgroundColor = isLight ? theme.white : "rgba(255, 255, 255, 0.05)";
+  const textColor = isLight ? theme.black : "#fff";
+  const placeholderColor = isLight
+    ? "rgba(0, 0, 0, 0.5)"
+    : "rgba(255, 255, 255, 0.5)";
 
   // Handle both Money objects and plain numbers
   const amount = typeof value === "number" ? value : value.amount;
@@ -54,8 +85,32 @@ export default function MoneyInput({
     return `1 ${baseCurrency} = ${rate.toFixed(2)} ${currency}`;
   };
 
-  // Get currency data for dropdown from available currencies in settings
-  const currencyData = availableCurrencies.map((code) => ({
+  // State to track if input is focused and display value
+  const [isFocused, setIsFocused] = useState(false);
+  const [displayValue, setDisplayValue] = useState<string>("");
+
+  // Format number with thousands separators and 2 decimal places for money
+  const formatNumber = (value: number | string | undefined): string => {
+    if (value === undefined || value === null || value === "") return "";
+    const numValue = typeof value === "string" ? parseFloat(value) : value;
+    if (isNaN(numValue)) return "";
+
+    return new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true,
+    }).format(numValue);
+  };
+
+  // Initialize display value
+  useEffect(() => {
+    if (!isFocused) {
+      setDisplayValue(formatNumber(amount));
+    }
+  }, [amount, precision, isFocused]);
+
+  // Get currency data for dropdown from available currencies
+  const currencyData = currenciesToUse.map((code) => ({
     value: code,
     label: `${CURRENCY_INFO[code].symbol} ${code}`,
   }));
@@ -115,25 +170,50 @@ export default function MoneyInput({
           exchangeRate: exchangeRate,
         });
       }
+    } else if (typeof newAmount === "string") {
+      // Handle string input (for formatted values)
+      const cleaned = newAmount.replace(/[^\d.-]/g, "");
+      const parsed = parseFloat(cleaned);
+      if (!isNaN(parsed)) {
+        handleAmountChange(parsed);
+      }
     }
   };
 
-  return (
-    <>
-      {label && (
-        <div style={{ marginBottom: "5px" }}>
-          <Text size="md" fw={500}>
-            {label}
-            {required && <span style={{ color: "red" }}> *</span>}
-          </Text>
-          {description && (
-            <Text size="sm" color="dimmed">
-              {description}
-            </Text>
-          )}
-        </div>
-      )}
+  // Handle input focus - show raw number
+  const handleFocus = () => {
+    setIsFocused(true);
+    setDisplayValue(amount?.toString() || "");
+  };
 
+  // Handle input blur - format the number
+  const handleBlur = () => {
+    setIsFocused(false);
+    // Parse the current display value and update the amount
+    const cleaned = displayValue.replace(/[^\d.-]/g, "");
+    const parsed = parseFloat(cleaned);
+    if (!isNaN(parsed)) {
+      handleAmountChange(parsed);
+    }
+    setDisplayValue(formatNumber(amount));
+  };
+
+  // Handle input change while focused
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setDisplayValue(value);
+    // Allow typing, but don't update the actual amount until blur
+  };
+
+  return (
+    <Input.Wrapper
+      label={label}
+      description={description}
+      required={required}
+      error={error}
+      size={size}
+      style={{ width: "100%" }}
+    >
       <div
         style={{
           display: "flex",
@@ -141,8 +221,8 @@ export default function MoneyInput({
           height: "42px",
           borderRadius: "4px",
           overflow: "hidden",
-          border: `1px solid ${error ? "red" : "#313131"}`,
-          backgroundColor: "rgba(255, 255, 255, 0.05)",
+          border: `1px solid ${borderColor}`,
+          backgroundColor: backgroundColor,
         }}
       >
         {showCurrencySelect ? (
@@ -159,12 +239,24 @@ export default function MoneyInput({
               input: {
                 height: "40px",
                 border: "none",
-                borderRight: "1px solid #313131",
+                borderRight: `1px solid ${borderColor}`,
                 borderRadius: 0,
-                backgroundColor: "transparent",
-                color: "#fff",
+                backgroundColor: isLight ? theme.white : "transparent",
+                color: textColor,
                 paddingLeft: "16px",
                 fontSize: "16px",
+              },
+              dropdown: {
+                backgroundColor: isLight ? theme.white : theme.colors.dark[7],
+              },
+              option: {
+                backgroundColor: isLight ? theme.white : theme.colors.dark[7],
+                color: textColor,
+                "&:hover": {
+                  backgroundColor: isLight
+                    ? theme.colors.blue[0]
+                    : theme.colors.dark[6],
+                },
               },
             }}
           />
@@ -176,8 +268,8 @@ export default function MoneyInput({
               display: "flex",
               alignItems: "center",
               paddingLeft: "16px",
-              borderRight: "1px solid #313131",
-              color: "#fff",
+              borderRight: `1px solid ${borderColor}`,
+              color: textColor,
               fontSize: "16px",
             }}
           >
@@ -185,26 +277,26 @@ export default function MoneyInput({
           </div>
         )}
 
-        <NumberInput
-          value={amount}
-          onChange={handleAmountChange}
+        <TextInput
+          value={isFocused ? displayValue : formatNumber(amount)}
+          onChange={handleInputChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           placeholder={placeholder || "0"}
           disabled={disabled}
-          error={false}
-          hideControls
-          step={step}
-          decimalScale={precision}
+          type="text"
+          inputMode="decimal"
           styles={{
             root: { flex: 1 },
             input: {
               height: "40px",
               border: "none",
-              backgroundColor: "transparent",
-              color: "#fff",
+              backgroundColor: isLight ? theme.white : "transparent",
+              color: textColor,
               paddingLeft: "16px",
               fontSize: "16px",
               "::placeholder": {
-                color: "rgba(255, 255, 255, 0.5)",
+                color: placeholderColor,
               },
             },
           }}
@@ -219,12 +311,6 @@ export default function MoneyInput({
           </Text>
         </Group>
       )}
-
-      {error && (
-        <Text size="xs" color="red" mt={5}>
-          {error}
-        </Text>
-      )}
-    </>
+    </Input.Wrapper>
   );
 }
