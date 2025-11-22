@@ -34,6 +34,7 @@ import {
 import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
 import { createSaleEntry } from "@/lib/accounting";
+import { allocateInventoryFIFO } from "@/lib/inventory";
 import { ProductDoc, SaleItem, PaymentMethod } from "@/types";
 import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
@@ -292,21 +293,44 @@ export default function NewSalePage() {
       const saleId = `sale_${now.getTime()}`;
 
       const salesDB = await getSalesDB();
-      // Calculate total cost and profit
-      const totalCost = cartItems.reduce(
-        (acc, item) => ({
-          ...acc,
-          amount: acc.amount + item.costPrice.amount * item.qty,
-        }),
-        createMoney(0)
-      );
+      
+      // Allocate inventory using FIFO and track lots used
+      const saleItemsWithLots: SaleItem[] = [];
+      let totalCostAmount = 0;
+
+      for (const item of cartItems) {
+        // Allocate inventory using FIFO
+        const lotsUsed = await allocateInventoryFIFO(item.productId, item.qty);
+        
+        // Calculate cost from lots (FIFO cost)
+        const itemCost = lotsUsed.reduce((sum, lot) => {
+          return sum + lot.costPrice.amount * lot.quantity;
+        }, 0);
+
+        totalCostAmount += itemCost;
+
+        // Create sale item with lot tracking
+        saleItemsWithLots.push({
+          ...item,
+          costPrice: {
+            ...item.costPrice,
+            amount: itemCost / item.qty, // Average cost per unit
+          },
+          lotsUsed,
+        });
+      }
+
+      const totalCost = {
+        ...totalPrice,
+        amount: totalCostAmount,
+      };
 
       const profit = {
         ...totalPrice,
         amount: totalPrice.amount - totalCost.amount,
       };
 
-      // Update stock levels
+      // Update stock levels (for backward compatibility)
       const productsDB = await getProductsDB();
       for (const item of cartItems) {
         const product = products.find((p) => p._id === item.productId);
@@ -319,11 +343,11 @@ export default function NewSalePage() {
         }
       }
 
-      // Save the sale
+      // Save the sale with lot tracking
       const saleDoc = {
         _id: saleId,
         type: "sale",
-        items: cartItems,
+        items: saleItemsWithLots,
         totalAmount: totalPrice,
         totalCost: totalCost,
         profit: profit,
@@ -332,6 +356,8 @@ export default function NewSalePage() {
         change: paymentMethod === "cash" ? change : undefined,
         timestamp: now.toISOString(),
         status: "pending", // Will be synced later via WhatsApp
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
       };
       await salesDB.put(saleDoc);
 

@@ -356,7 +356,7 @@ export default function DateFilter({
           style={{
             padding: "10px",
             borderRadius: "8px",
-            backgroundColor: "var(--mantine-color-default)",
+            backgroundColor: "var(--mantine-color-gray-0)",
             marginBottom: "10px",
           }}
         >
@@ -503,6 +503,21 @@ export default function DateFilter({
           data={basicOptions}
           size="xs"
           radius="md"
+          styles={(theme) => ({
+            root: {
+              backgroundColor: theme.colors.gray[0],
+            },
+            indicator: {
+              backgroundColor: theme.white,
+              boxShadow: theme.shadows.sm,
+            },
+            label: {
+              color: theme.colors.gray[7],
+              "&[data-active]": {
+                color: theme.colors.blue[7],
+              },
+            },
+          })}
         />
 
         <Menu shadow="md" width={200}>

@@ -61,6 +61,23 @@ export interface PurchaseItem {
   total: Money;
 }
 
+export interface InventoryLot {
+  _id: string;
+  _rev?: string;
+  type: "inventory_lot";
+  productId: string;
+  productName: string;
+  productCode: string;
+  purchaseRunId: string;
+  purchaseTimestamp: string;
+  quantity: number; // Original quantity purchased
+  remainingQuantity: number; // How much is left (for FIFO tracking)
+  costPrice: Money;
+  supplier?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PurchaseDoc {
   _id: string;
   _rev?: string;
@@ -86,6 +103,13 @@ export interface SaleItem {
   costPrice: Money;
   total: Money;
   purchaseDate?: string;
+  // FIFO lot tracking
+  lotsUsed?: Array<{
+    lotId: string;
+    purchaseRunId: string;
+    quantity: number;
+    costPrice: Money;
+  }>;
 }
 
 export interface SaleDoc {

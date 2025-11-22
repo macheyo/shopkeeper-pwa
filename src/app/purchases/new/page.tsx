@@ -35,6 +35,7 @@ import {
 import { useRouter } from "next/navigation";
 import { getPurchasesDB, getProductsDB } from "@/lib/databases";
 import { createPurchaseEntry } from "@/lib/accounting";
+import { createInventoryLots } from "@/lib/inventory";
 import { ProductDoc, PurchaseItem, PaymentMethod } from "@/types";
 import { formatMoney, createMoney, Money, BASE_CURRENCY } from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
@@ -342,6 +343,14 @@ export default function NewPurchasePage() {
         updatedAt: now.toISOString(),
       };
       await purchasesDB.put(purchaseDoc);
+
+      // Create inventory lots for FIFO tracking
+      await createInventoryLots(
+        purchaseRunId,
+        now.toISOString(),
+        cartItems,
+        supplierName || undefined
+      );
 
       // Create ledger entry for the purchase
       await createPurchaseEntry(

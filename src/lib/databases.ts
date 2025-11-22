@@ -3,6 +3,7 @@ export let salesDB: PouchDB.Database;
 export let purchasesDB: PouchDB.Database;
 export let cashInHandDB: PouchDB.Database;
 export let ledgerDB: PouchDB.Database;
+export let inventoryLotsDB: PouchDB.Database;
 
 export async function getProductsDB(): Promise<PouchDB.Database> {
   try {
@@ -232,6 +233,64 @@ export async function getPurchasesDB(): Promise<PouchDB.Database> {
     console.error("Error initializing purchases database:", err);
     throw new Error(
       `Failed to initialize purchases database: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+}
+
+export async function getInventoryLotsDB(): Promise<PouchDB.Database> {
+  try {
+    if (!inventoryLotsDB) {
+      if (typeof window === "undefined") {
+        throw new Error(
+          "PouchDB operations are only supported in browser environment. For server-side operations, consider using a different database or API endpoints."
+        );
+      }
+
+      // Browser environment
+      const PouchDB = (await import("pouchdb-browser")).default;
+      const PouchDBFind = await import("pouchdb-find");
+      const crypto = await import("crypto-pouch");
+      PouchDB.plugin(PouchDBFind.default);
+      PouchDB.plugin(crypto.default);
+
+      inventoryLotsDB = new PouchDB("inventory_lots");
+
+      const DB_KEY = process.env.NEXT_PUBLIC_DB_KEY || "default-insecure-key";
+      if (DB_KEY && DB_KEY !== "default-insecure-key") {
+        await inventoryLotsDB.crypto(DB_KEY);
+      }
+
+      // Create indexes for product and purchase run queries
+      try {
+        // Index for querying by productId with remainingQuantity filter
+        await inventoryLotsDB.createIndex({
+          index: {
+            fields: ["type", "productId", "remainingQuantity"],
+            name: "inventory_lots_product_index",
+          },
+        });
+        // Index for querying by purchaseRunId
+        await inventoryLotsDB.createIndex({
+          index: {
+            fields: ["type", "purchaseRunId"],
+            name: "inventory_lots_purchase_run_index",
+          },
+        });
+      } catch (err) {
+        console.error("Error creating inventory lots index:", err);
+        // Don't throw here as the index might already exist
+      }
+
+      // Verify database is accessible
+      await inventoryLotsDB.info();
+    }
+    return inventoryLotsDB;
+  } catch (err) {
+    console.error("Error initializing inventory lots database:", err);
+    throw new Error(
+      `Failed to initialize inventory lots database: ${
         err instanceof Error ? err.message : String(err)
       }`
     );

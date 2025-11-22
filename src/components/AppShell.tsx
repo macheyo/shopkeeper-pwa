@@ -287,14 +287,13 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
               top: 70, // Below the header
               zIndex: 100,
               width: "100%",
-              backgroundColor: "var(--mantine-color-body)",
+              backgroundColor: "var(--mantine-color-gray-0)",
               boxShadow: "var(--mantine-shadow-xs)",
               padding: "12px 16px",
               borderBottom: "1px solid var(--mantine-color-default-border)",
               marginBottom: "16px",
               transition: "all 0.3s ease",
               backdropFilter: "blur(10px)",
-              background: "var(--mantine-color-dark-filled)",
             }}
           >
             <DateFilter />
