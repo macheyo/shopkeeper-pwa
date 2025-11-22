@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-  NumberInput,
   Group,
   Select,
   Text,
@@ -76,9 +75,6 @@ export default function MoneyInput({
       ? value.currency
       : baseCurrency);
   const exchangeRate = exchangeRates[currency] || 1;
-
-  // Calculate step based on precision
-  const step = 1 / Math.pow(10, precision);
 
   // Format exchange rate for display
   const formatExchangeRate = (rate: number) => {

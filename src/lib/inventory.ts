@@ -1,6 +1,12 @@
 import { getInventoryLotsDB } from "./databases";
-import { InventoryLot, PurchaseItem, SaleItem, Money } from "@/types";
-import { createMoney } from "@/types/money";
+import {
+  InventoryLot,
+  PurchaseItem,
+  SaleItem,
+  PurchaseDoc,
+  SaleDoc,
+} from "@/types";
+import { Money } from "@/types/money";
 
 /**
  * Create inventory lots from a purchase
@@ -176,7 +182,7 @@ export async function getSalesForPurchaseRun(
     },
   });
 
-  const relevantSales = (allSales.docs as any[]).filter((sale) => {
+  const relevantSales = (allSales.docs as SaleDoc[]).filter((sale) => {
     return sale.items?.some((item: SaleItem) =>
       item.lotsUsed?.some((lot) => lot.purchaseRunId === purchaseRunId)
     );
@@ -389,13 +395,15 @@ export async function getPurchaseRunProgress(purchaseRunId: string): Promise<{
   // We need to get the purchase document to get intended selling prices
   const { getPurchasesDB } = await import("./databases");
   const purchasesDB = await getPurchasesDB();
-  const purchaseDoc = await purchasesDB.get(purchaseRunId).catch(() => null);
+  const purchaseDoc = (await purchasesDB
+    .get(purchaseRunId)
+    .catch(() => null)) as PurchaseDoc | null;
 
   let expectedRevenueAmount = 0;
   let expectedProfitAmount = 0;
 
-  if (purchaseDoc && (purchaseDoc as any).items) {
-    const purchaseItems = (purchaseDoc as any).items;
+  if (purchaseDoc && purchaseDoc.items) {
+    const purchaseItems = purchaseDoc.items;
     for (const item of purchaseItems) {
       const costAmount = item.costPrice.amount * item.qty;
       const sellingAmount = item.intendedSellingPrice

@@ -41,13 +41,7 @@ import { useDateFilter } from "@/contexts/DateFilterContext";
 import ProductManager from "@/components/ProductManager";
 import AccountsView from "@/components/AccountsView";
 import { generateTrialBalance } from "@/lib/accounting";
-import {
-  TrialBalance,
-  AccountType,
-  AccountCode,
-  LedgerEntryDoc,
-} from "@/types/accounting";
-import { convertMoneyWithRates } from "@/types/money";
+import { TrialBalance, AccountCode, LedgerEntryDoc } from "@/types/accounting";
 import { getPurchaseRunProgress } from "@/lib/inventory";
 
 // Component to display purchase run items with progress
@@ -150,7 +144,7 @@ function PurchaseRunItemsTable({
             const itemProgress = getItemProgress(item.productId);
 
             return (
-              <Card key={`${purchase._id}_${idx}`} withBorder p="sm" size="sm">
+              <Card key={`${purchase._id}_${idx}`} withBorder p="sm">
                 <Stack gap="xs">
                   <div>
                     <Text fw={600} size="sm">
@@ -522,7 +516,7 @@ function PurchaseRunProgressCard({
             {isMobile ? (
               <Stack gap="xs">
                 {progress.items.map((item) => (
-                  <Card key={item.productId} withBorder p="xs" size="xs">
+                  <Card key={item.productId} withBorder p="xs">
                     <Stack gap={4}>
                       <Text size="xs" fw={600}>
                         {item.productName}
@@ -558,7 +552,7 @@ function PurchaseRunProgressCard({
               </Stack>
             ) : (
               <ScrollArea>
-                <Table size="xs" withColumnBorders>
+                <Table withColumnBorders>
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>Product</Table.Th>
@@ -1654,7 +1648,8 @@ export default function ReportsPage() {
           // Check both supplier and supplierName fields (for backward compatibility with old purchases)
           const supplier =
             firstPurchase.supplier ||
-            (firstPurchase as any).supplierName ||
+            (firstPurchase as PurchaseDoc & { supplierName?: string })
+              .supplierName ||
             "Not specified";
           const paymentMethod = firstPurchase.paymentMethod;
 
