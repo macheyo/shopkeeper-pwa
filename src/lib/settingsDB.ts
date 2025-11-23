@@ -2,6 +2,9 @@
 
 // Don't import PouchDB at the top level to avoid server-side issues
 export let settingsDB: PouchDB.Database;
+let settingsDBPromise: Promise<PouchDB.Database> | null = null;
+let pouchDBInitialized = false;
+let pouchDBInitPromise: Promise<void> | null = null;
 
 export interface ShopSettings {
   _id: string;
@@ -27,8 +30,19 @@ export interface ShopSettings {
 }
 
 export async function getSettingsDB(): Promise<PouchDB.Database> {
-  try {
-    if (!settingsDB) {
+  // If database is already initialized, return it
+  if (settingsDB) {
+    return settingsDB;
+  }
+
+  // If initialization is in progress, wait for it
+  if (settingsDBPromise) {
+    return settingsDBPromise;
+  }
+
+  // Start initialization
+  settingsDBPromise = (async () => {
+    try {
       // This is a browser-only module
       if (typeof window === "undefined") {
         throw new Error(
@@ -36,14 +50,30 @@ export async function getSettingsDB(): Promise<PouchDB.Database> {
         );
       }
 
-      // Dynamically import PouchDB only in browser environment
+      // Initialize PouchDB plugins only once (shared across all databases)
+      if (!pouchDBInitialized) {
+        if (pouchDBInitPromise) {
+          await pouchDBInitPromise;
+        } else {
+          pouchDBInitPromise = (async () => {
+            const PouchDB = (await import("pouchdb-browser")).default;
+            const PouchDBFind = await import("pouchdb-find");
+            const crypto = await import("crypto-pouch");
+
+            // Only register plugins if not already registered
+            if (!(PouchDB as any).__pluginsRegistered) {
+              PouchDB.plugin(PouchDBFind.default);
+              PouchDB.plugin(crypto.default);
+              (PouchDB as any).__pluginsRegistered = true;
+            }
+            pouchDBInitialized = true;
+          })();
+          await pouchDBInitPromise;
+        }
+      }
+
+      // Dynamically import PouchDB (plugins are already registered)
       const PouchDB = (await import("pouchdb-browser")).default;
-      const PouchDBFind = await import("pouchdb-find");
-      const crypto = await import("crypto-pouch");
-
-      PouchDB.plugin(PouchDBFind.default);
-      PouchDB.plugin(crypto.default);
-
       settingsDB = new PouchDB("settings");
 
       const DB_KEY = process.env.NEXT_PUBLIC_DB_KEY || "default-insecure-key";
@@ -65,16 +95,21 @@ export async function getSettingsDB(): Promise<PouchDB.Database> {
 
       // Verify database is accessible
       await settingsDB.info();
+
+      return settingsDB;
+    } catch (err) {
+      // Reset promise on error so it can be retried
+      settingsDBPromise = null;
+      console.error("Error initializing settings database:", err);
+      throw new Error(
+        `Failed to initialize settings database: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     }
-    return settingsDB;
-  } catch (err) {
-    console.error("Error initializing settings database:", err);
-    throw new Error(
-      `Failed to initialize settings database: ${
-        err instanceof Error ? err.message : String(err)
-      }`
-    );
-  }
+  })();
+
+  return settingsDBPromise;
 }
 
 export async function getShopSettings(): Promise<ShopSettings | null> {

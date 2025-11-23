@@ -7,7 +7,14 @@ import {
   Input,
   TextInput,
 } from "@mantine/core";
-import { Money, CurrencyCode, CURRENCY_INFO } from "@/types/money";
+import {
+  Money,
+  CurrencyCode,
+  CURRENCY_INFO,
+  createMoney,
+  formatMoney,
+  BASE_CURRENCY,
+} from "@/types/money";
 import { useMoneyContext } from "@/contexts/MoneyContext";
 import { IconExchange } from "@tabler/icons-react";
 
@@ -76,9 +83,21 @@ export default function MoneyInput({
       : baseCurrency);
   const exchangeRate = exchangeRates[currency] || 1;
 
-  // Format exchange rate for display
-  const formatExchangeRate = (rate: number) => {
-    return `1 ${baseCurrency} = ${rate.toFixed(2)} ${currency}`;
+  // Calculate equivalent amount in base currency
+  const getEquivalentInBaseCurrency = (): Money | null => {
+    if (currency === baseCurrency) return null;
+
+    if (typeof value === "object" && value !== null) {
+      // Convert to base currency
+      const amountInBase = value.amount / value.exchangeRate;
+      return createMoney(amountInBase, baseCurrency, 1);
+    } else if (typeof value === "number") {
+      // If value is a number, assume it's already in the selected currency
+      const amountInBase = value / exchangeRate;
+      return createMoney(amountInBase, baseCurrency, 1);
+    }
+
+    return null;
   };
 
   // State to track if input is focused and display value
@@ -117,31 +136,35 @@ export default function MoneyInput({
     console.log("Current currency:", currency);
   }, [value, currency]);
 
-  // Handle currency change with robust implementation
+  // Handle currency change with auto-conversion
   const handleCurrencyChange = (newCurrency: string | null) => {
-    console.log("Currency selected:", newCurrency);
     if (!newCurrency) return;
 
     const newCurrencyCode = newCurrency as CurrencyCode;
     const newExchangeRate = exchangeRates[newCurrencyCode] || 1;
 
     if (typeof value === "object" && value !== null) {
-      // If value is a Money object, update its currency and exchange rate
+      // Convert amount from old currency to new currency
+      // First convert to base currency, then to new currency
+      const amountInBase = value.amount / value.exchangeRate;
+      const amountInNewCurrency = amountInBase * newExchangeRate;
+
       const updatedValue = {
-        ...value,
+        amount: amountInNewCurrency,
         currency: newCurrencyCode,
         exchangeRate: newExchangeRate,
       };
-      console.log("Updating Money object:", updatedValue);
       onChange(updatedValue);
     } else {
-      // If value is a number or something else, create a new Money object
+      // If value is a number, assume it's in base currency and convert
+      const amountInBase = typeof value === "number" ? value : 0;
+      const amountInNewCurrency = amountInBase * newExchangeRate;
+
       const newValue = {
-        amount: typeof value === "number" ? value : 0,
+        amount: amountInNewCurrency,
         currency: newCurrencyCode,
         exchangeRate: newExchangeRate,
       };
-      console.log("Creating new Money object:", newValue);
       onChange(newValue);
     }
   };
@@ -217,8 +240,12 @@ export default function MoneyInput({
           height: "42px",
           borderRadius: "4px",
           overflow: "hidden",
-          border: `1px solid ${borderColor}`,
-          backgroundColor: backgroundColor,
+          border: `1px solid ${error ? theme.colors.red[6] : borderColor}`,
+          backgroundColor: error
+            ? isLight
+              ? theme.colors.red[0]
+              : theme.colors.dark[7]
+            : backgroundColor,
         }}
       >
         {showCurrencySelect ? (
@@ -235,7 +262,9 @@ export default function MoneyInput({
               input: {
                 height: "40px",
                 border: "none",
-                borderRight: `1px solid ${borderColor}`,
+                borderRight: `1px solid ${
+                  error ? theme.colors.red[6] : borderColor
+                }`,
                 borderRadius: 0,
                 backgroundColor: isLight ? theme.white : "transparent",
                 color: textColor,
@@ -264,7 +293,9 @@ export default function MoneyInput({
               display: "flex",
               alignItems: "center",
               paddingLeft: "16px",
-              borderRight: `1px solid ${borderColor}`,
+              borderRight: `1px solid ${
+                error ? theme.colors.red[6] : borderColor
+              }`,
               color: textColor,
               fontSize: "16px",
             }}
@@ -282,12 +313,19 @@ export default function MoneyInput({
           disabled={disabled}
           type="text"
           inputMode="decimal"
+          error={error ? true : undefined}
           styles={{
             root: { flex: 1 },
             input: {
               height: "40px",
               border: "none",
-              backgroundColor: isLight ? theme.white : "transparent",
+              backgroundColor: error
+                ? isLight
+                  ? theme.colors.red[0]
+                  : theme.colors.dark[7]
+                : isLight
+                ? theme.white
+                : "transparent",
               color: textColor,
               paddingLeft: "16px",
               fontSize: "16px",
@@ -299,14 +337,21 @@ export default function MoneyInput({
         />
       </div>
 
-      {showExchangeRate && currency !== baseCurrency && (
-        <Group gap="xs" mt={5}>
-          <IconExchange size={16} color="#ccc" />
-          <Text size="sm" color="dimmed">
-            {formatExchangeRate(exchangeRate)}
-          </Text>
-        </Group>
-      )}
+      {showExchangeRate &&
+        currency !== baseCurrency &&
+        (() => {
+          const equivalent = getEquivalentInBaseCurrency();
+          if (!equivalent) return null;
+
+          return (
+            <Group gap="xs" mt={5}>
+              <IconExchange size={16} color="#ccc" />
+              <Text size="sm" color="dimmed">
+                ≈ {formatMoney(equivalent)}
+              </Text>
+            </Group>
+          );
+        })()}
     </Input.Wrapper>
   );
 }

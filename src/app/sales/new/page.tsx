@@ -28,8 +28,9 @@ import {
   IconShoppingCart,
   IconAlertCircle,
   IconCheck,
-  IconTrash,
+  IconX,
   IconReceipt,
+  IconEdit,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getSalesDB, getProductsDB } from "@/lib/databases";
@@ -70,6 +71,13 @@ export default function NewSalePage() {
     change: Money;
     timestamp: string;
     paymentMethod: PaymentMethod;
+  } | null>(null);
+  const [editingCartItemIndex, setEditingCartItemIndex] = useState<
+    number | null
+  >(null);
+  const [editCartItemForm, setEditCartItemForm] = useState<{
+    quantity: number;
+    price: Money;
   } | null>(null);
 
   const form = useForm({
@@ -175,6 +183,25 @@ export default function NewSalePage() {
   const handleAddSelectedToCart = () => {
     if (selectedProducts.length === 0) return;
 
+    // Validate profitability before adding to cart
+    const unprofitableItems: string[] = [];
+    selectedProducts.forEach((product) => {
+      const costAmount = (product.costPrice || createMoney(0)).amount;
+      const sellingAmount = product.price.amount;
+      if (sellingAmount <= costAmount) {
+        unprofitableItems.push(product.name);
+      }
+    });
+
+    if (unprofitableItems.length > 0) {
+      setError(
+        `The following items are not profitable (selling price must be greater than cost price): ${unprofitableItems.join(
+          ", "
+        )}`
+      );
+      return;
+    }
+
     const newItems: SaleItem[] = selectedProducts.map((product) => {
       const quantity = form.values.quantity;
 
@@ -210,6 +237,57 @@ export default function NewSalePage() {
     const newCartItems = [...cartItems];
     newCartItems.splice(index, 1);
     setCartItems(newCartItems);
+  };
+
+  const handleEditCartItem = (index: number) => {
+    const item = cartItems[index];
+    setEditCartItemForm({
+      quantity: item.qty,
+      price: item.price,
+    });
+    setEditingCartItemIndex(index);
+  };
+
+  const handleSaveCartItemEdit = () => {
+    if (editingCartItemIndex === null || !editCartItemForm) return;
+
+    // Validate profitability
+    const item = cartItems[editingCartItemIndex];
+    const costAmount = item.costPrice.amount;
+    if (editCartItemForm.price.amount <= costAmount) {
+      setError("Selling price must be greater than cost price");
+      return;
+    }
+
+    const itemTotal = {
+      ...editCartItemForm.price,
+      amount: editCartItemForm.price.amount * editCartItemForm.quantity,
+    };
+
+    const updatedItem: SaleItem = {
+      ...item,
+      qty: editCartItemForm.quantity,
+      price: editCartItemForm.price,
+      total: itemTotal,
+    };
+
+    const newCartItems = [...cartItems];
+    newCartItems[editingCartItemIndex] = updatedItem;
+    setCartItems(newCartItems);
+    setEditingCartItemIndex(null);
+    setEditCartItemForm(null);
+    setError(null);
+
+    // Recalculate change if cash payment
+    if (paymentMethod === "cash") {
+      const totalInBase = convertToBaseCurrency(calculateTotalPrice());
+      const receivedInBase = convertToBaseCurrency(cashReceivedMoney);
+      const changeAmount = receivedInBase.amount - totalInBase.amount;
+      setChange({
+        ...cashReceivedMoney,
+        amount: Math.max(0, changeAmount * cashReceivedMoney.exchangeRate),
+      });
+    }
   };
 
   // Calculate total price for all items in the cart
@@ -248,7 +326,16 @@ export default function NewSalePage() {
     };
   };
 
-  // Check if payment is sufficient
+  // Check if sale is profitable (selling price > cost price for all items)
+  const isSaleProfitable = () => {
+    return cartItems.every((item) => {
+      const costAmount = item.costPrice.amount;
+      const sellingAmount = item.price.amount;
+      return sellingAmount > costAmount;
+    });
+  };
+
+  // Check if payment is sufficient and calculate change
   const isPaymentSufficient = () => {
     if (paymentMethod !== "cash") return true;
 
@@ -258,9 +345,11 @@ export default function NewSalePage() {
 
     // Calculate change in the payment currency
     const changeAmount = receivedInBase.amount - totalInBase.amount;
+
+    // Always calculate and set change, even if negative (will show error)
     setChange({
       ...cashReceivedMoney,
-      amount: changeAmount * cashReceivedMoney.exchangeRate,
+      amount: Math.max(0, changeAmount * cashReceivedMoney.exchangeRate),
     });
 
     return receivedInBase.amount >= totalInBase.amount;
@@ -274,6 +363,14 @@ export default function NewSalePage() {
 
     if (cartItems.length === 0) {
       setError("Please add at least one product to the cart");
+      return;
+    }
+
+    // Validate profitability
+    if (!isSaleProfitable()) {
+      setError(
+        "Sale is not profitable. Selling price must be greater than cost price for all items."
+      );
       return;
     }
 
@@ -293,7 +390,7 @@ export default function NewSalePage() {
       const saleId = `sale_${now.getTime()}`;
 
       const salesDB = await getSalesDB();
-      
+
       // Allocate inventory using FIFO and track lots used
       const saleItemsWithLots: SaleItem[] = [];
       let totalCostAmount = 0;
@@ -301,7 +398,7 @@ export default function NewSalePage() {
       for (const item of cartItems) {
         // Allocate inventory using FIFO
         const lotsUsed = await allocateInventoryFIFO(item.productId, item.qty);
-        
+
         // Calculate cost from lots (FIFO cost)
         const itemCost = lotsUsed.reduce((sum, lot) => {
           return sum + lot.costPrice.amount * lot.quantity;
@@ -471,13 +568,22 @@ export default function NewSalePage() {
               <Card key={`${item.productId}_${index}`} withBorder p="sm">
                 <Group justify="space-between" mb="xs">
                   <Text fw={700}>{item.productName}</Text>
-                  <ActionIcon
-                    color="red"
-                    variant="light"
-                    onClick={() => handleRemoveFromCart(index)}
-                  >
-                    <IconTrash size="1.125rem" />
-                  </ActionIcon>
+                  <Group gap="xs">
+                    <ActionIcon
+                      color="blue"
+                      variant="light"
+                      onClick={() => handleEditCartItem(index)}
+                    >
+                      <IconEdit size="1.125rem" />
+                    </ActionIcon>
+                    <ActionIcon
+                      color="red"
+                      variant="light"
+                      onClick={() => handleRemoveFromCart(index)}
+                    >
+                      <IconX size="1.125rem" />
+                    </ActionIcon>
+                  </Group>
                 </Group>
                 <Group justify="space-between" mb="xs">
                   <Text size="sm">Quantity:</Text>
@@ -516,6 +622,18 @@ export default function NewSalePage() {
                     : value;
                 setCashReceivedMoney(newMoney);
                 form.setFieldValue("cashReceived", newMoney.amount);
+
+                // Auto-calculate change when cash received changes
+                if (paymentMethod === "cash") {
+                  const totalInBase = convertToBaseCurrency(totalPrice);
+                  const receivedInBase = convertToBaseCurrency(newMoney);
+                  const changeAmount =
+                    receivedInBase.amount - totalInBase.amount;
+                  setChange({
+                    ...newMoney,
+                    amount: Math.max(0, changeAmount * newMoney.exchangeRate),
+                  });
+                }
               }}
               variant="light"
               size="md"
@@ -740,6 +858,122 @@ export default function NewSalePage() {
             size="lg"
           >
             Add to Cart
+          </Button>
+        </Group>
+      </Drawer>
+
+      {/* Edit Cart Item Drawer */}
+      <Drawer
+        opened={editingCartItemIndex !== null}
+        onClose={() => {
+          setEditingCartItemIndex(null);
+          setEditCartItemForm(null);
+          setError(null);
+        }}
+        title="Edit Cart Item"
+        position="bottom"
+        size="lg"
+      >
+        {editingCartItemIndex !== null && editCartItemForm && (
+          <ScrollArea h={400} offsetScrollbars>
+            <Stack gap="md">
+              <Card withBorder p="md">
+                <Text fw={700} size="lg" mb="md">
+                  {cartItems[editingCartItemIndex].productName}
+                </Text>
+                <Text size="sm" c="dimmed" mb="lg">
+                  Code: {cartItems[editingCartItemIndex].productCode}
+                </Text>
+
+                <Stack gap="md">
+                  <Group justify="space-between" align="center">
+                    <Text fw={500}>Quantity:</Text>
+                    <NumberInput
+                      value={editCartItemForm.quantity}
+                      onChange={(value) =>
+                        setEditCartItemForm({
+                          ...editCartItemForm,
+                          quantity: Number(value) || 1,
+                        })
+                      }
+                      min={1}
+                      size="md"
+                      style={{ width: "120px" }}
+                    />
+                  </Group>
+
+                  <MoneyInput
+                    label="Selling Price"
+                    description="Price per unit"
+                    value={editCartItemForm.price}
+                    onChange={(value) =>
+                      setEditCartItemForm({
+                        ...editCartItemForm,
+                        price:
+                          typeof value === "number"
+                            ? { ...editCartItemForm.price, amount: value }
+                            : value,
+                      })
+                    }
+                    variant="light"
+                    size="md"
+                  />
+
+                  <Group justify="space-between">
+                    <Text fw={500}>Total:</Text>
+                    <Text fw={700}>
+                      {formatMoney({
+                        ...editCartItemForm.price,
+                        amount:
+                          editCartItemForm.price.amount *
+                          editCartItemForm.quantity,
+                      })}
+                    </Text>
+                  </Group>
+
+                  <Group justify="space-between">
+                    <Text fw={500}>Cost Price:</Text>
+                    <Text c="dimmed">
+                      {formatMoney(cartItems[editingCartItemIndex].costPrice)}
+                    </Text>
+                  </Group>
+
+                  <Group justify="space-between">
+                    <Text fw={500}>Profit per Unit:</Text>
+                    <Text fw={700} c="green">
+                      {formatMoney({
+                        ...editCartItemForm.price,
+                        amount:
+                          editCartItemForm.price.amount -
+                          cartItems[editingCartItemIndex].costPrice.amount,
+                      })}
+                    </Text>
+                  </Group>
+                </Stack>
+              </Card>
+            </Stack>
+          </ScrollArea>
+        )}
+
+        <Group mt="xl">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setEditingCartItemIndex(null);
+              setEditCartItemForm(null);
+              setError(null);
+            }}
+            style={{ flex: 1 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="green"
+            onClick={handleSaveCartItemEdit}
+            style={{ flex: 2 }}
+            size="lg"
+          >
+            Save Changes
           </Button>
         </Group>
       </Drawer>

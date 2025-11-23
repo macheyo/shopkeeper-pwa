@@ -29,17 +29,29 @@ import {
   IconShoppingBag,
   IconAlertCircle,
   IconCheck,
-  IconTrash,
+  IconX,
   IconReceipt,
+  IconEdit,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getPurchasesDB, getProductsDB } from "@/lib/databases";
-import { createPurchaseEntry } from "@/lib/accounting";
+import { createPurchaseEntry, generateTrialBalance } from "@/lib/accounting";
 import { createInventoryLots } from "@/lib/inventory";
 import { ProductDoc, PurchaseItem, PaymentMethod } from "@/types";
-import { formatMoney, createMoney, Money, BASE_CURRENCY } from "@/types/money";
+import {
+  formatMoney,
+  createMoney,
+  Money,
+  BASE_CURRENCY,
+  CurrencyCode,
+  convertMoneyWithRates,
+} from "@/types/money";
 import MoneyInput from "@/components/MoneyInput";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
+import { AccountCode } from "@/types/accounting";
+import { getShopSettings } from "@/lib/settingsDB";
+import { getLedgerDB } from "@/lib/databases";
+import { LedgerEntryDoc } from "@/types/accounting";
 import dynamic from "next/dynamic";
 
 const BarcodeScanner = dynamic(() => import("@/components/BarcodeScanner"), {
@@ -68,6 +80,17 @@ export default function NewPurchasePage() {
     paymentMethod: PaymentMethod;
     supplierName: string;
   } | null>(null);
+  const [editingCartItemIndex, setEditingCartItemIndex] = useState<
+    number | null
+  >(null);
+  const [editCartItemForm, setEditCartItemForm] = useState<{
+    quantity: number;
+    costPrice: Money;
+    sellingPrice: Money;
+  } | null>(null);
+  const [paymentMethodError, setPaymentMethodError] = useState<string | null>(
+    null
+  );
 
   const form = useForm({
     initialValues: {
@@ -213,6 +236,24 @@ export default function NewPurchasePage() {
   const handleAddSelectedToCart = () => {
     if (selectedProducts.length === 0) return;
 
+    // Validate profitability before adding to cart
+    const unprofitableItems: string[] = [];
+    selectedProducts.forEach((product) => {
+      const details = productDetails[product._id];
+      if (details.sellingPrice.amount <= details.costPrice.amount) {
+        unprofitableItems.push(product.name);
+      }
+    });
+
+    if (unprofitableItems.length > 0) {
+      setError(
+        `The following items are not profitable (selling price must be greater than cost price): ${unprofitableItems.join(
+          ", "
+        )}`
+      );
+      return;
+    }
+
     const newItems: PurchaseItem[] = selectedProducts.map((product) => {
       const details = productDetails[product._id];
       const quantity = details.quantity;
@@ -257,6 +298,56 @@ export default function NewPurchasePage() {
     setCartItems(newCartItems);
   };
 
+  const handleEditCartItem = (index: number) => {
+    const item = cartItems[index];
+    setEditCartItemForm({
+      quantity: item.qty,
+      costPrice: item.costPrice,
+      sellingPrice: item.intendedSellingPrice,
+    });
+    setEditingCartItemIndex(index);
+  };
+
+  const handleSaveCartItemEdit = () => {
+    if (editingCartItemIndex === null || !editCartItemForm) return;
+
+    // Validate profitability
+    if (
+      editCartItemForm.sellingPrice.amount <= editCartItemForm.costPrice.amount
+    ) {
+      setError("Selling price must be greater than cost price");
+      return;
+    }
+
+    const item = cartItems[editingCartItemIndex];
+    const itemTotal = {
+      ...editCartItemForm.costPrice,
+      amount: editCartItemForm.costPrice.amount * editCartItemForm.quantity,
+    };
+    const expectedProfit = {
+      ...editCartItemForm.sellingPrice,
+      amount:
+        editCartItemForm.sellingPrice.amount -
+        editCartItemForm.costPrice.amount,
+    };
+
+    const updatedItem: PurchaseItem = {
+      ...item,
+      qty: editCartItemForm.quantity,
+      costPrice: editCartItemForm.costPrice,
+      intendedSellingPrice: editCartItemForm.sellingPrice,
+      total: itemTotal,
+      expectedProfit: expectedProfit,
+    };
+
+    const newCartItems = [...cartItems];
+    newCartItems[editingCartItemIndex] = updatedItem;
+    setCartItems(newCartItems);
+    setEditingCartItemIndex(null);
+    setEditCartItemForm(null);
+    setError(null);
+  };
+
   // Calculate total price for all items in the cart
   // Convert money to base currency
   const convertToBaseCurrency = (money: Money): Money => {
@@ -292,6 +383,175 @@ export default function NewPurchasePage() {
 
   const totalPrice = calculateTotalPrice();
 
+  // Check if purchase is profitable (selling price > cost price for all items)
+  const isPurchaseProfitable = () => {
+    return cartItems.every((item) => {
+      const costAmount = item.costPrice.amount;
+      const sellingAmount = item.intendedSellingPrice.amount;
+      return sellingAmount > costAmount;
+    });
+  };
+
+  // Check if sufficient funds available for non-credit payments
+  const hasSufficientFunds = async (): Promise<boolean> => {
+    if (paymentMethod === "credit") return true;
+
+    try {
+      const settings = await getShopSettings();
+      if (!settings) return false;
+
+      const baseCurrency = settings.baseCurrency as CurrencyCode;
+      const exchangeRates = settings.currencies.reduce((acc, curr) => {
+        acc[curr.code as CurrencyCode] = curr.exchangeRate;
+        return acc;
+      }, {} as Record<CurrencyCode, number>);
+      exchangeRates[baseCurrency] = 1;
+
+      const trialBalance = await generateTrialBalance(
+        new Date(0).toISOString(),
+        new Date().toISOString()
+      );
+
+      // Convert total price to base currency
+      const totalInBase = convertMoneyWithRates(
+        totalPrice,
+        baseCurrency,
+        exchangeRates[baseCurrency],
+        baseCurrency
+      );
+
+      let availableBalance: Money;
+
+      if (paymentMethod === "cash") {
+        const cashAccount = trialBalance.accounts[AccountCode.CASH];
+        availableBalance = cashAccount
+          ? cashAccount.netBalance
+          : createMoney(0, baseCurrency, 1);
+      } else if (paymentMethod === "bank") {
+        // Calculate bank balance from settings + transactions
+        let bankOpeningBalance = 0;
+        settings.accounts.forEach((account) => {
+          if (account.type === "bank") {
+            const accountBalance = convertMoneyWithRates(
+              {
+                amount: account.balance,
+                currency: account.currency as CurrencyCode,
+                exchangeRate:
+                  exchangeRates[account.currency as CurrencyCode] || 1,
+              },
+              baseCurrency,
+              exchangeRates[baseCurrency],
+              baseCurrency
+            );
+            bankOpeningBalance += accountBalance.amount;
+          }
+        });
+
+        const ledgerDB = await getLedgerDB();
+        const ledgerEntries = await ledgerDB.find({
+          selector: {
+            type: "ledger_entry",
+            "metadata.paymentMethod": "bank",
+          },
+        });
+
+        let bankNetChange = 0;
+        (ledgerEntries.docs as LedgerEntryDoc[]).forEach((entry) => {
+          const cashLine = entry.lines.find(
+            (line) =>
+              line.accountCode === AccountCode.CASH ||
+              line.accountCode === AccountCode.ACCOUNTS_RECEIVABLE
+          );
+          if (cashLine && entry.metadata?.paymentMethod === "bank") {
+            const debitAmount = convertMoneyWithRates(
+              cashLine.debit,
+              baseCurrency,
+              exchangeRates[baseCurrency],
+              baseCurrency
+            ).amount;
+            const creditAmount = convertMoneyWithRates(
+              cashLine.credit,
+              baseCurrency,
+              exchangeRates[baseCurrency],
+              baseCurrency
+            ).amount;
+            bankNetChange += debitAmount - creditAmount;
+          }
+        });
+
+        availableBalance = createMoney(
+          bankOpeningBalance + bankNetChange,
+          baseCurrency,
+          1
+        );
+      } else if (paymentMethod === "mobile_money") {
+        // Calculate mobile_money balance from settings + transactions
+        let mobileMoneyOpeningBalance = 0;
+        settings.accounts.forEach((account) => {
+          if (account.type === "mobile_money") {
+            const accountBalance = convertMoneyWithRates(
+              {
+                amount: account.balance,
+                currency: account.currency as CurrencyCode,
+                exchangeRate:
+                  exchangeRates[account.currency as CurrencyCode] || 1,
+              },
+              baseCurrency,
+              exchangeRates[baseCurrency],
+              baseCurrency
+            );
+            mobileMoneyOpeningBalance += accountBalance.amount;
+          }
+        });
+
+        const ledgerDB = await getLedgerDB();
+        const ledgerEntries = await ledgerDB.find({
+          selector: {
+            type: "ledger_entry",
+            "metadata.paymentMethod": "mobile_money",
+          },
+        });
+
+        let mobileMoneyNetChange = 0;
+        (ledgerEntries.docs as LedgerEntryDoc[]).forEach((entry) => {
+          const cashLine = entry.lines.find(
+            (line) =>
+              line.accountCode === AccountCode.CASH ||
+              line.accountCode === AccountCode.ACCOUNTS_RECEIVABLE
+          );
+          if (cashLine && entry.metadata?.paymentMethod === "mobile_money") {
+            const debitAmount = convertMoneyWithRates(
+              cashLine.debit,
+              baseCurrency,
+              exchangeRates[baseCurrency],
+              baseCurrency
+            ).amount;
+            const creditAmount = convertMoneyWithRates(
+              cashLine.credit,
+              baseCurrency,
+              exchangeRates[baseCurrency],
+              baseCurrency
+            ).amount;
+            mobileMoneyNetChange += debitAmount - creditAmount;
+          }
+        });
+
+        availableBalance = createMoney(
+          mobileMoneyOpeningBalance + mobileMoneyNetChange,
+          baseCurrency,
+          1
+        );
+      } else {
+        return true; // Unknown payment method, allow it
+      }
+
+      return availableBalance.amount >= totalInBase.amount;
+    } catch (err) {
+      console.error("Error checking sufficient funds:", err);
+      return false;
+    }
+  };
+
   const handleSavePurchase = async () => {
     if (typeof window === "undefined") {
       setError("Purchases can only be recorded in the browser");
@@ -302,6 +562,32 @@ export default function NewPurchasePage() {
       setError("Please add at least one product to the cart");
       return;
     }
+
+    // Validate profitability
+    if (!isPurchaseProfitable()) {
+      setError(
+        "Purchase is not profitable. Selling price must be greater than cost price for all items."
+      );
+      return;
+    }
+
+    // Validate sufficient funds for non-credit payments
+    const hasFunds = await hasSufficientFunds();
+    if (!hasFunds) {
+      const errorMessage = `Insufficient ${
+        paymentMethod === "cash"
+          ? "cash"
+          : paymentMethod === "bank"
+          ? "bank"
+          : "mobile money"
+      }. Please use credit or add funds.`;
+      setError(errorMessage);
+      setPaymentMethodError(errorMessage);
+      return;
+    }
+
+    // Clear payment method error if validation passes
+    setPaymentMethodError(null);
 
     setLoading(true);
     setError(null);
@@ -371,6 +657,10 @@ export default function NewPurchasePage() {
 
       setShowReceipt(true);
       setSuccess(true);
+
+      // Clear errors
+      setError(null);
+      setPaymentMethodError(null);
 
       // Clear cart
       setCartItems([]);
@@ -460,13 +750,22 @@ export default function NewPurchasePage() {
               <Card key={`${item.productId}_${index}`} withBorder p="sm">
                 <Group justify="space-between" mb="xs">
                   <Text fw={700}>{item.productName}</Text>
-                  <ActionIcon
-                    color="red"
-                    variant="light"
-                    onClick={() => handleRemoveFromCart(index)}
-                  >
-                    <IconTrash size="1.125rem" />
-                  </ActionIcon>
+                  <Group gap="xs">
+                    <ActionIcon
+                      color="blue"
+                      variant="light"
+                      onClick={() => handleEditCartItem(index)}
+                    >
+                      <IconEdit size="1.125rem" />
+                    </ActionIcon>
+                    <ActionIcon
+                      color="red"
+                      variant="light"
+                      onClick={() => handleRemoveFromCart(index)}
+                    >
+                      <IconX size="1.125rem" />
+                    </ActionIcon>
+                  </Group>
                 </Group>
                 <Group justify="space-between" mb="xs">
                   <Text size="sm">Quantity:</Text>
@@ -501,8 +800,14 @@ export default function NewPurchasePage() {
           />
           <PaymentMethodSelect
             value={paymentMethod}
-            onChange={setPaymentMethod}
+            onChange={(method) => {
+              setPaymentMethod(method);
+              // Clear error when payment method changes
+              setPaymentMethodError(null);
+              setError(null);
+            }}
             className="mb-4"
+            error={paymentMethodError || undefined}
           />
 
           <Card withBorder p="md" mb="md">
@@ -780,6 +1085,135 @@ export default function NewPurchasePage() {
             size="lg"
           >
             Add to Cart
+          </Button>
+        </Group>
+      </Drawer>
+
+      {/* Edit Cart Item Drawer */}
+      <Drawer
+        opened={editingCartItemIndex !== null}
+        onClose={() => {
+          setEditingCartItemIndex(null);
+          setEditCartItemForm(null);
+          setError(null);
+        }}
+        title="Edit Cart Item"
+        position="bottom"
+        size="lg"
+      >
+        {editingCartItemIndex !== null && editCartItemForm && (
+          <ScrollArea h={400} offsetScrollbars>
+            <Stack gap="md">
+              <Card withBorder p="md">
+                <Text fw={700} size="lg" mb="md">
+                  {cartItems[editingCartItemIndex].productName}
+                </Text>
+                <Text size="sm" c="dimmed" mb="lg">
+                  Code: {cartItems[editingCartItemIndex].productCode}
+                </Text>
+
+                <Stack gap="md">
+                  <Group justify="space-between" align="center">
+                    <Text fw={500}>Quantity:</Text>
+                    <NumberInput
+                      value={editCartItemForm.quantity}
+                      onChange={(value) =>
+                        setEditCartItemForm({
+                          ...editCartItemForm,
+                          quantity: Number(value) || 1,
+                        })
+                      }
+                      min={1}
+                      size="md"
+                      style={{ width: "120px" }}
+                    />
+                  </Group>
+
+                  <MoneyInput
+                    label="Cost Price"
+                    description="Price you're paying per unit"
+                    value={editCartItemForm.costPrice}
+                    onChange={(value) =>
+                      setEditCartItemForm({
+                        ...editCartItemForm,
+                        costPrice:
+                          typeof value === "number"
+                            ? { ...editCartItemForm.costPrice, amount: value }
+                            : value,
+                      })
+                    }
+                    variant="light"
+                    size="md"
+                  />
+
+                  <MoneyInput
+                    label="Intended Selling Price"
+                    description="Price you plan to sell at"
+                    value={editCartItemForm.sellingPrice}
+                    onChange={(value) =>
+                      setEditCartItemForm({
+                        ...editCartItemForm,
+                        sellingPrice:
+                          typeof value === "number"
+                            ? {
+                                ...editCartItemForm.sellingPrice,
+                                amount: value,
+                              }
+                            : value,
+                      })
+                    }
+                    variant="light"
+                    size="md"
+                  />
+
+                  <Group justify="space-between">
+                    <Text fw={500}>Total Cost:</Text>
+                    <Text fw={700}>
+                      {formatMoney({
+                        ...editCartItemForm.costPrice,
+                        amount:
+                          editCartItemForm.costPrice.amount *
+                          editCartItemForm.quantity,
+                      })}
+                    </Text>
+                  </Group>
+
+                  <Group justify="space-between">
+                    <Text fw={500}>Expected Profit per Unit:</Text>
+                    <Text fw={700} c="green">
+                      {formatMoney({
+                        ...editCartItemForm.sellingPrice,
+                        amount:
+                          editCartItemForm.sellingPrice.amount -
+                          editCartItemForm.costPrice.amount,
+                      })}
+                    </Text>
+                  </Group>
+                </Stack>
+              </Card>
+            </Stack>
+          </ScrollArea>
+        )}
+
+        <Group mt="xl">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setEditingCartItemIndex(null);
+              setEditCartItemForm(null);
+              setError(null);
+            }}
+            style={{ flex: 1 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="green"
+            onClick={handleSaveCartItemEdit}
+            style={{ flex: 2 }}
+            size="lg"
+          >
+            Save Changes
           </Button>
         </Group>
       </Drawer>

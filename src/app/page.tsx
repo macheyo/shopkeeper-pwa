@@ -222,28 +222,57 @@ export default function Home() {
       if (target) {
         if ("totalAmount" in target) {
           // It's an aggregated target
-          setAggregatedTarget(target);
+          // Always recalculate achievement based on current revenue
+          const isCurrentlyAchieved = totalAmount >= target.totalAmount;
+
+          // Update the aggregated target with current achievement status
+          const updatedAggregatedTarget = {
+            ...target,
+            achieved: isCurrentlyAchieved,
+          };
+
+          setAggregatedTarget(updatedAggregatedTarget);
           setCurrentTargetState(null);
 
-          // Check if we've met the aggregated target
-          if (totalAmount >= target.totalAmount && !target.achieved) {
-            // Show celebration
+          // Show celebration only when newly achieved
+          if (isCurrentlyAchieved && !target.achieved) {
             setShowCelebration(true);
           }
         } else {
           // It's a single day target
-          setCurrentTargetState(target);
-          setAggregatedTarget(null);
+          // Check if this is today's target (ignore previous days' achievement status)
+          const today = new Date().toISOString().split("T")[0];
+          const isTodayTarget = target.date === today;
 
-          // Check if target is achieved
-          if (target.amount <= totalAmount && !target.achieved) {
-            // Update in localStorage using the imported function
-            const newTarget = updateTargetAchievement(target, true);
-            setCurrentTargetState(newTarget);
+          if (isTodayTarget) {
+            // For today's target, always recalculate achievement based on current revenue
+            const isCurrentlyAchieved = totalAmount >= target.amount;
 
-            // Show celebration
-            setShowCelebration(true);
+            // Only update if the achievement status has changed
+            if (isCurrentlyAchieved !== target.achieved) {
+              const newTarget = updateTargetAchievement(
+                target,
+                isCurrentlyAchieved
+              );
+              setCurrentTargetState(newTarget);
+
+              // Show celebration only when newly achieved
+              if (isCurrentlyAchieved && !target.achieved) {
+                setShowCelebration(true);
+              }
+            } else {
+              setCurrentTargetState(target);
+            }
+          } else {
+            // For previous days' targets, don't show as achieved (even if it was achieved that day)
+            // Only show achievement status for today's target
+            const targetWithResetAchievement = {
+              ...target,
+              achieved: false, // Reset achievement status for non-today targets
+            };
+            setCurrentTargetState(targetWithResetAchievement);
           }
+          setAggregatedTarget(null);
         }
       } else {
         setCurrentTargetState(null);

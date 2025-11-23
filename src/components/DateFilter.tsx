@@ -513,9 +513,6 @@ export default function DateFilter({
             },
             label: {
               color: theme.colors.gray[7],
-              "&[data-active]": {
-                color: theme.colors.blue[7],
-              },
             },
           })}
         />

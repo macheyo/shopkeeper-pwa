@@ -19,12 +19,14 @@ interface PaymentMethodSelectProps {
   value: PaymentMethod;
   onChange: (method: PaymentMethod) => void;
   className?: string;
+  error?: string;
 }
 
 export function PaymentMethodSelect({
   value,
   onChange,
   className = "",
+  error,
 }: PaymentMethodSelectProps) {
   const { dateRangeInfo } = useDateFilter();
   const [balances, setBalances] = useState<{
@@ -223,6 +225,17 @@ export function PaymentMethodSelect({
       data={paymentMethodData}
       className={className}
       mb="md"
+      error={error}
+      styles={
+        error
+          ? {
+              input: {
+                borderColor: "var(--mantine-color-red-6)",
+                backgroundColor: "var(--mantine-color-red-0)",
+              },
+            }
+          : undefined
+      }
     />
   );
 }
