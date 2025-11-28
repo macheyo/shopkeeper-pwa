@@ -6,7 +6,6 @@ import {
   Container,
   Paper,
   TextInput,
-  PasswordInput,
   Button,
   Title,
   Text,
@@ -31,7 +30,7 @@ import {
   updateInvitation,
   createUser,
 } from "@/lib/usersDB";
-import { storeCredentials, generateUserId } from "@/lib/auth";
+import { generateUserId } from "@/lib/auth";
 import { InvitationDoc } from "@/types";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
@@ -46,8 +45,6 @@ export default function InviteAcceptancePage() {
   const [success, setSuccess] = useState(false);
 
   const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [licenseConfirmed, setLicenseConfirmed] = useState(false);
@@ -110,16 +107,6 @@ export default function InviteAcceptancePage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
     try {
       setLoading(true);
 
@@ -130,7 +117,8 @@ export default function InviteAcceptancePage() {
       // Create user
       const user = await createUser({
         userId,
-        email: invitation.email,
+        phoneNumber: invitation.phoneNumber || invitation.email || "", // Use phoneNumber, fallback to email for backwards compatibility
+        email: invitation.email, // Optional, for backwards compatibility
         name: name.trim(),
         role: invitation.role,
         shopId: invitation.shopId,
@@ -139,8 +127,7 @@ export default function InviteAcceptancePage() {
         invitedAt: invitation.createdAt,
       });
 
-      // Store credentials
-      await storeCredentials(userId, invitation.email, password);
+      // Note: We use license-based auth, no password needed
 
       // Generate employee license (tied to device)
       // License will be shown to user in modal - they must save it
@@ -150,8 +137,9 @@ export default function InviteAcceptancePage() {
         const { generateEmployeeLicense } = await import("@/lib/licenseKey");
         const { getShopById } = await import("@/lib/usersDB");
         const shopData = await getShopById(invitation.shopId);
+        const phoneNumber = invitation.phoneNumber || invitation.email || "";
         const licenseResult = await generateEmployeeLicense(
-          invitation.email,
+          phoneNumber,
           invitation.shopId,
           shopData?.shopName || "Shop",
           name.trim(),
@@ -341,7 +329,8 @@ export default function InviteAcceptancePage() {
               Accept Invitation
             </Title>
             <Text c="dimmed" ta="center" size="sm">
-              You&apos;ve been invited to join {invitation?.email}
+              You&apos;ve been invited to join{" "}
+              {invitation?.phoneNumber || invitation?.email || "this shop"}
             </Text>
           </div>
 
@@ -369,8 +358,8 @@ export default function InviteAcceptancePage() {
               />
 
               <TextInput
-                label="Email"
-                value={invitation?.email || ""}
+                label="Phone Number"
+                value={invitation?.phoneNumber || invitation?.email || ""}
                 disabled
                 readOnly
               />
@@ -380,24 +369,6 @@ export default function InviteAcceptancePage() {
                 value={invitation?.role || ""}
                 disabled
                 readOnly
-              />
-
-              <PasswordInput
-                label="Password"
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.currentTarget.value)}
-                required
-                disabled={loading}
-              />
-
-              <PasswordInput
-                label="Confirm Password"
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.currentTarget.value)}
-                required
-                disabled={loading}
               />
 
               <Button

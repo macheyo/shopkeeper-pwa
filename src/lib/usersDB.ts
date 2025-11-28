@@ -326,7 +326,8 @@ export async function createInvitation(
       _id: `invitation_${invitation.inviteId}`,
       type: "invitation",
       ...invitation,
-      email: invitation.email.toLowerCase(),
+      phoneNumber: invitation.phoneNumber.replace(/[\s\-\(\)]/g, ""), // Normalize phone number
+      email: invitation.email?.toLowerCase(), // Optional, for backwards compatibility
       createdAt: new Date().toISOString(),
     };
 

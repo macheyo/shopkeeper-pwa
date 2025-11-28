@@ -34,6 +34,8 @@ import { getShopUsers, updateUser } from "@/lib/usersDB";
 import { UserDoc, UserRole, UserStatus } from "@/types";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import FeatureGate from "@/components/FeatureGate";
+import PhoneNumberInput from "@/components/PhoneNumberInput";
+import { validatePhoneNumber } from "@/lib/phoneValidation";
 
 export default function UsersPage() {
   const { currentUser, shop } = useAuth();
@@ -41,7 +43,8 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteCountryCode, setInviteCountryCode] = useState("+263");
+  const [invitePhoneNumber, setInvitePhoneNumber] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("employee");
 
   const loadUsers = useCallback(async () => {
@@ -85,11 +88,23 @@ export default function UsersPage() {
       setLoading(true);
       setError(null);
 
+      // Validate phone number
+      const phoneValidation = validatePhoneNumber(invitePhoneNumber.trim());
+      if (!phoneValidation.valid) {
+        setError(phoneValidation.error || "Please enter a valid phone number");
+        return;
+      }
+
+      // Combine country code and phone number
+      const fullPhoneNumber = `${inviteCountryCode}${invitePhoneNumber
+        .replace(/^0+/, "")
+        .replace(/[\s\-\(\)]/g, "")}`;
+
       // Check if user already exists
-      const { getUserByEmail } = await import("@/lib/usersDB");
-      const existingUser = await getUserByEmail(inviteEmail);
+      const { getUserByPhoneNumber } = await import("@/lib/usersDB");
+      const existingUser = await getUserByPhoneNumber(fullPhoneNumber);
       if (existingUser) {
-        setError("User with this email already exists");
+        setError("User with this phone number already exists");
         return;
       }
 
@@ -106,7 +121,7 @@ export default function UsersPage() {
 
       await createInvitation({
         inviteId,
-        email: inviteEmail,
+        phoneNumber: fullPhoneNumber,
         role: inviteRole,
         shopId: shop.shopId,
         invitedBy: currentUser.userId,
@@ -135,7 +150,8 @@ export default function UsersPage() {
       }
 
       setInviteModalOpen(false);
-      setInviteEmail("");
+      setInvitePhoneNumber("");
+      setInviteCountryCode("+263");
       setInviteRole("employee");
       await loadUsers();
     } catch (err) {
@@ -409,7 +425,8 @@ export default function UsersPage() {
         opened={inviteModalOpen}
         onClose={() => {
           setInviteModalOpen(false);
-          setInviteEmail("");
+          setInvitePhoneNumber("");
+          setInviteCountryCode("+263");
           setInviteRole("employee");
         }}
         title="Invite User"
@@ -417,13 +434,15 @@ export default function UsersPage() {
         size="md"
       >
         <Stack gap="md">
-          <TextInput
-            label="Email"
-            placeholder="user@example.com"
-            type="email"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.currentTarget.value)}
-            leftSection={<IconMail size={16} />}
+          <PhoneNumberInput
+            countryCode={inviteCountryCode}
+            phoneNumber={invitePhoneNumber}
+            onCountryCodeChange={setInviteCountryCode}
+            onPhoneNumberChange={(e) =>
+              setInvitePhoneNumber(e.currentTarget.value)
+            }
+            label="Phone Number"
+            placeholder="771 802 312"
             required
           />
           <Select
@@ -441,7 +460,8 @@ export default function UsersPage() {
               variant="outline"
               onClick={() => {
                 setInviteModalOpen(false);
-                setInviteEmail("");
+                setInvitePhoneNumber("");
+                setInviteCountryCode("+263");
                 setInviteRole("employee");
               }}
               fullWidth={{ base: true, sm: false }}

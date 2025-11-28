@@ -180,7 +180,8 @@ export interface InvitationDoc {
   _rev?: string;
   type: "invitation";
   inviteId: string;
-  email: string;
+  phoneNumber: string; // Phone number (replaces email)
+  email?: string; // Optional email (for backwards compatibility)
   role: "manager" | "employee";
   shopId: string;
   invitedBy: string;
