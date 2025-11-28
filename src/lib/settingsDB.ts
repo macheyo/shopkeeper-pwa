@@ -25,6 +25,7 @@ export interface ShopSettings {
     currency: string;
   }[];
   hasCompletedOnboarding: boolean;
+  shopId?: string; // Shop identifier for multi-user support
   createdAt: string;
   updatedAt: string;
 }
@@ -112,7 +113,9 @@ export async function getSettingsDB(): Promise<PouchDB.Database> {
   return settingsDBPromise;
 }
 
-export async function getShopSettings(): Promise<ShopSettings | null> {
+export async function getShopSettings(
+  shopId?: string
+): Promise<ShopSettings | null> {
   try {
     // Only run in browser environment
     if (typeof window === "undefined") {
@@ -120,8 +123,15 @@ export async function getShopSettings(): Promise<ShopSettings | null> {
     }
 
     const db = await getSettingsDB();
+
+    // Build selector with shopId filter if provided
+    const selector: any = { type: "settings" };
+    if (shopId) {
+      selector.shopId = shopId;
+    }
+
     const result = await db.find({
-      selector: { type: "settings" },
+      selector,
       limit: 1,
     });
 
@@ -157,7 +167,7 @@ function getDefaultSettings(): ShopSettings {
 }
 
 export async function saveShopSettings(
-  settings: Omit<ShopSettings, "_id">
+  settings: Partial<ShopSettings> & { shopId?: string }
 ): Promise<ShopSettings> {
   try {
     // Only run in browser environment
@@ -166,24 +176,69 @@ export async function saveShopSettings(
     }
 
     const db = await getSettingsDB();
-    const doc = {
-      _id: "shop_settings",
-      ...settings,
-      updatedAt: new Date().toISOString(),
-    };
 
-    try {
-      const existing = await db.get("shop_settings");
-      (doc as PouchDB.Core.Document<typeof doc>)._rev = existing._rev;
-    } catch {
-      // Document doesn't exist yet
+    // Use shopId in _id if provided, otherwise use default
+    const docId = settings.shopId
+      ? `shop_settings_${settings.shopId}`
+      : "shop_settings";
+
+    // Retry logic for handling conflicts
+    let retries = 3;
+    let lastError: Error | null = null;
+
+    while (retries > 0) {
+      try {
+        // Always get the latest version of the document
+        let existing: PouchDB.Core.ExistingDocument<ShopSettings> | null = null;
+        try {
+          existing = await db.get(docId);
+        } catch {
+          // Document doesn't exist yet, that's fine
+        }
+
+        // Extract only the data fields (exclude _id and _rev from input)
+        const { _id, _rev, ...settingsData } = settings as any;
+
+        // Merge existing settings with new settings
+        const mergedSettings: ShopSettings = {
+          ...(existing || getDefaultSettings()),
+          ...settingsData,
+          _id: docId,
+          _rev: existing?._rev, // Always use the latest _rev from the database
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Ensure required fields are present
+        if (!mergedSettings.type) {
+          mergedSettings.type = "settings";
+        }
+        if (!mergedSettings.createdAt && !existing) {
+          mergedSettings.createdAt = new Date().toISOString();
+        }
+
+        const result = await db.put(mergedSettings);
+
+        // Return the saved document
+        const saved = await db.get(result.id);
+        return saved as ShopSettings;
+      } catch (err: any) {
+        lastError = err;
+        // If it's a conflict error and we have retries left, try again
+        if (err?.status === 409 && retries > 1) {
+          retries--;
+          // Wait a bit before retrying (exponential backoff)
+          await new Promise((resolve) =>
+            setTimeout(resolve, 100 * (4 - retries))
+          );
+          continue;
+        }
+        // If it's not a conflict or we're out of retries, throw
+        throw err;
+      }
     }
 
-    const result = await db.put(doc);
-    return {
-      ...doc,
-      _id: result.id,
-    } as ShopSettings;
+    // If we exhausted retries, throw the last error
+    throw lastError || new Error("Failed to save shop settings after retries");
   } catch (err) {
     console.error("Error saving shop settings:", err);
     throw new Error(

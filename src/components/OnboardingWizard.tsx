@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Stepper,
   TextInput,
@@ -21,9 +21,10 @@ import { CurrencyCode, CURRENCY_INFO, Money } from "@/types/money";
 import { saveShopSettings } from "@/lib/settingsDB";
 import { createOpeningBalanceEntries } from "@/lib/accounting";
 import { AccountCode } from "@/types/accounting";
+import { useAuth } from "@/contexts/AuthContext";
 import MoneyInput from "./MoneyInput";
-
 import { AccountSettings } from "@/types";
+import { getLicenseData } from "@/lib/featureCheck";
 
 interface CurrencySettings {
   code: CurrencyCode;
@@ -35,14 +36,38 @@ export default function OnboardingWizard({
 }: {
   onComplete: () => void;
 }) {
+  const { currentUser, shop } = useAuth();
   const [active, setActive] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [shopName, setShopName] = useState("");
+  // Initialize shop name from license or shop
+  const [shopName, setShopName] = useState(shop?.shopName || "");
   const [businessType, setBusinessType] = useState("");
   const [baseCurrency, setBaseCurrency] = useState<CurrencyCode>("USD");
   const [currencies, setCurrencies] = useState<CurrencySettings[]>([]);
   const [accounts, setAccounts] = useState<AccountSettings[]>([]);
+
+  // Load shop name from license data on mount
+  useEffect(() => {
+    const loadLicenseShopName = async () => {
+      try {
+        const licenseData = await getLicenseData();
+        if (licenseData?.shopName) {
+          setShopName(licenseData.shopName);
+        } else if (shop?.shopName) {
+          setShopName(shop.shopName);
+        }
+      } catch (err) {
+        console.error("Error loading license data:", err);
+        // Fallback to shop name if license data fails
+        if (shop?.shopName) {
+          setShopName(shop.shopName);
+        }
+      }
+    };
+
+    loadLicenseShopName();
+  }, [shop?.shopName]);
 
   const nextStep = () => {
     // Validate current step
@@ -154,6 +179,7 @@ export default function OnboardingWizard({
         })),
         type: "settings",
         hasCompletedOnboarding: true,
+        shopId: shop?.shopId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -170,7 +196,9 @@ export default function OnboardingWizard({
                 ?.exchangeRate || 1,
           } as Money,
         })),
-        new Date().toISOString()
+        new Date().toISOString(),
+        shop?.shopId,
+        currentUser?.userId
       );
 
       onComplete();
@@ -217,6 +245,8 @@ export default function OnboardingWizard({
               onChange={(e) => setShopName(e.target.value)}
               required
               size={isMobile ? "sm" : "md"}
+              disabled
+              description="Shop name is set from your license and cannot be changed"
             />
             <Select
               label="Business Type"
@@ -383,47 +413,91 @@ export default function OnboardingWizard({
                     }
                     size={isMobile ? "sm" : "md"}
                   />
-                  <Group grow align="flex-start">
-                    <Select
-                      label="Account Type"
-                      value={account.type}
-                      onChange={(value) =>
-                        value && handleAccountChange(index, "type", value)
-                      }
-                      data={[
-                        { value: "cash", label: "Cash" },
-                        { value: "mobile_money", label: "Mobile Money" },
-                        { value: "bank", label: "Bank Account" },
-                      ]}
-                      size={isMobile ? "sm" : "md"}
-                    />
-                    <MoneyInput
-                      label="Balance"
-                      value={account.balance}
-                      currency={account.currency}
-                      onChange={(value) => {
-                        if (typeof value === "object" && value !== null) {
-                          // If it's a Money object, update both balance and currency
-                          handleAccountChange(index, "balance", value.amount);
-                          handleAccountChange(
-                            index,
-                            "currency",
-                            value.currency
-                          );
-                        } else {
-                          // If it's just a number, only update balance
-                          handleAccountChange(index, "balance", value);
+                  {isMobile ? (
+                    <Stack gap="xs">
+                      <Select
+                        label="Account Type"
+                        value={account.type}
+                        onChange={(value) =>
+                          value && handleAccountChange(index, "type", value)
                         }
-                      }}
-                      variant="light"
-                      showCurrencySelect={true}
-                      size={isMobile ? "sm" : "md"}
-                      customCurrencies={[
-                        baseCurrency,
-                        ...currencies.map((c) => c.code),
-                      ]}
-                    />
-                  </Group>
+                        data={[
+                          { value: "cash", label: "Cash" },
+                          { value: "mobile_money", label: "Mobile Money" },
+                          { value: "bank", label: "Bank Account" },
+                        ]}
+                        size="sm"
+                      />
+                      <MoneyInput
+                        label="Balance"
+                        value={account.balance}
+                        currency={account.currency}
+                        onChange={(value) => {
+                          if (typeof value === "object" && value !== null) {
+                            // If it's a Money object, update both balance and currency
+                            handleAccountChange(index, "balance", value.amount);
+                            handleAccountChange(
+                              index,
+                              "currency",
+                              value.currency
+                            );
+                          } else {
+                            // If it's just a number, only update balance
+                            handleAccountChange(index, "balance", value);
+                          }
+                        }}
+                        variant="light"
+                        showCurrencySelect={true}
+                        size="sm"
+                        customCurrencies={[
+                          baseCurrency,
+                          ...currencies.map((c) => c.code),
+                        ]}
+                      />
+                    </Stack>
+                  ) : (
+                    <Group grow align="flex-start">
+                      <Select
+                        label="Account Type"
+                        value={account.type}
+                        onChange={(value) =>
+                          value && handleAccountChange(index, "type", value)
+                        }
+                        data={[
+                          { value: "cash", label: "Cash" },
+                          { value: "mobile_money", label: "Mobile Money" },
+                          { value: "bank", label: "Bank Account" },
+                        ]}
+                        size="md"
+                      />
+                      <MoneyInput
+                        label="Balance"
+                        value={account.balance}
+                        currency={account.currency}
+                        onChange={(value) => {
+                          if (typeof value === "object" && value !== null) {
+                            // If it's a Money object, update both balance and currency
+                            handleAccountChange(index, "balance", value.amount);
+                            handleAccountChange(
+                              index,
+                              "currency",
+                              value.currency
+                            );
+                          } else {
+                            // If it's just a number, only update balance
+                            handleAccountChange(index, "balance", value);
+                          }
+                        }}
+                        variant="light"
+                        showCurrencySelect={true}
+                        size="md"
+                        customCurrencies={[
+                          baseCurrency,
+                          ...currencies.map((c) => c.code),
+                        ]}
+                      />
+                    </Group>
+                  )}
                 </Stack>
               </Card>
             ))}

@@ -24,10 +24,12 @@ import {
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { getProductsDB } from "@/lib/databases";
+import { useAuth } from "@/contexts/AuthContext";
 import BarcodeScanner from "@/components/BarcodeScanner";
 
 export default function AddProductPage() {
   const router = useRouter();
+  const { currentUser, shop } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -79,6 +81,8 @@ export default function AddProductPage() {
         name: values.name,
         price: moneyValue,
         barcode: values.barcode || undefined, // Don't store empty strings
+        shopId: shop?.shopId,
+        createdBy: currentUser?.userId,
         createdAt: now,
         updatedAt: now,
       });

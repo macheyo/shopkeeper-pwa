@@ -10,16 +10,19 @@ import {
   IconRefresh,
 } from "@tabler/icons-react";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { hasPermission, Permission } from "@/lib/permissions";
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const { currentUser } = useAuth();
   const [visible, setVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [scrollTimeout, setScrollTimeout] = useState<NodeJS.Timeout | null>(
     null
   );
 
-  const navItems = [
+  const allNavItems = [
     {
       icon: IconHome,
       label: "Home",
@@ -47,6 +50,7 @@ export default function BottomNav() {
       path: "/reports",
       color: "violet",
       animation: "icon-spin",
+      requiresPermission: Permission.VIEW_REPORTS,
     },
     {
       icon: IconRefresh,
@@ -56,6 +60,14 @@ export default function BottomNav() {
       animation: "icon-bounce",
     },
   ];
+
+  // Filter nav items based on permissions
+  const navItems = allNavItems.filter((item) => {
+    if (item.requiresPermission) {
+      return hasPermission(currentUser, item.requiresPermission);
+    }
+    return true;
+  });
 
   const isActive = (path: string) => {
     if (path === "/") {

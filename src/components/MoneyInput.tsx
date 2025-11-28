@@ -125,7 +125,9 @@ export default function MoneyInput({
   }, [amount, precision, isFocused]);
 
   // Get currency data for dropdown from available currencies
-  const currencyData = currenciesToUse.map((code) => ({
+  // Remove duplicates by converting to Set and back to array
+  const uniqueCurrencies = Array.from(new Set(currenciesToUse));
+  const currencyData = uniqueCurrencies.map((code) => ({
     value: code,
     label: `${CURRENCY_INFO[code].symbol} ${code}`,
   }));

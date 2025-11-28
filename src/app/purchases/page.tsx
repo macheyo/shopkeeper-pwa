@@ -19,9 +19,12 @@ import { formatMoney, Money } from "@/types/money";
 import { PurchaseDoc } from "@/types";
 import { getPurchasesDB } from "@/lib/databases";
 import { useDateFilter } from "@/contexts/DateFilterContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { addShopIdFilter } from "@/lib/queryHelpers";
 
 export default function PurchasesPage() {
   const router = useRouter();
+  const { shop } = useAuth();
   const { dateRangeInfo } = useDateFilter();
   const [purchases, setPurchases] = React.useState<PurchaseDoc[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -32,13 +35,16 @@ export default function PurchasesPage() {
       try {
         const purchasesDB = await getPurchasesDB();
         const result = await purchasesDB.find({
-          selector: {
-            type: "purchase",
-            timestamp: {
-              $gte: dateRangeInfo.startDate.toISOString(),
-              $lte: dateRangeInfo.endDate.toISOString(),
+          selector: addShopIdFilter(
+            {
+              type: "purchase",
+              timestamp: {
+                $gte: dateRangeInfo.startDate.toISOString(),
+                $lte: dateRangeInfo.endDate.toISOString(),
+              },
             },
-          },
+            shop?.shopId
+          ),
         });
         setPurchases(result.docs as PurchaseDoc[]);
       } catch (err) {

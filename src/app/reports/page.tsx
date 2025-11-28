@@ -38,11 +38,15 @@ import {
 } from "@/types/money";
 import { useMoneyContext } from "@/contexts/MoneyContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { addShopIdFilter } from "@/lib/queryHelpers";
 import ProductManager from "@/components/ProductManager";
 import AccountsView from "@/components/AccountsView";
 import { generateTrialBalance } from "@/lib/accounting";
 import { TrialBalance, AccountCode, LedgerEntryDoc } from "@/types/accounting";
 import { getPurchaseRunProgress } from "@/lib/inventory";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { hasPermission, Permission } from "@/lib/permissions";
 
 // Component to display purchase run items with progress
 function PurchaseRunItemsTable({
@@ -53,6 +57,7 @@ function PurchaseRunItemsTable({
   formatMoney,
   reportingCurrency,
   exchangeRates,
+  shopId,
 }: {
   purchases: PurchaseDoc[];
   purchaseRunId: string;
@@ -61,6 +66,7 @@ function PurchaseRunItemsTable({
   formatMoney: (money: Money) => string;
   reportingCurrency: CurrencyCode;
   exchangeRates: Record<CurrencyCode, number>;
+  shopId?: string;
 }) {
   const theme = useMantineTheme();
   const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
@@ -80,7 +86,7 @@ function PurchaseRunItemsTable({
     const fetchProgress = async () => {
       setLoading(true);
       try {
-        const data = await getPurchaseRunProgress(purchaseRunId);
+        const data = await getPurchaseRunProgress(purchaseRunId, shopId);
         setProgress(data);
       } catch (err) {
         console.error("Error fetching purchase run progress:", err);
@@ -360,10 +366,12 @@ function PurchaseRunProgressCard({
   purchaseRunId,
   formatMoney,
   convertToReportingCurrency,
+  shopId,
 }: {
   purchaseRunId: string;
   formatMoney: (money: Money) => string;
   convertToReportingCurrency: (money: Money) => Money;
+  shopId?: string;
 }) {
   const theme = useMantineTheme();
   const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
@@ -403,7 +411,7 @@ function PurchaseRunProgressCard({
   useEffect(() => {
     const fetchProgress = async () => {
       try {
-        const data = await getPurchaseRunProgress(purchaseRunId);
+        const data = await getPurchaseRunProgress(purchaseRunId, shopId);
         setProgress(data);
       } catch (err) {
         console.error("Error fetching purchase run progress:", err);
@@ -413,7 +421,7 @@ function PurchaseRunProgressCard({
       }
     };
     fetchProgress();
-  }, [purchaseRunId]);
+  }, [purchaseRunId, shopId]);
 
   if (loading) {
     return (
@@ -818,6 +826,7 @@ function PurchaseRunProgressCard({
 
 export default function ReportsPage() {
   const router = useRouter();
+  const { shop, currentUser } = useAuth();
   const { dateRangeInfo } = useDateFilter();
   const { baseCurrency, exchangeRates, availableCurrencies } =
     useMoneyContext();
@@ -906,14 +915,16 @@ export default function ReportsPage() {
         // Fetch trial balance from ledger
         const balance = await generateTrialBalance(
           dateRangeInfo.startDate.toISOString(),
-          dateRangeInfo.endDate.toISOString()
+          dateRangeInfo.endDate.toISOString(),
+          shop?.shopId
         );
         setTrialBalance(balance);
 
         // Fetch cash flow data
         const openingTrialBalance = await generateTrialBalance(
           new Date(0).toISOString(),
-          dateRangeInfo.startDate.toISOString()
+          dateRangeInfo.startDate.toISOString(),
+          shop?.shopId
         );
         const openingCashAccount =
           openingTrialBalance.accounts[AccountCode.CASH];
@@ -924,11 +935,14 @@ export default function ReportsPage() {
         // Get opening balance entries to calculate cash from equity
         const ledgerDB = await getLedgerDB();
         const openingBalanceEntries = await ledgerDB.find({
-          selector: {
-            type: "ledger_entry",
-            transactionType: "opening_balance",
-            status: "posted",
-          },
+          selector: addShopIdFilter(
+            {
+              type: "ledger_entry",
+              transactionType: "opening_balance",
+              status: "posted",
+            },
+            shop?.shopId
+          ),
         });
 
         // Sum up cash contributions from opening balance entries
@@ -1771,6 +1785,7 @@ export default function ReportsPage() {
                   purchaseRunId={run.purchaseRunId}
                   formatMoney={formatMoney}
                   convertToReportingCurrency={convertToReportingCurrency}
+                  shopId={shop?.shopId}
                 />
 
                 {/* Items Table */}
@@ -1782,6 +1797,7 @@ export default function ReportsPage() {
                   formatMoney={formatMoney}
                   reportingCurrency={reportingCurrency}
                   exchangeRates={exchangeRates}
+                  shopId={shop?.shopId}
                 />
 
                 {/* Notes if available */}
@@ -1801,151 +1817,81 @@ export default function ReportsPage() {
     );
   };
 
+  // Check permissions
+  if (!currentUser || !hasPermission(currentUser, Permission.VIEW_REPORTS)) {
+    return (
+      <ProtectedRoute requireAuth={true}>
+        <Stack gap="md" p="md">
+          <Text ta="center" c="dimmed" size="lg">
+            You don&apos;t have permission to view reports.
+          </Text>
+        </Stack>
+      </ProtectedRoute>
+    );
+  }
+
   return (
-    <Stack gap="lg">
-      <Paper
-        p="md"
-        withBorder
-        style={{ backgroundColor: "var(--mantine-color-gray-0)" }}
-      >
-        <Group justify="space-between" align="center">
-          <Title order={2}>Financial Reports</Title>
-          <Group gap="xs" align="center">
-            <Text size="sm" fw={500}>
-              Reporting Currency:
-            </Text>
-            <Select
-              value={reportingCurrency}
-              onChange={(value) => setReportingCurrency(value as CurrencyCode)}
-              data={availableCurrencies
-                .map((code) => CURRENCY_INFO[code])
-                .filter((info) => info !== undefined)
-                .map((info) => ({
-                  value: info.code,
-                  label: `${info.flag} ${info.code}`,
-                }))}
-              size="sm"
-              style={{ width: 120 }}
-            />
-          </Group>
-        </Group>
-      </Paper>
-
-      {loading ? (
-        <Text ta="center">Loading reports...</Text>
-      ) : (
-        <>
-          <Box hiddenFrom="sm">
-            {/* Mobile view */}
-            <Select
-              value={activeTab}
-              onChange={(value) => setActiveTab(value || "pl")}
-              data={[
-                { value: "pl", label: "Profit & Loss" },
-                { value: "cf", label: "Cash Flow" },
-                { value: "bs", label: "Balance Sheet" },
-                { value: "pa", label: "Purchase Analysis" },
-                { value: "accounts", label: "Accounts" },
-                { value: "products", label: "Products" },
-                { value: "cash", label: "Cash Tracking" },
-              ]}
-              size="md"
-              mb="md"
-            />
-            <Paper p="xs" withBorder>
-              {activeTab === "pl" && renderProfitLoss()}
-              {activeTab === "cf" && renderCashFlow()}
-              {activeTab === "bs" && renderBalanceSheet()}
-              {activeTab === "pa" && renderPurchaseAnalysis()}
-              {activeTab === "accounts" && <AccountsView />}
-              {activeTab === "products" && <ProductManager />}
-              {activeTab === "cash" && (
-                <Button
-                  fullWidth
-                  size="xl"
-                  leftSection={<IconWallet size={24} />}
-                  onClick={() => router.push("/cash-tracking")}
-                  color="blue"
-                  h={60}
-                >
-                  Open Cash Tracking
-                </Button>
-              )}
-            </Paper>
-
-            {/* Quick navigation buttons */}
-            <Group mt="md" grow>
-              {activeTab !== "pl" && (
-                <Button
-                  variant="light"
-                  onClick={() => setActiveTab("pl")}
-                  leftSection={<IconChartPie3 size={16} />}
-                  color="violet"
-                >
-                  P&L
-                </Button>
-              )}
-              {activeTab !== "cf" && (
-                <Button
-                  variant="light"
-                  onClick={() => setActiveTab("cf")}
-                  leftSection={<IconCash size={16} />}
-                  color="violet"
-                >
-                  Cash
-                </Button>
-              )}
-              {activeTab !== "bs" && (
-                <Button
-                  variant="light"
-                  onClick={() => setActiveTab("bs")}
-                  leftSection={<IconScale size={16} />}
-                  color="violet"
-                >
-                  Balance
-                </Button>
-              )}
-              {activeTab !== "accounts" && (
-                <Button
-                  variant="light"
-                  onClick={() => setActiveTab("accounts")}
-                  leftSection={<IconBook size={16} />}
-                  color="violet"
-                >
-                  Accounts
-                </Button>
-              )}
+    <ProtectedRoute requireAuth={true}>
+      <Stack gap="lg">
+        <Paper
+          p="md"
+          withBorder
+          style={{ backgroundColor: "var(--mantine-color-gray-0)" }}
+        >
+          <Group justify="space-between" align="center">
+            <Title order={2}>Financial Reports</Title>
+            <Group gap="xs" align="center">
+              <Text size="sm" fw={500}>
+                Reporting Currency:
+              </Text>
+              <Select
+                value={reportingCurrency}
+                onChange={(value) =>
+                  setReportingCurrency(value as CurrencyCode)
+                }
+                data={availableCurrencies
+                  .map((code) => CURRENCY_INFO[code])
+                  .filter((info) => info !== undefined)
+                  .map((info) => ({
+                    value: info.code,
+                    label: `${info.flag} ${info.code}`,
+                  }))}
+                size="sm"
+                style={{ width: 120 }}
+              />
             </Group>
-          </Box>
+          </Group>
+        </Paper>
 
-          <Box visibleFrom="sm">
-            {/* Desktop view */}
-            <Tabs
-              value={activeTab}
-              onChange={(value) => setActiveTab(value || "pl")}
-            >
-              <Tabs.List grow>
-                <Tabs.Tab value="pl">Profit & Loss</Tabs.Tab>
-                <Tabs.Tab value="cf">Cash Flow</Tabs.Tab>
-                <Tabs.Tab value="bs">Balance Sheet</Tabs.Tab>
-                <Tabs.Tab value="pa">Purchase Analysis</Tabs.Tab>
-                <Tabs.Tab value="accounts">Accounts</Tabs.Tab>
-                <Tabs.Tab value="products">Products</Tabs.Tab>
-                <Tabs.Tab value="cash">Cash Tracking</Tabs.Tab>
-              </Tabs.List>
-
-              <Paper p="md" mt="md" withBorder>
-                <Tabs.Panel value="pl">{renderProfitLoss()}</Tabs.Panel>
-                <Tabs.Panel value="cf">{renderCashFlow()}</Tabs.Panel>
-                <Tabs.Panel value="bs">{renderBalanceSheet()}</Tabs.Panel>
-                <Tabs.Panel value="pa">{renderPurchaseAnalysis()}</Tabs.Panel>
-                <Tabs.Panel value="accounts">
-                  <AccountsView />
-                </Tabs.Panel>
-                <Tabs.Panel value="products">
-                  <ProductManager />
-                </Tabs.Panel>
-                <Tabs.Panel value="cash">
+        {loading ? (
+          <Text ta="center">Loading reports...</Text>
+        ) : (
+          <>
+            <Box hiddenFrom="sm">
+              {/* Mobile view */}
+              <Select
+                value={activeTab}
+                onChange={(value) => setActiveTab(value || "pl")}
+                data={[
+                  { value: "pl", label: "Profit & Loss" },
+                  { value: "cf", label: "Cash Flow" },
+                  { value: "bs", label: "Balance Sheet" },
+                  { value: "pa", label: "Purchase Analysis" },
+                  { value: "accounts", label: "Accounts" },
+                  { value: "products", label: "Products" },
+                  { value: "cash", label: "Cash Tracking" },
+                ]}
+                size="md"
+                mb="md"
+              />
+              <Paper p="xs" withBorder>
+                {activeTab === "pl" && renderProfitLoss()}
+                {activeTab === "cf" && renderCashFlow()}
+                {activeTab === "bs" && renderBalanceSheet()}
+                {activeTab === "pa" && renderPurchaseAnalysis()}
+                {activeTab === "accounts" && <AccountsView />}
+                {activeTab === "products" && <ProductManager />}
+                {activeTab === "cash" && (
                   <Button
                     fullWidth
                     size="xl"
@@ -1956,12 +1902,99 @@ export default function ReportsPage() {
                   >
                     Open Cash Tracking
                   </Button>
-                </Tabs.Panel>
+                )}
               </Paper>
-            </Tabs>
-          </Box>
-        </>
-      )}
-    </Stack>
+
+              {/* Quick navigation buttons */}
+              <Group mt="md" grow>
+                {activeTab !== "pl" && (
+                  <Button
+                    variant="light"
+                    onClick={() => setActiveTab("pl")}
+                    leftSection={<IconChartPie3 size={16} />}
+                    color="violet"
+                  >
+                    P&L
+                  </Button>
+                )}
+                {activeTab !== "cf" && (
+                  <Button
+                    variant="light"
+                    onClick={() => setActiveTab("cf")}
+                    leftSection={<IconCash size={16} />}
+                    color="violet"
+                  >
+                    Cash
+                  </Button>
+                )}
+                {activeTab !== "bs" && (
+                  <Button
+                    variant="light"
+                    onClick={() => setActiveTab("bs")}
+                    leftSection={<IconScale size={16} />}
+                    color="violet"
+                  >
+                    Balance
+                  </Button>
+                )}
+                {activeTab !== "accounts" && (
+                  <Button
+                    variant="light"
+                    onClick={() => setActiveTab("accounts")}
+                    leftSection={<IconBook size={16} />}
+                    color="violet"
+                  >
+                    Accounts
+                  </Button>
+                )}
+              </Group>
+            </Box>
+
+            <Box visibleFrom="sm">
+              {/* Desktop view */}
+              <Tabs
+                value={activeTab}
+                onChange={(value) => setActiveTab(value || "pl")}
+              >
+                <Tabs.List grow>
+                  <Tabs.Tab value="pl">Profit & Loss</Tabs.Tab>
+                  <Tabs.Tab value="cf">Cash Flow</Tabs.Tab>
+                  <Tabs.Tab value="bs">Balance Sheet</Tabs.Tab>
+                  <Tabs.Tab value="pa">Purchase Analysis</Tabs.Tab>
+                  <Tabs.Tab value="accounts">Accounts</Tabs.Tab>
+                  <Tabs.Tab value="products">Products</Tabs.Tab>
+                  <Tabs.Tab value="cash">Cash Tracking</Tabs.Tab>
+                </Tabs.List>
+
+                <Paper p="md" mt="md" withBorder>
+                  <Tabs.Panel value="pl">{renderProfitLoss()}</Tabs.Panel>
+                  <Tabs.Panel value="cf">{renderCashFlow()}</Tabs.Panel>
+                  <Tabs.Panel value="bs">{renderBalanceSheet()}</Tabs.Panel>
+                  <Tabs.Panel value="pa">{renderPurchaseAnalysis()}</Tabs.Panel>
+                  <Tabs.Panel value="accounts">
+                    <AccountsView />
+                  </Tabs.Panel>
+                  <Tabs.Panel value="products">
+                    <ProductManager />
+                  </Tabs.Panel>
+                  <Tabs.Panel value="cash">
+                    <Button
+                      fullWidth
+                      size="xl"
+                      leftSection={<IconWallet size={24} />}
+                      onClick={() => router.push("/cash-tracking")}
+                      color="blue"
+                      h={60}
+                    >
+                      Open Cash Tracking
+                    </Button>
+                  </Tabs.Panel>
+                </Paper>
+              </Tabs>
+            </Box>
+          </>
+        )}
+      </Stack>
+    </ProtectedRoute>
   );
 }

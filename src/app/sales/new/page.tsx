@@ -38,6 +38,8 @@ import { createSaleEntry } from "@/lib/accounting";
 import { allocateInventoryFIFO } from "@/lib/inventory";
 import { ProductDoc, SaleItem, PaymentMethod } from "@/types";
 import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
+import { useAuth } from "@/contexts/AuthContext";
+import { addShopIdFilter } from "@/lib/queryHelpers";
 import MoneyInput from "@/components/MoneyInput";
 import { PaymentMethodSelect } from "@/components/PaymentMethodSelect";
 import dynamic from "next/dynamic";
@@ -48,6 +50,7 @@ const BarcodeScanner = dynamic(() => import("@/components/BarcodeScanner"), {
 
 export default function NewSalePage() {
   const router = useRouter();
+  const { currentUser, shop } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -96,12 +99,13 @@ export default function NewSalePage() {
   // Fetch all products on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!shop?.shopId) return;
 
     const fetchData = async () => {
       try {
         const productsDB = await getProductsDB();
         const result = await productsDB.find({
-          selector: { type: "product" },
+          selector: addShopIdFilter({ type: "product" }, shop.shopId),
         });
         setProducts(result.docs as ProductDoc[]);
         setFilteredProducts(result.docs as ProductDoc[]);
@@ -116,7 +120,7 @@ export default function NewSalePage() {
     };
 
     fetchData();
-  }, []);
+  }, [shop?.shopId]);
 
   // Filter products when search term changes
   useEffect(() => {
@@ -397,7 +401,11 @@ export default function NewSalePage() {
 
       for (const item of cartItems) {
         // Allocate inventory using FIFO
-        const lotsUsed = await allocateInventoryFIFO(item.productId, item.qty);
+        const lotsUsed = await allocateInventoryFIFO(
+          item.productId,
+          item.qty,
+          shop?.shopId
+        );
 
         // Calculate cost from lots (FIFO cost)
         const itemCost = lotsUsed.reduce((sum, lot) => {
@@ -453,6 +461,8 @@ export default function NewSalePage() {
         change: paymentMethod === "cash" ? change : undefined,
         timestamp: now.toISOString(),
         status: "pending", // Will be synced later via WhatsApp
+        shopId: shop?.shopId,
+        createdBy: currentUser?.userId,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
@@ -464,7 +474,9 @@ export default function NewSalePage() {
         totalPrice,
         totalCost,
         paymentMethod,
-        now.toISOString()
+        now.toISOString(),
+        shop?.shopId,
+        currentUser?.userId
       );
 
       // Set receipt data for display

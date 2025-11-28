@@ -15,9 +15,12 @@ import {
 import { IconAlertCircle, IconRefresh } from "@tabler/icons-react";
 import { getProductsDB } from "@/lib/databases";
 import { ProductDoc } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { addShopIdFilter, filterByShopId } from "@/lib/queryHelpers";
 import { formatMoney } from "@/types/money";
 
 export default function ProductManager() {
+  const { shop } = useAuth();
   const [products, setProducts] = useState<ProductDoc[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -47,9 +50,12 @@ export default function ProductManager() {
       });
 
       // Map the results to our ProductDoc type
-      const fetchedProducts = result.rows
+      const allProducts = result.rows
         .map((row) => row.doc as ProductDoc)
         .filter((doc) => doc && doc.type === "product");
+
+      // Filter by shopId for data isolation
+      const fetchedProducts = filterByShopId(allProducts, shop?.shopId);
 
       if (fetchedProducts.length > 0) {
         setProducts(fetchedProducts);
@@ -72,10 +78,12 @@ export default function ProductManager() {
     }
   };
 
-  // Fetch products when component mounts
+  // Fetch products when component mounts or shop changes
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    if (shop?.shopId) {
+      fetchProducts();
+    }
+  }, [shop?.shopId]);
 
   const handleRefresh = () => {
     fetchProducts();

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { CurrencyCode } from "@/types/money";
 import { getShopSettings } from "@/lib/settingsDB";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Define the MoneyContextType clearly
 export interface MoneyContextType {
@@ -48,6 +49,7 @@ export function MoneyProvider({
   children,
   initialSettings,
 }: MoneyProviderProps) {
+  const { shop } = useAuth();
   const [state, setState] = useState<MoneyContextType>(
     initialSettings || {
       baseCurrency: "USD",
@@ -66,7 +68,7 @@ export function MoneyProvider({
 
     async function loadSettings() {
       try {
-        const settings = await getShopSettings();
+        const settings = await getShopSettings(shop?.shopId);
 
         if (settings) {
           // Start with default rates
@@ -108,7 +110,7 @@ export function MoneyProvider({
     }
 
     loadSettings();
-  }, [initialSettings]);
+  }, [initialSettings, shop?.shopId]);
 
   return (
     <MoneyContext.Provider value={state}>{children}</MoneyContext.Provider>

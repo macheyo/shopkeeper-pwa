@@ -19,9 +19,12 @@ import { SaleDoc, SaleItem } from "@/types";
 import { formatMoney } from "@/types/money";
 import { useRouter } from "next/navigation";
 import { useDateFilter } from "@/contexts/DateFilterContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { filterByShopId } from "@/lib/queryHelpers";
 
 export default function SalesList() {
   const router = useRouter();
+  const { shop } = useAuth();
   const { dateRangeInfo } = useDateFilter();
   const [sales, setSales] = useState<SaleDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,16 +96,20 @@ export default function SalesList() {
                 docDate < new Date(endDateISOString)
               );
             })
-            .map((doc) => doc as unknown as SaleDoc)
-            // Sort by timestamp in descending order
-            .sort(
-              (a, b) =>
-                new Date(b.timestamp as string).getTime() -
-                new Date(a.timestamp as string).getTime()
-            );
+            .map((doc) => doc as unknown as SaleDoc);
 
-          console.log("Filtered sales:", filteredDocs);
-          setSales(filteredDocs);
+          // Filter by shopId for data isolation
+          const shopFilteredDocs = filterByShopId(filteredDocs, shop?.shopId);
+
+          // Sort by timestamp in descending order
+          const sortedDocs = shopFilteredDocs.sort(
+            (a, b) =>
+              new Date(b.timestamp as string).getTime() -
+              new Date(a.timestamp as string).getTime()
+          );
+
+          console.log("Filtered sales:", sortedDocs);
+          setSales(sortedDocs);
         } catch (err) {
           console.error("Error fetching sales:", err);
           const message = err instanceof Error ? err.message : String(err);

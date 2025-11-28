@@ -54,7 +54,9 @@ export async function createOpeningBalanceEntries(
     accountCode: AccountCode;
     balance: Money;
   }>,
-  timestamp: string
+  timestamp: string,
+  shopId?: string,
+  createdBy?: string
 ): Promise<LedgerEntryDoc | null> {
   const ledgerDB = await getLedgerDB();
   const settings = await getShopSettings();
@@ -156,6 +158,8 @@ export async function createOpeningBalanceEntries(
     description: "Opening balance entries",
     lines,
     status: "posted",
+    shopId,
+    createdBy,
     metadata: {
       isOpeningBalance: true,
     },
@@ -172,7 +176,9 @@ export async function createSaleEntry(
   totalAmount: Money,
   costOfGoods: Money,
   paymentMethod: string,
-  timestamp: string
+  timestamp: string,
+  shopId?: string,
+  createdBy?: string
 ): Promise<LedgerEntryDoc | null> {
   const ledgerDB = await getLedgerDB();
 
@@ -266,6 +272,8 @@ export async function createSaleEntry(
     description: "Sale transaction",
     lines,
     status: "posted",
+    shopId,
+    createdBy,
     metadata: {
       totalAmount: saleAmountBase.amount,
       costOfGoods: costOfGoodsBase.amount,
@@ -284,12 +292,19 @@ export async function createPurchaseEntry(
   purchaseId: string,
   totalAmount: Money,
   paymentMethod: string,
-  timestamp: string
+  timestamp: string,
+  shopId?: string,
+  createdBy?: string
 ): Promise<LedgerEntryDoc | null> {
   const ledgerDB = await getLedgerDB();
 
+  // Validate shopId is provided
+  if (!shopId) {
+    throw new Error("shopId is required to create purchase entry");
+  }
+
   // Get settings for currency conversion
-  const settings = await getShopSettings();
+  const settings = await getShopSettings(shopId);
   if (!settings) {
     throw new Error("Shop settings not found");
   }
@@ -349,6 +364,8 @@ export async function createPurchaseEntry(
     description: "Purchase transaction",
     lines,
     status: "posted",
+    shopId,
+    createdBy,
     metadata: {
       totalAmount: purchaseAmountBase.amount,
       paymentMethod,
@@ -365,7 +382,9 @@ export async function createCashAdjustmentEntry(
   countId: string,
   physicalAmount: Money,
   expectedAmount: Money,
-  timestamp: string
+  timestamp: string,
+  shopId?: string,
+  createdBy?: string
 ): Promise<LedgerEntryDoc | null> {
   const ledgerDB = await getLedgerDB();
 
@@ -490,6 +509,8 @@ export async function createCashAdjustmentEntry(
     description: "Cash count adjustment",
     lines,
     status: "posted",
+    shopId,
+    createdBy,
     metadata: {
       physicalAmount: physicalBase.amount,
       expectedAmount: expectedBase.amount,
@@ -505,21 +526,24 @@ export async function createCashAdjustmentEntry(
 // Generate a trial balance for a period
 export async function generateTrialBalance(
   startDate: string,
-  endDate: string
+  endDate: string,
+  shopId?: string
 ): Promise<TrialBalance> {
   const ledgerDB = await getLedgerDB();
 
   // Get all posted entries within the date range
-  const result = await ledgerDB.find({
-    selector: {
-      type: "ledger_entry",
-      status: "posted",
-      timestamp: {
-        $gte: startDate,
-        $lt: endDate,
-      },
+  const selector: any = {
+    type: "ledger_entry",
+    status: "posted",
+    timestamp: {
+      $gte: startDate,
+      $lt: endDate,
     },
-  });
+  };
+  if (shopId) {
+    selector.shopId = shopId;
+  }
+  const result = await ledgerDB.find({ selector });
 
   // Get settings for currency conversion
   const settings = await getShopSettings();

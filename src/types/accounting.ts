@@ -127,6 +127,8 @@ export interface LedgerEntryDoc extends PouchDB.Core.Document<object> {
   description: string; // General description of the entry
   lines: LedgerEntryLine[]; // Individual debit/credit lines
   status: "pending" | "posted" | "failed";
+  shopId?: string; // Shop identifier
+  createdBy?: string; // userId of creator
   metadata?: {
     // Additional contextual information
     [key: string]: string | number | boolean | Money | null;

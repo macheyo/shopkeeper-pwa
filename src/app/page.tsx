@@ -2,6 +2,10 @@
 
 import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useOnboarding } from "@/contexts/OnboardingContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { addShopIdFilter } from "@/lib/queryHelpers";
+import { hasPermission, Permission } from "@/lib/permissions";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import {
@@ -81,6 +85,12 @@ type BeforeInstallPromptEvent = Event & {
 
 export default function Home() {
   const { hasCompletedOnboarding, completeOnboarding } = useOnboarding();
+  const {
+    isAuthenticated,
+    isLoading: authLoading,
+    shop,
+    currentUser,
+  } = useAuth();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -120,6 +130,14 @@ export default function Home() {
   const fetchDashboardData = useCallback(async () => {
     if (typeof window === "undefined") return;
 
+    // Don't fetch if shop is not available
+    if (!shop?.shopId) {
+      setProductsLoading(false);
+      setSalesLoading(false);
+      setRevenueLoading(false);
+      return;
+    }
+
     // Reset loading states
     setProductsLoading(true);
     setSalesLoading(true);
@@ -135,13 +153,16 @@ export default function Home() {
       ]);
     } catch (error) {
       console.error("Error initializing databases:", error);
+      setProductsLoading(false);
+      setSalesLoading(false);
+      setRevenueLoading(false);
       return;
     }
 
     // Fetch products count
     try {
       const productsResult = await productsDB.find({
-        selector: { type: "product" },
+        selector: addShopIdFilter({ type: "product" }, shop.shopId),
       });
       setProductCount(productsResult.docs.length);
     } catch (error) {
@@ -170,13 +191,16 @@ export default function Home() {
 
       // Query sales with filtering at the database level
       const result = await salesDB.find({
-        selector: {
-          type: "sale",
-          timestamp: {
-            $gte: startDateISOString,
-            $lt: endDateISOString,
+        selector: addShopIdFilter(
+          {
+            type: "sale",
+            timestamp: {
+              $gte: startDateISOString,
+              $lt: endDateISOString,
+            },
           },
-        },
+          shop?.shopId
+        ),
       });
 
       const filteredSales = result.docs as SaleDoc[];
@@ -286,7 +310,7 @@ export default function Home() {
       setSalesLoading(false);
       setRevenueLoading(false);
     }
-  }, [dateRange, customDateRange, startDate, endDate, label]); // Re-fetch when date range changes
+  }, [dateRange, customDateRange, startDate, endDate, label, shop]); // Re-fetch when date range changes
 
   // Function to load sales target from localStorage
   const loadSalesTarget = useCallback(() => {
@@ -695,440 +719,465 @@ export default function Home() {
     );
   };
 
-  // Show onboarding wizard if onboarding is not complete
-  if (!hasCompletedOnboarding) {
-    return (
-      <Suspense
-        fallback={
-          <LoadingSpinner message="Loading onboarding wizard..." size="md" />
-        }
-      >
-        <OnboardingWizard onComplete={completeOnboarding} />
-      </Suspense>
-    );
-  }
-
   return (
-    <div>
-      <Container size="md" py="md">
-        <Stack gap="md">
-          <Group justify="space-between" align="center">
-            <Title order={2}>ShopKeeper Dashboard</Title>
-            <Badge
-              color={isOnline ? "green" : "red"}
-              leftSection={
-                isOnline ? <IconWifi size={12} /> : <IconWifiOff size={12} />
-              }
-            >
-              {isOnline ? "Online" : "Offline"}
-            </Badge>
-          </Group>
-
-          {syncStatus === "pending" && (
-            <Paper withBorder p="xs" bg="yellow.0">
-              <Group>
-                <IconCloudUpload size={16} />
-                <Text size="sm">Syncing data with server...</Text>
-              </Group>
-            </Paper>
-          )}
-
-          {!isInstalled && (
-            <Card withBorder p="md" radius="md" bg="blue.0">
-              <Stack gap="md">
-                <Text fw={500} size="lg">
-                  Install ShopKeeper on your device
-                </Text>
-                <Text size="sm">
-                  Install this app on your home screen for quick access and
-                  offline use!
-                </Text>
-                <Group justify="flex-end">
-                  <Button
-                    leftSection={<IconDownload size={20} />}
-                    onClick={handleInstall}
-                    disabled={!deferredPrompt}
-                  >
-                    Install Now
-                  </Button>
-                </Group>
-              </Stack>
-            </Card>
-          )}
-
-          {/* Stats Cards */}
-          <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md">
-            {stats.map((stat) => (
-              <Card
-                key={stat.label}
-                withBorder
-                p="md"
-                radius="md"
-                style={{
-                  cursor: "pointer",
-                  transition: "transform 0.2s, box-shadow 0.2s",
-                }}
-                className="hover-card"
-                onClick={() => router.push(stat.path)}
-              >
-                <Group justify="space-between" align="flex-start">
-                  <div>
-                    <Text size="xs" c="dimmed">
-                      {stat.label}
-                    </Text>
-                    <Text fw={700} size="xl">
-                      {stat.value}
-                    </Text>
-                  </div>
-                  <ThemeIcon
-                    color={stat.color}
-                    variant="light"
-                    size="lg"
-                    radius="md"
-                  >
-                    <stat.icon style={{ width: rem(20), height: rem(20) }} />
-                  </ThemeIcon>
-                </Group>
-              </Card>
-            ))}
-          </SimpleGrid>
-
-          {/* Sales Target Card */}
-          {currentTarget || aggregatedTarget ? (
-            <Card withBorder p="md" radius="md" mb="md">
-              <Group justify="space-between" align="flex-start" mb="xs">
-                <div>
-                  <Group align="center">
-                    <Text fw={500} size="lg">
-                      {currentTarget
-                        ? "Today's Sales Target"
-                        : getTargetLabel(aggregatedTarget, dateRange)}
-                    </Text>
-                    <Tooltip label="View target history">
-                      <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        onClick={() => setShowHistoryModal(true)}
-                      >
-                        <IconHistory size={18} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </Group>
-                  <Group gap="xs" mt="xs">
-                    <Text fw={700} size="xl">
-                      {currentTarget
-                        ? formatMoney(
-                            createMoney(
-                              currentTarget.amount,
-                              currentTarget.currency
-                            )
-                          )
-                        : formatTargetAmount(aggregatedTarget)}
-                    </Text>
-                    {(currentTarget?.achieved ||
-                      aggregatedTarget?.achieved) && (
-                      <Badge color="green" size="lg">
-                        Achieved!
-                      </Badge>
-                    )}
-                  </Group>
-                </div>
-                <ThemeIcon
-                  color={
-                    currentTarget?.achieved || aggregatedTarget?.achieved
-                      ? "green"
-                      : "blue"
-                  }
-                  variant="light"
-                  size="lg"
-                  radius="md"
-                >
-                  {currentTarget?.achieved || aggregatedTarget?.achieved ? (
-                    <IconTrophy style={{ width: rem(20), height: rem(20) }} />
-                  ) : (
-                    <IconTarget style={{ width: rem(20), height: rem(20) }} />
-                  )}
-                </ThemeIcon>
-              </Group>
-
-              {/* Progress bar */}
-              <Stack gap="xs">{renderProgressBar()}</Stack>
-            </Card>
-          ) : null}
-
-          {!currentTarget && !aggregatedTarget && (
-            <Card withBorder p="md" radius="md" mb="md">
-              <Group justify="space-between" align="center">
-                <Text>
-                  No sales target set for {dateRangeInfo.label.toLowerCase()}
-                </Text>
-                <Button
-                  leftSection={<IconTarget size={16} />}
-                  onClick={() => setShowTargetModal(true)}
-                  variant="light"
-                >
-                  Set Target
-                </Button>
-              </Group>
-            </Card>
-          )}
-
-          {/* Quick Actions */}
-          <Card withBorder shadow="sm" p="lg" radius="md">
+    <ProtectedRoute requireAuth={true}>
+      {!hasCompletedOnboarding ? (
+        <Suspense
+          fallback={
+            <LoadingSpinner message="Loading onboarding wizard..." size="md" />
+          }
+        >
+          <OnboardingWizard onComplete={completeOnboarding} />
+        </Suspense>
+      ) : (
+        <div>
+          <Container size="md" py="md">
             <Stack gap="md">
-              <Text fw={500} size="lg">
-                Quick Actions
+              <Group justify="space-between" align="center">
+                <Title order={2}>ShopKeeper Dashboard</Title>
+                <Badge
+                  color={isOnline ? "green" : "red"}
+                  leftSection={
+                    isOnline ? (
+                      <IconWifi size={12} />
+                    ) : (
+                      <IconWifiOff size={12} />
+                    )
+                  }
+                >
+                  {isOnline ? "Online" : "Offline"}
+                </Badge>
+              </Group>
+
+              {syncStatus === "pending" && (
+                <Paper withBorder p="xs" bg="yellow.0">
+                  <Group>
+                    <IconCloudUpload size={16} />
+                    <Text size="sm">Syncing data with server...</Text>
+                  </Group>
+                </Paper>
+              )}
+
+              {!isInstalled && (
+                <Card withBorder p="md" radius="md" bg="blue.0">
+                  <Stack gap="md">
+                    <Text fw={500} size="lg">
+                      Install ShopKeeper on your device
+                    </Text>
+                    <Text size="sm">
+                      Install this app on your home screen for quick access and
+                      offline use!
+                    </Text>
+                    <Group justify="flex-end">
+                      <Button
+                        leftSection={<IconDownload size={20} />}
+                        onClick={handleInstall}
+                        disabled={!deferredPrompt}
+                      >
+                        Install Now
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Card>
+              )}
+
+              {/* Stats Cards */}
+              <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md">
+                {stats.map((stat) => (
+                  <Card
+                    key={stat.label}
+                    withBorder
+                    p="md"
+                    radius="md"
+                    style={{
+                      cursor: "pointer",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                    }}
+                    className="hover-card"
+                    onClick={() => router.push(stat.path)}
+                  >
+                    <Group justify="space-between" align="flex-start">
+                      <div>
+                        <Text size="xs" c="dimmed">
+                          {stat.label}
+                        </Text>
+                        <Text fw={700} size="xl">
+                          {stat.value}
+                        </Text>
+                      </div>
+                      <ThemeIcon
+                        color={stat.color}
+                        variant="light"
+                        size="lg"
+                        radius="md"
+                      >
+                        <stat.icon
+                          style={{ width: rem(20), height: rem(20) }}
+                        />
+                      </ThemeIcon>
+                    </Group>
+                  </Card>
+                ))}
+              </SimpleGrid>
+
+              {/* Sales Target Card */}
+              {currentTarget || aggregatedTarget ? (
+                <Card withBorder p="md" radius="md" mb="md">
+                  <Group justify="space-between" align="flex-start" mb="xs">
+                    <div>
+                      <Group align="center">
+                        <Text fw={500} size="lg">
+                          {currentTarget
+                            ? "Today's Sales Target"
+                            : getTargetLabel(aggregatedTarget, dateRange)}
+                        </Text>
+                        <Tooltip label="View target history">
+                          <ActionIcon
+                            variant="subtle"
+                            color="gray"
+                            onClick={() => setShowHistoryModal(true)}
+                          >
+                            <IconHistory size={18} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                      <Group gap="xs" mt="xs">
+                        <Text fw={700} size="xl">
+                          {currentTarget
+                            ? formatMoney(
+                                createMoney(
+                                  currentTarget.amount,
+                                  currentTarget.currency
+                                )
+                              )
+                            : formatTargetAmount(aggregatedTarget)}
+                        </Text>
+                        {(currentTarget?.achieved ||
+                          aggregatedTarget?.achieved) && (
+                          <Badge color="green" size="lg">
+                            Achieved!
+                          </Badge>
+                        )}
+                      </Group>
+                    </div>
+                    <ThemeIcon
+                      color={
+                        currentTarget?.achieved || aggregatedTarget?.achieved
+                          ? "green"
+                          : "blue"
+                      }
+                      variant="light"
+                      size="lg"
+                      radius="md"
+                    >
+                      {currentTarget?.achieved || aggregatedTarget?.achieved ? (
+                        <IconTrophy
+                          style={{ width: rem(20), height: rem(20) }}
+                        />
+                      ) : (
+                        <IconTarget
+                          style={{ width: rem(20), height: rem(20) }}
+                        />
+                      )}
+                    </ThemeIcon>
+                  </Group>
+
+                  {/* Progress bar */}
+                  <Stack gap="xs">{renderProgressBar()}</Stack>
+                </Card>
+              ) : null}
+
+              {!currentTarget && !aggregatedTarget && (
+                <Card withBorder p="md" radius="md" mb="md">
+                  <Group justify="space-between" align="center">
+                    <Text>
+                      No sales target set for{" "}
+                      {dateRangeInfo.label.toLowerCase()}
+                    </Text>
+                    <Button
+                      leftSection={<IconTarget size={16} />}
+                      onClick={() => setShowTargetModal(true)}
+                      variant="light"
+                    >
+                      Set Target
+                    </Button>
+                  </Group>
+                </Card>
+              )}
+
+              {/* Quick Actions */}
+              <Card withBorder shadow="sm" p="lg" radius="md">
+                <Stack gap="md">
+                  <Text fw={500} size="lg">
+                    Quick Actions
+                  </Text>
+
+                  <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md">
+                    <Button
+                      component="a"
+                      href="/sales/new"
+                      leftSection={<IconPlus size={20} />}
+                      variant="filled"
+                      color="blue"
+                      fullWidth
+                    >
+                      New Sale
+                    </Button>
+
+                    <Button
+                      component="a"
+                      href="/products/add"
+                      leftSection={<IconPlus size={20} />}
+                      variant="filled"
+                      color="green"
+                      fullWidth
+                    >
+                      Add Product
+                    </Button>
+
+                    {hasPermission(currentUser, Permission.VIEW_REPORTS) && (
+                      <>
+                        <Button
+                          component="a"
+                          href="/reports"
+                          leftSection={<IconChartBar size={20} />}
+                          variant="outline"
+                          fullWidth
+                        >
+                          View Reports
+                        </Button>
+
+                        <Button
+                          leftSection={<IconShare size={20} />}
+                          variant="outline"
+                          fullWidth
+                          onClick={() => {
+                            if (navigator.share) {
+                              navigator.share({
+                                title: "ShopKeeper Reports",
+                                text: "Check out my shop reports",
+                                url: window.location.origin + "/reports",
+                              });
+                            }
+                          }}
+                        >
+                          Share Reports
+                        </Button>
+                      </>
+                    )}
+                  </SimpleGrid>
+                </Stack>
+              </Card>
+
+              {/* Add hover styles */}
+              <style jsx>{`
+                .hover-card {
+                  transition: transform 0.2s, box-shadow 0.2s;
+                }
+                .hover-card:hover {
+                  transform: translateY(-4px);
+                  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                }
+              `}</style>
+            </Stack>
+          </Container>
+
+          {/* Modals */}
+          {/* Target Modal */}
+          <Modal
+            opened={showTargetModal}
+            onClose={() => setShowTargetModal(false)}
+            title="Set Sales Target"
+            centered
+            size="lg"
+          >
+            <Stack>
+              <Text size="sm">
+                Setting sales targets can help you track your progress and stay
+                motivated. Choose the type of target you want to set.
               </Text>
+              <Tabs defaultValue="daily">
+                <Tabs.List>
+                  <Tabs.Tab
+                    value="daily"
+                    leftSection={<IconTarget size={16} />}
+                  >
+                    Daily Target
+                  </Tabs.Tab>
+                  <Tabs.Tab
+                    value="weekly"
+                    leftSection={<IconCalendar size={16} />}
+                  >
+                    Weekly Target
+                  </Tabs.Tab>
+                  <Tabs.Tab
+                    value="monthly"
+                    leftSection={<IconCalendar size={16} />}
+                  >
+                    Monthly Target
+                  </Tabs.Tab>
+                </Tabs.List>
+                <Tabs.Panel value="daily" pt="xs">
+                  <Stack mt="md">
+                    <Text size="sm">Set a target for today&apos;s sales.</Text>
+                    <NumberInput
+                      label="Daily Target Amount"
+                      description={`Enter your daily sales target in ${BASE_CURRENCY}`}
+                      value={targetAmount}
+                      onChange={(val) => setTargetAmount(Number(val))}
+                      min={0}
+                      step={10}
+                      decimalScale={2}
+                      prefix="$"
+                      size="lg"
+                    />
+                    <Group justify="right" mt="md">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowTargetModal(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={setNewTarget}
+                        disabled={targetAmount <= 0}
+                        color="blue"
+                      >
+                        Set Daily Target
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Tabs.Panel>
 
-              <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="md">
-                <Button
-                  component="a"
-                  href="/sales/new"
-                  leftSection={<IconPlus size={20} />}
-                  variant="filled"
-                  color="blue"
-                  fullWidth
-                >
-                  New Sale
-                </Button>
+                <Tabs.Panel value="weekly" pt="xs">
+                  <Stack mt="md">
+                    <Text size="sm">
+                      Set a target for this week&apos;s sales. This will help
+                      you track your weekly performance.
+                    </Text>
+                    <NumberInput
+                      label="Weekly Target Amount"
+                      description={`Enter your weekly sales target in ${BASE_CURRENCY}`}
+                      value={weeklyTargetAmount}
+                      onChange={(val) => setWeeklyTargetAmount(Number(val))}
+                      min={0}
+                      step={50}
+                      decimalScale={2}
+                      prefix="$"
+                      size="lg"
+                    />
+                    <Group justify="right" mt="md">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowTargetModal(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={setNewWeeklyTarget}
+                        disabled={weeklyTargetAmount <= 0}
+                        color="teal"
+                      >
+                        Set Weekly Target
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Tabs.Panel>
 
-                <Button
-                  component="a"
-                  href="/products/add"
-                  leftSection={<IconPlus size={20} />}
-                  variant="filled"
-                  color="green"
-                  fullWidth
-                >
-                  Add Product
-                </Button>
+                <Tabs.Panel value="monthly" pt="xs">
+                  <Stack mt="md">
+                    <Text size="sm">
+                      Set a target for this month&apos;s sales. This will help
+                      you track your monthly performance.
+                    </Text>
+                    <NumberInput
+                      label="Monthly Target Amount"
+                      description={`Enter your monthly sales target in ${BASE_CURRENCY}`}
+                      value={monthlyTargetAmount}
+                      onChange={(val) => setMonthlyTargetAmount(Number(val))}
+                      min={0}
+                      step={100}
+                      decimalScale={2}
+                      prefix="$"
+                      size="lg"
+                    />
+                    <Group justify="right" mt="md">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowTargetModal(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={setNewMonthlyTarget}
+                        disabled={monthlyTargetAmount <= 0}
+                        color="indigo"
+                      >
+                        Set Monthly Target
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Tabs.Panel>
+              </Tabs>
+            </Stack>
+          </Modal>
 
+          {/* Target History Modal */}
+          <Modal
+            opened={showHistoryModal}
+            onClose={() => setShowHistoryModal(false)}
+            title="Sales Target History"
+            size="lg"
+          >
+            {renderTargetHistory()}
+            <Button
+              fullWidth
+              mt="md"
+              onClick={() => setShowHistoryModal(false)}
+            >
+              Close
+            </Button>
+          </Modal>
+
+          {/* Celebration Modal */}
+          <Modal
+            opened={showCelebration}
+            onClose={() => setShowCelebration(false)}
+            title={
+              <Title order={3} ta="center">
+                🎉 Congratulations! 🎉
+              </Title>
+            }
+            centered
+            size="md"
+          >
+            <Stack align="center" gap="lg" py="md">
+              <Text size="xl" fw={700} ta="center">
+                You&apos;ve achieved your sales target for today!
+              </Text>
+              <div style={{ fontSize: rem(80), textAlign: "center" }}>🏆</div>
+              <Text ta="center">
+                Keep up the great work! Your dedication and effort have paid
+                off.
+              </Text>
+              <Group>
                 <Button
-                  component="a"
-                  href="/reports"
-                  leftSection={<IconChartBar size={20} />}
                   variant="outline"
-                  fullWidth
-                >
-                  View Reports
-                </Button>
-
-                <Button
-                  leftSection={<IconShare size={20} />}
-                  variant="outline"
-                  fullWidth
                   onClick={() => {
-                    if (navigator.share) {
-                      navigator.share({
-                        title: "ShopKeeper Reports",
-                        text: "Check out my shop reports",
-                        url: window.location.origin + "/reports",
-                      });
-                    }
+                    setShowCelebration(false);
+                    setShowTargetModal(true);
                   }}
                 >
-                  Share Reports
+                  Set New Target
                 </Button>
-              </SimpleGrid>
+                <Button size="lg" onClick={() => setShowCelebration(false)}>
+                  Thank You!
+                </Button>
+              </Group>
             </Stack>
-          </Card>
-
-          {/* Add hover styles */}
-          <style jsx>{`
-            .hover-card {
-              transition: transform 0.2s, box-shadow 0.2s;
-            }
-            .hover-card:hover {
-              transform: translateY(-4px);
-              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            }
-          `}</style>
-        </Stack>
-      </Container>
-
-      {/* Modals */}
-      {/* Target Modal */}
-      <Modal
-        opened={showTargetModal}
-        onClose={() => setShowTargetModal(false)}
-        title="Set Sales Target"
-        centered
-        size="lg"
-      >
-        <Stack>
-          <Text size="sm">
-            Setting sales targets can help you track your progress and stay
-            motivated. Choose the type of target you want to set.
-          </Text>
-          <Tabs defaultValue="daily">
-            <Tabs.List>
-              <Tabs.Tab value="daily" leftSection={<IconTarget size={16} />}>
-                Daily Target
-              </Tabs.Tab>
-              <Tabs.Tab value="weekly" leftSection={<IconCalendar size={16} />}>
-                Weekly Target
-              </Tabs.Tab>
-              <Tabs.Tab
-                value="monthly"
-                leftSection={<IconCalendar size={16} />}
-              >
-                Monthly Target
-              </Tabs.Tab>
-            </Tabs.List>
-            <Tabs.Panel value="daily" pt="xs">
-              <Stack mt="md">
-                <Text size="sm">Set a target for today&apos;s sales.</Text>
-                <NumberInput
-                  label="Daily Target Amount"
-                  description={`Enter your daily sales target in ${BASE_CURRENCY}`}
-                  value={targetAmount}
-                  onChange={(val) => setTargetAmount(Number(val))}
-                  min={0}
-                  step={10}
-                  decimalScale={2}
-                  prefix="$"
-                  size="lg"
-                />
-                <Group justify="right" mt="md">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowTargetModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={setNewTarget}
-                    disabled={targetAmount <= 0}
-                    color="blue"
-                  >
-                    Set Daily Target
-                  </Button>
-                </Group>
-              </Stack>
-            </Tabs.Panel>
-
-            <Tabs.Panel value="weekly" pt="xs">
-              <Stack mt="md">
-                <Text size="sm">
-                  Set a target for this week&apos;s sales. This will help you
-                  track your weekly performance.
-                </Text>
-                <NumberInput
-                  label="Weekly Target Amount"
-                  description={`Enter your weekly sales target in ${BASE_CURRENCY}`}
-                  value={weeklyTargetAmount}
-                  onChange={(val) => setWeeklyTargetAmount(Number(val))}
-                  min={0}
-                  step={50}
-                  decimalScale={2}
-                  prefix="$"
-                  size="lg"
-                />
-                <Group justify="right" mt="md">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowTargetModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={setNewWeeklyTarget}
-                    disabled={weeklyTargetAmount <= 0}
-                    color="teal"
-                  >
-                    Set Weekly Target
-                  </Button>
-                </Group>
-              </Stack>
-            </Tabs.Panel>
-
-            <Tabs.Panel value="monthly" pt="xs">
-              <Stack mt="md">
-                <Text size="sm">
-                  Set a target for this month&apos;s sales. This will help you
-                  track your monthly performance.
-                </Text>
-                <NumberInput
-                  label="Monthly Target Amount"
-                  description={`Enter your monthly sales target in ${BASE_CURRENCY}`}
-                  value={monthlyTargetAmount}
-                  onChange={(val) => setMonthlyTargetAmount(Number(val))}
-                  min={0}
-                  step={100}
-                  decimalScale={2}
-                  prefix="$"
-                  size="lg"
-                />
-                <Group justify="right" mt="md">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowTargetModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={setNewMonthlyTarget}
-                    disabled={monthlyTargetAmount <= 0}
-                    color="indigo"
-                  >
-                    Set Monthly Target
-                  </Button>
-                </Group>
-              </Stack>
-            </Tabs.Panel>
-          </Tabs>
-        </Stack>
-      </Modal>
-
-      {/* Target History Modal */}
-      <Modal
-        opened={showHistoryModal}
-        onClose={() => setShowHistoryModal(false)}
-        title="Sales Target History"
-        size="lg"
-      >
-        {renderTargetHistory()}
-        <Button fullWidth mt="md" onClick={() => setShowHistoryModal(false)}>
-          Close
-        </Button>
-      </Modal>
-
-      {/* Celebration Modal */}
-      <Modal
-        opened={showCelebration}
-        onClose={() => setShowCelebration(false)}
-        title={
-          <Title order={3} ta="center">
-            🎉 Congratulations! 🎉
-          </Title>
-        }
-        centered
-        size="md"
-      >
-        <Stack align="center" gap="lg" py="md">
-          <Text size="xl" fw={700} ta="center">
-            You&apos;ve achieved your sales target for today!
-          </Text>
-          <div style={{ fontSize: rem(80), textAlign: "center" }}>🏆</div>
-          <Text ta="center">
-            Keep up the great work! Your dedication and effort have paid off.
-          </Text>
-          <Group>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowCelebration(false);
-                setShowTargetModal(true);
-              }}
-            >
-              Set New Target
-            </Button>
-            <Button size="lg" onClick={() => setShowCelebration(false)}>
-              Thank You!
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-    </div>
+          </Modal>
+        </div>
+      )}
+    </ProtectedRoute>
   );
 }

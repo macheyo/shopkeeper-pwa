@@ -7,6 +7,7 @@ import { CurrencyCode } from "@/types/money";
 import LoadingSpinner from "./LoadingSpinner";
 import { useMantineTheme } from "@mantine/core";
 import { LottieAnimation } from "@/types/lottie";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Default Lottie animation data - a simple pulsing spinner
 // Now properly typed with LottieAnimation interface
@@ -140,6 +141,7 @@ export default function ClientSettingsLoader({
   lottieAnimationData,
   lottieAnimationPath,
 }: ClientSettingsLoaderProps) {
+  const { shop } = useAuth();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("Initializing");
@@ -163,7 +165,7 @@ export default function ClientSettingsLoader({
         updateLoadingState(loadingSteps[stepIndex]);
 
         // Actually fetch settings
-        const settings = await getShopSettings();
+        const settings = await getShopSettings(shop?.shopId);
         if (cancelled) return;
 
         stepIndex++;
@@ -248,7 +250,7 @@ export default function ClientSettingsLoader({
     return () => {
       cancelled = true;
     };
-  }, [serverSettings, onSettingsLoaded]);
+  }, [serverSettings, onSettingsLoaded, shop?.shopId]);
 
   // Show loading spinner with Lottie animation while loading
   if (loading) {

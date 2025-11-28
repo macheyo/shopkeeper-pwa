@@ -1,9 +1,9 @@
 "use client";
 
-"use client";
-
 import React from "react";
 import { useOnboarding } from "@/contexts/OnboardingContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { hasPermission, Permission } from "@/lib/permissions";
 import {
   AppShell,
   Group,
@@ -15,6 +15,9 @@ import {
   Box,
   Tooltip,
   ActionIcon,
+  Menu,
+  Badge,
+  Button,
 } from "@mantine/core";
 import {
   IconHome,
@@ -24,8 +27,11 @@ import {
   IconRefresh,
   IconBrandWhatsapp,
   IconCloud,
+  IconUser,
+  IconLogout,
+  IconUsers,
 } from "@tabler/icons-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import BottomNav from "./BottomNav";
 import DateFilter from "./DateFilter";
 
@@ -35,7 +41,19 @@ interface AppShellProps {
 
 export default function ShopkeeperAppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { hasCompletedOnboarding } = useOnboarding();
+  const { currentUser, shop, logout, isAuthenticated } = useAuth();
+
+  // Public routes that don't need the full app shell
+  const publicRoutes = ["/login", "/register"];
+  const isPublicRoute =
+    publicRoutes.includes(pathname) || pathname.startsWith("/invite/");
+
+  // For public routes, render children without the shell
+  if (isPublicRoute) {
+    return <>{children}</>;
+  }
 
   // Status indicators for WhatsApp and GCP connections
   const getConnectionStatus = () => {
@@ -45,21 +63,21 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
     const gcpStatus = isOnline;
 
     return (
-      <Group gap="sm">
+      <Group gap={{ base: "xs", sm: "sm" }}>
         <Tooltip
           label={`WhatsApp: ${whatsAppStatus ? "Connected" : "Offline"}`}
         >
           <ActionIcon
             variant="light"
             color={whatsAppStatus ? "green" : "red"}
-            size="lg"
+            size={{ base: "md", sm: "lg" }}
             style={{
               transition: "all 0.3s ease",
               animation: whatsAppStatus ? "pulse 2s infinite" : "none",
             }}
           >
             <IconBrandWhatsapp
-              size={20}
+              size={18}
               style={{ opacity: whatsAppStatus ? 1 : 0.5 }}
             />
           </ActionIcon>
@@ -68,13 +86,13 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
           <ActionIcon
             variant="light"
             color={gcpStatus ? "green" : "red"}
-            size="lg"
+            size={{ base: "md", sm: "lg" }}
             style={{
               transition: "all 0.3s ease",
               animation: gcpStatus ? "pulse 2s infinite" : "none",
             }}
           >
-            <IconCloud size={20} style={{ opacity: gcpStatus ? 1 : 0.5 }} />
+            <IconCloud size={18} style={{ opacity: gcpStatus ? 1 : 0.5 }} />
           </ActionIcon>
         </Tooltip>
       </Group>
@@ -98,22 +116,92 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
       }}
     >
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group>
+        <Group
+          h="100%"
+          px={{ base: "xs", sm: "md" }}
+          justify="space-between"
+          wrap="nowrap"
+        >
+          <Box style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
             <Title
               order={3}
               c="blue.7"
               style={{
                 transition: "transform 0.3s ease",
-                "&:hover": {
-                  transform: "scale(1.02)",
-                },
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: "100%",
               }}
+              size={{ base: "h5", sm: "h3" }}
             >
-              ShopKeeper
+              {shop?.shopName || "ShopKeeper"}
             </Title>
+          </Box>
+          <Group gap={{ base: "xs", sm: "md" }} wrap="nowrap">
+            {isAuthenticated && currentUser && (
+              <Menu shadow="md" width={200}>
+                <Menu.Target>
+                  <Button
+                    variant="subtle"
+                    leftSection={<IconUser size={16} />}
+                    rightSection={
+                      <Badge size="sm" color="blue" variant="light">
+                        {currentUser.role}
+                      </Badge>
+                    }
+                    px={{ base: "xs", sm: "sm" }}
+                    style={{ overflow: "hidden" }}
+                  >
+                    <Text
+                      size="sm"
+                      visibleFrom="sm"
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: 120,
+                      }}
+                    >
+                      {currentUser.name}
+                    </Text>
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>Account</Menu.Label>
+                  <Menu.Item leftSection={<IconUser size={16} />}>
+                    <Text size="sm" fw={500}>
+                      {currentUser.name}
+                    </Text>
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconUser size={16} />}
+                    onClick={() => router.push("/profile")}
+                  >
+                    Profile
+                  </Menu.Item>
+                  {(currentUser.role === "owner" ||
+                    currentUser.role === "manager") && (
+                    <Menu.Item
+                      leftSection={<IconUsers size={16} />}
+                      onClick={() => router.push("/users")}
+                    >
+                      Manage Users
+                    </Menu.Item>
+                  )}
+                  <Menu.Divider />
+                  <Menu.Item
+                    color="red"
+                    leftSection={<IconLogout size={16} />}
+                    onClick={logout}
+                  >
+                    Logout
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            )}
+            {getConnectionStatus()}
           </Group>
-          <Group>{getConnectionStatus()}</Group>
         </Group>
         {/* Header DateFilter removed and moved below */}
       </AppShell.Header>
@@ -217,35 +305,68 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
               },
             }}
           />
-          <NavLink
-            label="Reports"
-            leftSection={
-              <IconSend
-                size={24}
-                stroke={1.5}
-                style={{ transition: "transform 0.2s ease" }}
-                className="tabler-icon icon-spin"
-              />
-            }
-            active={pathname === "/reports"}
-            href="/reports"
-            component="a"
-            h={60}
-            p="md"
-            style={{ fontSize: "18px" }}
-            styles={{
-              root: {
-                transition: "all 0.2s ease",
-                "&:hover": {
-                  transform: "translateX(5px)",
-                  backgroundColor: "var(--mantine-color-violet-0)",
+          {hasPermission(currentUser, Permission.VIEW_REPORTS) && (
+            <NavLink
+              label="Reports"
+              leftSection={
+                <IconSend
+                  size={24}
+                  stroke={1.5}
+                  style={{ transition: "transform 0.2s ease" }}
+                  className="tabler-icon icon-spin"
+                />
+              }
+              active={pathname === "/reports"}
+              href="/reports"
+              component="a"
+              h={60}
+              p="md"
+              style={{ fontSize: "18px" }}
+              styles={{
+                root: {
+                  transition: "all 0.2s ease",
+                  "&:hover": {
+                    transform: "translateX(5px)",
+                    backgroundColor: "var(--mantine-color-violet-0)",
+                  },
                 },
-              },
-              label: {
-                transition: "transform 0.2s ease",
-              },
-            }}
-          />
+                label: {
+                  transition: "transform 0.2s ease",
+                },
+              }}
+            />
+          )}
+          {hasPermission(currentUser, Permission.VIEW_USERS) && (
+            <NavLink
+              label="Users"
+              leftSection={
+                <IconUsers
+                  size={24}
+                  stroke={1.5}
+                  style={{ transition: "transform 0.2s ease" }}
+                  className="tabler-icon icon-bounce"
+                />
+              }
+              active={pathname === "/users" || pathname.startsWith("/users/")}
+              href="/users"
+              component="a"
+              h={60}
+              p="md"
+              style={{ fontSize: "18px" }}
+              styles={{
+                root: {
+                  transition: "all 0.2s ease",
+                  "&:hover": {
+                    transform: "translateX(5px)",
+                    backgroundColor: "var(--mantine-color-orange-0)",
+                  },
+                },
+                label: {
+                  transition: "transform 0.2s ease",
+                },
+              }}
+            />
+          )}
           <NavLink
             label="Sync"
             leftSection={

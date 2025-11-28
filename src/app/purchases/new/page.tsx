@@ -38,6 +38,8 @@ import { getPurchasesDB, getProductsDB } from "@/lib/databases";
 import { createPurchaseEntry, generateTrialBalance } from "@/lib/accounting";
 import { createInventoryLots } from "@/lib/inventory";
 import { ProductDoc, PurchaseItem, PaymentMethod } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { addShopIdFilter } from "@/lib/queryHelpers";
 import {
   formatMoney,
   createMoney,
@@ -60,6 +62,7 @@ const BarcodeScanner = dynamic(() => import("@/components/BarcodeScanner"), {
 
 export default function NewPurchasePage() {
   const router = useRouter();
+  const { currentUser, shop } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -111,12 +114,13 @@ export default function NewPurchasePage() {
   // Fetch all products on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!shop?.shopId) return;
 
     const fetchData = async () => {
       try {
         const productsDB = await getProductsDB();
         const result = await productsDB.find({
-          selector: { type: "product" },
+          selector: addShopIdFilter({ type: "product" }, shop.shopId),
         });
         setProducts(result.docs as ProductDoc[]);
         setFilteredProducts(result.docs as ProductDoc[]);
@@ -131,7 +135,7 @@ export default function NewPurchasePage() {
     };
 
     fetchData();
-  }, []);
+  }, [shop?.shopId]);
 
   // Filter products when search term changes
   useEffect(() => {
@@ -558,6 +562,16 @@ export default function NewPurchasePage() {
       return;
     }
 
+    if (!shop?.shopId) {
+      setError("Shop information is not available. Please refresh the page.");
+      return;
+    }
+
+    if (!currentUser?.userId) {
+      setError("User information is not available. Please refresh the page.");
+      return;
+    }
+
     if (cartItems.length === 0) {
       setError("Please add at least one product to the cart");
       return;
@@ -625,6 +639,8 @@ export default function NewPurchasePage() {
         paymentMethod: paymentMethod,
         supplier: supplierName || undefined, // Use supplier to match type definition
         status: "pending", // Will be synced later via WhatsApp
+        shopId: shop.shopId,
+        createdBy: currentUser.userId,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
@@ -635,7 +651,8 @@ export default function NewPurchasePage() {
         purchaseRunId,
         now.toISOString(),
         cartItems,
-        supplierName || undefined
+        supplierName || undefined,
+        shop.shopId
       );
 
       // Create ledger entry for the purchase
@@ -643,7 +660,9 @@ export default function NewPurchasePage() {
         purchaseRunId,
         totalPrice,
         paymentMethod,
-        now.toISOString()
+        now.toISOString(),
+        shop.shopId,
+        currentUser.userId
       );
 
       // Set receipt data for display

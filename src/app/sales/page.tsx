@@ -26,6 +26,8 @@ import SalesList from "@/components/SalesList";
 import CollapsibleFab from "@/components/CollapsibleFab";
 import { getSalesDB } from "@/lib/databases";
 import { SaleDoc } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { addShopIdFilter } from "@/lib/queryHelpers";
 import { formatMoney, createMoney, BASE_CURRENCY, Money } from "@/types/money";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import {
@@ -39,6 +41,7 @@ import { SalesTargetHistoryModal } from "@/components/SalesTargetHistoryModal";
 
 export default function SalesPage() {
   const router = useRouter();
+  const { shop } = useAuth();
   const { dateRangeInfo, dateRange, customDateRange } = useDateFilter();
   const [revenue, setRevenue] = useState<Money | null>(null);
   const [currentTarget, setCurrentTarget] = useState<SalesTarget | null>(null);
@@ -59,13 +62,16 @@ export default function SalesPage() {
 
       // Get sales for the selected date range
       const result = await salesDB.find({
-        selector: {
-          type: "sale",
-          timestamp: {
-            $gte: startDateISOString,
-            $lt: endDateISOString,
+        selector: addShopIdFilter(
+          {
+            type: "sale",
+            timestamp: {
+              $gte: startDateISOString,
+              $lt: endDateISOString,
+            },
           },
-        },
+          shop?.shopId
+        ),
       });
 
       const filteredSales = result.docs as SaleDoc[];

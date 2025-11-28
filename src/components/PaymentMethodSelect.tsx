@@ -14,6 +14,7 @@ import { useDateFilter } from "@/contexts/DateFilterContext";
 import { getShopSettings } from "@/lib/settingsDB";
 import { getLedgerDB } from "@/lib/databases";
 import { LedgerEntryDoc } from "@/types/accounting";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface PaymentMethodSelectProps {
   value: PaymentMethod;
@@ -29,6 +30,7 @@ export function PaymentMethodSelect({
   error,
 }: PaymentMethodSelectProps) {
   const { dateRangeInfo } = useDateFilter();
+  const { shop } = useAuth();
   const [balances, setBalances] = useState<{
     cash: Money | null;
     bank: Money | null;
@@ -45,7 +47,7 @@ export function PaymentMethodSelect({
   useEffect(() => {
     const fetchBalances = async () => {
       try {
-        const settings = await getShopSettings();
+        const settings = await getShopSettings(shop?.shopId);
         if (!settings) {
           setLoading(false);
           return;
@@ -187,7 +189,7 @@ export function PaymentMethodSelect({
     };
 
     fetchBalances();
-  }, [dateRangeInfo.endDate]);
+  }, [dateRangeInfo.endDate, shop?.shopId]);
 
   const paymentMethodData = useMemo(() => {
     const getLabel = (method: PaymentMethod): string => {

@@ -15,7 +15,8 @@ export async function createInventoryLots(
   purchaseRunId: string,
   purchaseTimestamp: string,
   items: PurchaseItem[],
-  supplier?: string
+  supplier?: string,
+  shopId?: string
 ): Promise<InventoryLot[]> {
   const lotsDB = await getInventoryLotsDB();
   const now = new Date().toISOString();
@@ -38,6 +39,7 @@ export async function createInventoryLots(
       remainingQuantity: item.qty, // Initially all remaining
       costPrice: item.costPrice,
       supplier,
+      shopId,
       createdAt: now,
       updatedAt: now,
     };
@@ -53,17 +55,21 @@ export async function createInventoryLots(
  * Get available inventory lots for a product (FIFO order - oldest first)
  */
 export async function getAvailableLotsForProduct(
-  productId: string
+  productId: string,
+  shopId?: string
 ): Promise<InventoryLot[]> {
   const lotsDB = await getInventoryLotsDB();
 
-  const result = await lotsDB.find({
-    selector: {
-      type: "inventory_lot",
-      productId,
-      remainingQuantity: { $gt: 0 }, // Only lots with remaining stock
-    },
-  });
+  const selector: any = {
+    type: "inventory_lot",
+    productId,
+    remainingQuantity: { $gt: 0 }, // Only lots with remaining stock
+  };
+  if (shopId) {
+    selector.shopId = shopId;
+  }
+
+  const result = await lotsDB.find({ selector });
 
   // Sort in JavaScript for FIFO (oldest first)
   const lots = result.docs as InventoryLot[];
@@ -80,7 +86,8 @@ export async function getAvailableLotsForProduct(
  */
 export async function allocateInventoryFIFO(
   productId: string,
-  quantity: number
+  quantity: number,
+  shopId?: string
 ): Promise<
   Array<{
     lotId: string;
@@ -90,7 +97,7 @@ export async function allocateInventoryFIFO(
   }>
 > {
   const lotsDB = await getInventoryLotsDB();
-  const availableLots = await getAvailableLotsForProduct(productId);
+  const availableLots = await getAvailableLotsForProduct(productId, shopId);
 
   if (availableLots.length === 0) {
     throw new Error(`No inventory available for product ${productId}`);
@@ -146,16 +153,20 @@ export async function allocateInventoryFIFO(
  * Get lots for a specific purchase run
  */
 export async function getLotsByPurchaseRun(
-  purchaseRunId: string
+  purchaseRunId: string,
+  shopId?: string
 ): Promise<InventoryLot[]> {
   const lotsDB = await getInventoryLotsDB();
 
-  const result = await lotsDB.find({
-    selector: {
-      type: "inventory_lot",
-      purchaseRunId,
-    },
-  });
+  const selector: any = {
+    type: "inventory_lot",
+    purchaseRunId,
+  };
+  if (shopId) {
+    selector.shopId = shopId;
+  }
+
+  const result = await lotsDB.find({ selector });
 
   // Sort in JavaScript by purchaseTimestamp (oldest first)
   const lots = result.docs as InventoryLot[];
@@ -170,17 +181,20 @@ export async function getLotsByPurchaseRun(
  * Get sales that used items from a specific purchase run
  */
 export async function getSalesForPurchaseRun(
-  purchaseRunId: string
+  purchaseRunId: string,
+  shopId?: string
 ): Promise<Array<{ saleId: string; timestamp: string; items: SaleItem[] }>> {
   const { getSalesDB } = await import("./databases");
   const salesDB = await getSalesDB();
 
   // Get all sales and filter those that used items from this purchase run
-  const allSales = await salesDB.find({
-    selector: {
-      type: "sale",
-    },
-  });
+  const selector: any = {
+    type: "sale",
+  };
+  if (shopId) {
+    selector.shopId = shopId;
+  }
+  const allSales = await salesDB.find({ selector });
 
   const relevantSales = (allSales.docs as SaleDoc[]).filter((sale) => {
     return sale.items?.some((item: SaleItem) =>
@@ -200,7 +214,10 @@ export async function getSalesForPurchaseRun(
 /**
  * Calculate purchase run progress with additional metrics
  */
-export async function getPurchaseRunProgress(purchaseRunId: string): Promise<{
+export async function getPurchaseRunProgress(
+  purchaseRunId: string,
+  shopId?: string
+): Promise<{
   totalPurchased: number;
   totalSold: number;
   totalRemaining: number;

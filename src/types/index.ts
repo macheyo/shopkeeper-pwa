@@ -2,7 +2,7 @@ import { Money, CurrencyCode } from "./money";
 
 export interface CashInHand {
   _id: string;
-  _rev: string;
+  _rev?: string;
   type: "cash_in_hand";
   amount: Money;
   expectedAmount: Money;
@@ -10,6 +10,8 @@ export interface CashInHand {
   timestamp: string;
   notes: string;
   status: "pending" | "synced" | "failed";
+  shopId?: string; // Shop identifier
+  createdBy?: string; // userId of creator
 }
 
 export interface ShopSettings {
@@ -46,6 +48,8 @@ export interface ProductDoc {
   costPrice: Money; // Last purchase cost
   stockQuantity: number;
   purchaseDate?: string;
+  shopId?: string; // Shop identifier
+  createdBy?: string; // userId of creator
   createdAt: string;
   updatedAt: string;
 }
@@ -74,6 +78,7 @@ export interface InventoryLot {
   remainingQuantity: number; // How much is left (for FIFO tracking)
   costPrice: Money;
   supplier?: string;
+  shopId?: string; // Shop identifier
   createdAt: string;
   updatedAt: string;
 }
@@ -90,6 +95,8 @@ export interface PurchaseDoc {
   totalAmount: Money;
   paymentMethod: PaymentMethod;
   status: "pending" | "synced" | "failed";
+  shopId?: string; // Shop identifier
+  createdBy?: string; // userId of creator
   createdAt: string;
   updatedAt: string;
 }
@@ -127,6 +134,8 @@ export interface SaleDoc {
   cashReceived?: Money;
   change?: Money;
   status: "pending" | "synced" | "failed";
+  shopId?: string; // Shop identifier
+  createdBy?: string; // userId of creator
   createdAt: string;
   updatedAt: string;
 }
@@ -141,6 +150,59 @@ export interface OnboardingWizardProps {
 }
 
 export type PaymentMethod = "cash" | "bank" | "mobile_money" | "credit";
+
+// User and Shop types
+export type UserRole = "owner" | "manager" | "employee";
+export type UserStatus = "active" | "invited" | "suspended";
+export type InvitationStatus = "pending" | "accepted" | "expired";
+
+export interface UserDoc {
+  _id: string; // user_{userId}
+  _rev?: string;
+  type: "user";
+  userId: string; // Unique user identifier
+  phoneNumber: string; // Phone number (replaces email)
+  email?: string; // Optional email (for backwards compatibility)
+  name: string;
+  role: UserRole;
+  shopId: string; // Links user to shop
+  status: UserStatus;
+  invitedBy?: string; // userId of inviter
+  invitedAt?: string;
+  lastLoginAt?: string;
+  keySignature?: string; // Signature derived from key (for zero-storage key auth)
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvitationDoc {
+  _id: string; // invitation_{inviteId}
+  _rev?: string;
+  type: "invitation";
+  inviteId: string;
+  email: string;
+  role: "manager" | "employee";
+  shopId: string;
+  invitedBy: string;
+  token: string; // Secure token for invitation acceptance
+  expiresAt: string;
+  status: InvitationStatus;
+  createdAt: string;
+}
+
+export interface ShopDoc {
+  _id: string; // shop_{shopId}
+  _rev?: string;
+  type: "shop";
+  shopId: string;
+  shopName: string;
+  ownerId: string; // userId of owner
+  businessType: string;
+  baseCurrency: CurrencyCode;
+  currencies: Array<{ code: CurrencyCode; exchangeRate: number }>;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface AccountSettings {
   id: string;

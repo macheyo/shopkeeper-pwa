@@ -5,6 +5,7 @@ import { MantineProvider } from "@mantine/core";
 import { OnboardingProvider } from "@/contexts/OnboardingContext";
 import { MoneyProvider, MoneyContextType } from "@/contexts/MoneyContext";
 import { DateFilterProvider } from "@/contexts/DateFilterContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import PWARegistration from "@/components/PWARegistration";
 import PWADebug from "@/components/PWADebug";
@@ -60,26 +61,28 @@ export default function ClientProviders({
 
   return (
     <MantineProvider defaultColorScheme="auto">
-      <ClientSettingsLoader
-        serverSettings={initialMoneySettings}
-        onSettingsLoaded={setMoneySettings}
-        lottieAnimationData={animationData || undefined}
-      >
-        <OnboardingProvider>
-          <MoneyProvider initialSettings={moneySettings}>
-            <DateFilterProvider>
-              <ShopkeeperAppShell>{children}</ShopkeeperAppShell>
-              <PWAInstallPrompt
-                debug={false}
-                title="Install ShopKeeper"
-                description="Install this app on your device for offline access and faster performance!"
-              />
-              <PWARegistration />
-              {process.env.NODE_ENV === "development" && <PWADebug />}
-            </DateFilterProvider>
-          </MoneyProvider>
-        </OnboardingProvider>
-      </ClientSettingsLoader>
+      <AuthProvider>
+        <ClientSettingsLoader
+          serverSettings={initialMoneySettings}
+          onSettingsLoaded={setMoneySettings}
+          lottieAnimationData={animationData || undefined}
+        >
+          <OnboardingProvider>
+            <MoneyProvider initialSettings={moneySettings}>
+              <DateFilterProvider>
+                <ShopkeeperAppShell>{children}</ShopkeeperAppShell>
+                <PWAInstallPrompt
+                  debug={false}
+                  title="Install ShopKeeper"
+                  description="Install this app on your device for offline access and faster performance!"
+                />
+                <PWARegistration />
+                {process.env.NODE_ENV === "development" && <PWADebug />}
+              </DateFilterProvider>
+            </MoneyProvider>
+          </OnboardingProvider>
+        </ClientSettingsLoader>
+      </AuthProvider>
     </MantineProvider>
   );
 }
