@@ -164,6 +164,7 @@ export async function initializeShopSync(
       "ledger",
       "inventory_lots",
       "cash_in_hand",
+      "eod_cash_records",
       "settings",
       "users",
     ];
@@ -232,6 +233,7 @@ export async function ensureAllDatabasesExist(
     "ledger",
     "inventory_lots",
     "cash_in_hand",
+    "eod_cash_records",
     "settings",
     "users",
   ];

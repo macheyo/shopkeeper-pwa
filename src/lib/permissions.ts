@@ -35,6 +35,9 @@ export enum Permission {
   // Cash Management
   VIEW_CASH = "view_cash",
   MANAGE_CASH = "manage_cash",
+  COMPLETE_EOD = "complete_eod",
+  VERIFY_EOD = "verify_eod",
+  VIEW_EOD_HISTORY = "view_eod_history",
 }
 
 // Role-based permissions
@@ -56,6 +59,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.VIEW_USERS,
     Permission.VIEW_CASH,
     Permission.MANAGE_CASH,
+    Permission.COMPLETE_EOD,
+    Permission.VERIFY_EOD,
+    Permission.VIEW_EOD_HISTORY,
   ],
   employee: [
     Permission.VIEW_PRODUCTS,
@@ -63,6 +69,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission.CREATE_SALES,
     Permission.VIEW_PURCHASES,
     Permission.VIEW_CASH,
+    Permission.COMPLETE_EOD,
   ],
 };
 
@@ -106,5 +113,3 @@ export function hasAllPermissions(
 export function getRolePermissions(role: UserRole): Permission[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }
-
-

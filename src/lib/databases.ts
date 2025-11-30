@@ -4,6 +4,7 @@ export let purchasesDB: PouchDB.Database;
 export let cashInHandDB: PouchDB.Database;
 export let ledgerDB: PouchDB.Database;
 export let inventoryLotsDB: PouchDB.Database;
+export let eodDB: PouchDB.Database;
 
 export async function getProductsDB(): Promise<PouchDB.Database> {
   try {
@@ -291,6 +292,62 @@ export async function getInventoryLotsDB(): Promise<PouchDB.Database> {
     console.error("Error initializing inventory lots database:", err);
     throw new Error(
       `Failed to initialize inventory lots database: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+}
+
+export async function getEODDB(): Promise<PouchDB.Database> {
+  try {
+    if (!eodDB) {
+      if (typeof window === "undefined") {
+        throw new Error(
+          "PouchDB operations are only supported in browser environment. For server-side operations, consider using a different database or API endpoints."
+        );
+      }
+
+      // Browser environment
+      const PouchDB = (await import("pouchdb-browser")).default;
+      const PouchDBFind = await import("pouchdb-find");
+      const crypto = await import("crypto-pouch");
+      PouchDB.plugin(PouchDBFind.default);
+      PouchDB.plugin(crypto.default);
+
+      eodDB = new PouchDB("eod_cash_records");
+
+      const DB_KEY = process.env.NEXT_PUBLIC_DB_KEY || "default-insecure-key";
+      if (DB_KEY && DB_KEY !== "default-insecure-key") {
+        await eodDB.crypto(DB_KEY);
+      }
+
+      // Create indexes for date and status queries
+      try {
+        await eodDB.createIndex({
+          index: {
+            fields: ["type", "date", "status"],
+            name: "eod_date_index",
+          },
+        });
+        await eodDB.createIndex({
+          index: {
+            fields: ["type", "shopId", "date"],
+            name: "eod_shop_date_index",
+          },
+        });
+      } catch (err) {
+        console.error("Error creating EOD index:", err);
+        // Don't throw here as the index might already exist
+      }
+
+      // Verify database is accessible
+      await eodDB.info();
+    }
+    return eodDB;
+  } catch (err) {
+    console.error("Error initializing EOD database:", err);
+    throw new Error(
+      `Failed to initialize EOD database: ${
         err instanceof Error ? err.message : String(err)
       }`
     );

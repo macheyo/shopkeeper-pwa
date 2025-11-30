@@ -251,6 +251,7 @@ export async function getLocalDB(dbName: string): Promise<PouchDB.Database> {
     getCashInHandDB,
     getLedgerDB,
     getInventoryLotsDB,
+    getEODDB,
   } = await import("./databases");
   const { getUsersDB } = await import("./usersDB");
   const { getSettingsDB } = await import("./settingsDB");
@@ -260,6 +261,7 @@ export async function getLocalDB(dbName: string): Promise<PouchDB.Database> {
     sales: getSalesDB,
     purchases: getPurchasesDB,
     cash_in_hand: getCashInHandDB,
+    eod_cash_records: getEODDB,
     ledger: getLedgerDB,
     inventory_lots: getInventoryLotsDB,
     users: getUsersDB,

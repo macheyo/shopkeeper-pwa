@@ -8,6 +8,7 @@ import {
   IconSend,
   IconShoppingBag,
   IconRefresh,
+  IconCash,
 } from "@tabler/icons-react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,6 +44,14 @@ export default function BottomNav() {
       path: "/purchases",
       color: "teal",
       animation: "icon-bounce",
+    },
+    {
+      icon: IconCash,
+      label: "EOD",
+      path: "/eod",
+      color: "orange",
+      animation: "icon-bounce",
+      requiresPermission: Permission.COMPLETE_EOD,
     },
     {
       icon: IconSend,

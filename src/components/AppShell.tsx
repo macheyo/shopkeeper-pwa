@@ -34,6 +34,8 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import BottomNav from "./BottomNav";
 import DateFilter from "./DateFilter";
+import EODBlockingModal from "./EODBlockingModal";
+import { checkTradingDayStatus, TradingDayStatus } from "@/lib/tradingDay";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -79,10 +81,45 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
     return () => clearInterval(interval);
   }, [shop]);
 
+  // Trading day enforcement - check if previous day EOD is completed
+  const [tradingDayStatus, setTradingDayStatus] = useState<TradingDayStatus>({
+    canTrade: true,
+    blocked: false,
+  });
+
+  useEffect(() => {
+    const checkTradingDay = async () => {
+      if (!isAuthenticated || !shop || !currentUser) return;
+
+      // Check for all users (employees, managers, and owners)
+      try {
+        const status = await checkTradingDayStatus(
+          currentUser.userId,
+          shop.shopId
+        );
+        setTradingDayStatus(status);
+      } catch (error) {
+        console.error("Error checking trading day status:", error);
+        // Fail open - allow trading on error
+        setTradingDayStatus({ canTrade: true, blocked: false });
+      }
+    };
+
+    checkTradingDay();
+  }, [isAuthenticated, shop, currentUser]);
+
   // Public routes that don't need the full app shell
   const publicRoutes = ["/login", "/register"];
   const isPublicRoute =
     publicRoutes.includes(pathname) || pathname.startsWith("/invite/");
+
+  // Routes that don't require EOD completion
+  const eodExemptRoutes = ["/eod", "/profile", "/sync"];
+  const requiresEODCheck =
+    currentUser &&
+    !eodExemptRoutes.includes(pathname) &&
+    !pathname.startsWith("/eod") &&
+    hasCompletedOnboarding;
 
   // For public routes, render children without the shell
   if (isPublicRoute) {
@@ -489,6 +526,14 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
 
         {/* Bottom navigation for mobile, hidden during onboarding */}
         {hasCompletedOnboarding && <BottomNav />}
+
+        {/* EOD Blocking Modal for employees */}
+        {requiresEODCheck && tradingDayStatus.blocked && (
+          <EODBlockingModal
+            opened={tradingDayStatus.blocked}
+            status={tradingDayStatus}
+          />
+        )}
       </AppShell.Main>
     </AppShell>
   );

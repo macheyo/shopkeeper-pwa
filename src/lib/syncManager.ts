@@ -101,6 +101,7 @@ export class SyncManager {
       "ledger",
       "inventory_lots",
       "cash_in_hand",
+      "eod_cash_records",
       "settings",
       "users",
     ];

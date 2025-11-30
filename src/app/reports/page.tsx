@@ -24,7 +24,6 @@ import {
   IconChartPie3,
   IconCash,
   IconScale,
-  IconWallet,
   IconBook,
 } from "@tabler/icons-react";
 import { getSalesDB, getPurchasesDB, getLedgerDB } from "@/lib/databases";
@@ -42,6 +41,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { addShopIdFilter } from "@/lib/queryHelpers";
 import ProductManager from "@/components/ProductManager";
 import AccountsView from "@/components/AccountsView";
+import EODHistoryTable from "@/components/EODHistoryTable";
 import { generateTrialBalance } from "@/lib/accounting";
 import { TrialBalance, AccountCode, LedgerEntryDoc } from "@/types/accounting";
 import { getPurchaseRunProgress } from "@/lib/inventory";
@@ -1891,18 +1891,7 @@ export default function ReportsPage() {
                 {activeTab === "pa" && renderPurchaseAnalysis()}
                 {activeTab === "accounts" && <AccountsView />}
                 {activeTab === "products" && <ProductManager />}
-                {activeTab === "cash" && (
-                  <Button
-                    fullWidth
-                    size="xl"
-                    leftSection={<IconWallet size={24} />}
-                    onClick={() => router.push("/cash-tracking")}
-                    color="blue"
-                    h={60}
-                  >
-                    Open Cash Tracking
-                  </Button>
-                )}
+                {activeTab === "cash" && <EODHistoryTable />}
               </Paper>
 
               {/* Quick navigation buttons */}
@@ -1978,16 +1967,7 @@ export default function ReportsPage() {
                     <ProductManager />
                   </Tabs.Panel>
                   <Tabs.Panel value="cash">
-                    <Button
-                      fullWidth
-                      size="xl"
-                      leftSection={<IconWallet size={24} />}
-                      onClick={() => router.push("/cash-tracking")}
-                      color="blue"
-                      h={60}
-                    >
-                      Open Cash Tracking
-                    </Button>
+                    <EODHistoryTable />
                   </Tabs.Panel>
                 </Paper>
               </Tabs>
