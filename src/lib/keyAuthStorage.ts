@@ -63,6 +63,9 @@ export async function storeKeyAuthData(
     };
 
     try {
+      if (!pouchDoc._id) {
+        throw new Error("Document _id is required");
+      }
       const existing = await db.get(pouchDoc._id);
       pouchDoc._rev = existing._rev;
       pouchDoc.createdAt = (existing as KeyAuthData).createdAt;
@@ -115,8 +118,9 @@ export async function getKeyAuthData(
     }
 
     return keyAuth;
-  } catch (err: any) {
-    if (err.status === 404) {
+  } catch (err: unknown) {
+    const error = err as { status?: number };
+    if (error.status === 404) {
       return null;
     }
     // PouchDB unavailable - that's fine, we tried localStorage first
@@ -155,8 +159,9 @@ export async function deleteKeyAuthData(userId: string): Promise<void> {
     const db = await getUsersDB();
     const doc = await db.get(`key_auth_${userId}`);
     await db.remove(doc);
-  } catch (err: any) {
-    if (err.status === 404) {
+  } catch (err: unknown) {
+    const error = err as { status?: number };
+    if (error.status === 404) {
       // Doesn't exist, that's fine
       return;
     }

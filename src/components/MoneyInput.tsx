@@ -13,7 +13,6 @@ import {
   CURRENCY_INFO,
   createMoney,
   formatMoney,
-  BASE_CURRENCY,
 } from "@/types/money";
 import { useMoneyContext } from "@/contexts/MoneyContext";
 import { IconExchange } from "@tabler/icons-react";

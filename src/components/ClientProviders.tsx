@@ -57,7 +57,7 @@ export default function ClientProviders({
     };
 
     loadAnimationData();
-  }, []);
+  }, [isLoadingAnimation]);
 
   return (
     <MantineProvider defaultColorScheme="auto">

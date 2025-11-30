@@ -44,7 +44,7 @@ export type SyncEventType =
 export interface SyncEvent {
   type: SyncEventType;
   dbName: string;
-  data?: any;
+  data?: unknown;
   error?: Error;
   syncedDocumentIds?: string[]; // IDs of documents that were synced
   direction?: "push" | "pull";
@@ -54,7 +54,10 @@ export interface SyncEvent {
  * Sync Manager - Handles PouchDB to CouchDB synchronization
  */
 export class SyncManager {
-  private syncHandles: Map<string, PouchDB.Replication.Sync<{}>> = new Map();
+  private syncHandles: Map<
+    string,
+    PouchDB.Replication.Sync<Record<string, never>>
+  > = new Map();
   private syncStatus: Map<string, DatabaseSyncStatus> = new Map();
   private eventListeners: Array<(event: SyncEvent) => void> = [];
   private config: CouchDBConfig | null = null;
@@ -152,7 +155,7 @@ export class SyncManager {
     const syncPromises = databases.map(async (dbName) => {
       try {
         console.log(`[SYNC] Attempting to sync database: ${dbName}`);
-        const syncHandle = await this.syncDatabase(dbName);
+        await this.syncDatabase(dbName);
         console.log(`[SYNC] ✅ Sync handle created successfully for ${dbName}`);
         return { dbName, success: true };
       } catch (error) {
@@ -188,7 +191,9 @@ export class SyncManager {
   /**
    * Sync individual database
    */
-  async syncDatabase(dbName: string): Promise<PouchDB.Replication.Sync<{}>> {
+  async syncDatabase(
+    dbName: string
+  ): Promise<PouchDB.Replication.Sync<Record<string, never>>> {
     if (!this.config || !this.user) {
       throw new Error("SyncManager not initialized. Call initialize() first.");
     }
@@ -267,7 +272,8 @@ export class SyncManager {
         console.log(`[SYNC] Change event in ${dbName}:`, {
           direction: info.direction,
           change: info.change?.docs?.length || 0,
-          docs: info.change?.docs?.map((d: any) => d._id) || [],
+          docs:
+            info.change?.docs?.map((d: { _id?: string }) => d._id || "") || [],
         });
         this.handleSyncChange(dbName, info);
       })
@@ -289,7 +295,7 @@ export class SyncManager {
         console.error(`Sync error in ${dbName}:`, err);
         this.updateStatus(dbName, {
           isSyncing: false,
-          error: err.message || String(err),
+          error: (err as Error)?.message || String(err),
         });
         this.emitEvent({
           type: "error",
@@ -323,7 +329,7 @@ export class SyncManager {
    */
   private handleSyncChange(
     dbName: string,
-    info: PouchDB.Replication.SyncResult<{}>
+    info: PouchDB.Replication.SyncResult<Record<string, never>>
   ): void {
     if (!this.config || !this.user) return;
 
@@ -342,7 +348,10 @@ export class SyncManager {
 
         // Validate shopId - but be lenient for documents that might not have shopId yet
         // Only reject if shopId exists and doesn't match
-        if (doc.shopId && !validateShopId(doc, this.config.shopId)) {
+        if (
+          doc.shopId &&
+          !validateShopId(doc as { shopId?: string }, this.config.shopId)
+        ) {
           const violation = `Security: Rejected document from different shop in ${dbName}: ${doc._id}`;
           console.error(violation);
           securityViolations.push(doc._id);
@@ -381,8 +390,10 @@ export class SyncManager {
 
     // Count conflicts and attempt auto-resolution
     if (info.change && info.change.docs) {
-      const conflictedDocs = info.change.docs.filter(
-        (doc: any) => doc._conflicts && doc._conflicts.length > 0
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const conflictedDocs = (info.change.docs as any[]).filter(
+        (doc: { _conflicts?: string[] }) =>
+          doc._conflicts && doc._conflicts.length > 0
       );
       conflicts = conflictedDocs.length;
 
@@ -449,7 +460,8 @@ export class SyncManager {
       console.log(`Removed cross-shop document ${docId} from ${dbName}`);
     } catch (err) {
       // Document might not exist or already removed
-      if ((err as any).status !== 404) {
+      const error = err as { status?: number };
+      if (error.status !== 404) {
         throw err;
       }
     }
@@ -461,7 +473,12 @@ export class SyncManager {
    */
   private async resolveConflicts(
     dbName: string,
-    conflictedDocs: any[]
+    conflictedDocs: Array<{
+      _id?: string;
+      _rev?: string;
+      _conflicts?: string[];
+      [key: string]: unknown;
+    }>
   ): Promise<void> {
     if (!this.config) return;
 
@@ -469,6 +486,9 @@ export class SyncManager {
 
     for (const doc of conflictedDocs) {
       try {
+        if (!doc._id) {
+          continue;
+        }
         // Get the document with all revisions
         const docWithRevs = await localDB.get(doc._id, {
           revs: true,
@@ -480,15 +500,21 @@ export class SyncManager {
         }
 
         // Get all conflict revisions
-        const allRevs = [docWithRevs._rev, ...docWithRevs._conflicts];
+        if (!docWithRevs._rev || !doc._id) {
+          continue;
+        }
+        const allRevs = [docWithRevs._rev, ...(docWithRevs._conflicts || [])];
         const allDocs = await Promise.all(
-          allRevs.map((rev) => localDB.get(doc._id, { rev }).catch(() => null))
+          allRevs.map((rev) => {
+            if (!rev) return null;
+            return localDB.get(doc._id!, { rev }).catch(() => null);
+          })
         );
 
         // Filter out nulls and validate shopId
         const validDocs = allDocs.filter((d) => {
           if (!d) return false;
-          return validateShopId(d, this.config!.shopId);
+          return validateShopId(d as { shopId?: string }, this.config!.shopId);
         });
 
         if (validDocs.length === 0) {
@@ -500,8 +526,20 @@ export class SyncManager {
         // Use "last write wins" - prefer document with most recent timestamp
         // If timestamps are equal, prefer the one with correct shopId
         const sortedDocs = validDocs.sort((a, b) => {
-          const aTime = a.updatedAt || a.createdAt || a.timestamp || "0";
-          const bTime = b.updatedAt || b.createdAt || b.timestamp || "0";
+          const aDoc = a as {
+            updatedAt?: string;
+            createdAt?: string;
+            timestamp?: string;
+          };
+          const bDoc = b as {
+            updatedAt?: string;
+            createdAt?: string;
+            timestamp?: string;
+          };
+          const aTime =
+            aDoc.updatedAt || aDoc.createdAt || aDoc.timestamp || "0";
+          const bTime =
+            bDoc.updatedAt || bDoc.createdAt || bDoc.timestamp || "0";
           return bTime.localeCompare(aTime);
         });
 
@@ -522,7 +560,8 @@ export class SyncManager {
             await localDB.remove(conflictDoc);
           } catch (err) {
             // Conflict revision might already be deleted
-            if ((err as any).status !== 404) {
+            const error = err as { status?: number };
+            if (error.status !== 404) {
               console.error(`Error removing conflict revision:`, err);
             }
           }
@@ -665,7 +704,7 @@ export class SyncManager {
         }
 
         // Validate shopId
-        if (!validateShopId(doc, this.config.shopId)) {
+        if (!validateShopId(doc as { shopId?: string }, this.config.shopId)) {
           violations.push(doc._id);
           // Remove cross-shop document
           await this.removeCrossShopDocument(dbName, doc._id);

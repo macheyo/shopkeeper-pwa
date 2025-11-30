@@ -10,8 +10,6 @@
  * Store license key in session
  */
 export function storeLicenseKey(
-  userId: string,
-  shopId: string,
   licenseKey: string
 ): void {
   if (typeof window === "undefined") {
@@ -19,6 +17,7 @@ export function storeLicenseKey(
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { updateSessionLicense } = require("@/lib/auth");
     updateSessionLicense(licenseKey);
   } catch (err) {
@@ -29,12 +28,13 @@ export function storeLicenseKey(
 /**
  * Get license key from session
  */
-export function getLicenseKey(userId: string, shopId: string): string | null {
+export function getLicenseKey(): string | null {
   if (typeof window === "undefined") {
     return null; // Server-side
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getSession } = require("@/lib/auth");
     const session = getSession();
     return session?.licenseKey || null;
@@ -47,12 +47,13 @@ export function getLicenseKey(userId: string, shopId: string): string | null {
 /**
  * Remove license key from session
  */
-export function removeLicenseKey(userId: string, shopId: string): void {
+export function removeLicenseKey(): void {
   if (typeof window === "undefined") {
     return; // Server-side
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getSession } = require("@/lib/auth");
     const session = getSession();
     if (session && session.licenseKey) {

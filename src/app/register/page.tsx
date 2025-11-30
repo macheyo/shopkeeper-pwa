@@ -29,7 +29,7 @@ import { validatePhoneNumber } from "@/lib/phoneValidation";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, refreshUser, currentUser, shop } = useAuth();
+  const { register, refreshUser } = useAuth();
   const [name, setName] = useState("");
   const [countryCode, setCountryCode] = useState("+263");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -283,7 +283,7 @@ export default function RegisterPage() {
                         const { storeLicenseKey } = await import(
                           "@/lib/licenseStorage"
                         );
-                        storeLicenseKey(user.userId, user.shopId, licenseKey);
+                        storeLicenseKey(licenseKey);
 
                         // Refresh auth context to update state
                         // This will load user and shop from the session we just created

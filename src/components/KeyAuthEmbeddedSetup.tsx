@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { Card, Stack, Text, Alert } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 

@@ -59,6 +59,7 @@ export default function BiometricManager() {
     };
 
     checkSupport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   const loadCredentials = async () => {
@@ -204,7 +205,7 @@ export default function BiometricManager() {
 
         {credentials.length === 0 ? (
           <Alert icon={<IconAlertCircle size={16} />} color="blue">
-            No biometric credentials registered. Click "Add Biometric" to
+            No biometric credentials registered. Click &quot;Add Biometric&quot; to
             register one.
           </Alert>
         ) : (

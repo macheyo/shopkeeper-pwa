@@ -1,6 +1,5 @@
 "use client";
 
-import { UserDoc } from "@/types";
 
 /**
  * Key-based authentication using deterministic key derivation

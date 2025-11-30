@@ -1,7 +1,6 @@
 "use client";
 
 import { CouchDBConfig, testCouchDBConnection } from "./couchdb";
-import { getCouchDBConfig } from "./couchdbConfig";
 
 /**
  * Create a shop-specific CouchDB sync user

@@ -1,6 +1,5 @@
 "use client";
 
-import { UserDoc } from "@/types";
 
 /**
  * CouchDB connection configuration
@@ -64,7 +63,7 @@ export async function testCouchDBConnection(
       };
     }
 
-    let data: any;
+    let data: { userCtx?: { name?: string; roles?: string[] }; name?: string; roles?: string[] };
     try {
       data = await response.json();
     } catch (err) {
@@ -279,6 +278,6 @@ export async function getLocalDB(dbName: string): Promise<PouchDB.Database> {
 /**
  * Validate that a document belongs to the correct shop
  */
-export function validateShopId(doc: any, expectedShopId: string): boolean {
+export function validateShopId(doc: { shopId?: string }, expectedShopId: string): boolean {
   return doc.shopId === expectedShopId;
 }

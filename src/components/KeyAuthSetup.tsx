@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   Card,
   Stack,
-  TextInput,
   Button,
   Title,
   Text,
@@ -64,13 +63,13 @@ export default function KeyAuthSetup() {
       const derivedUserId = await deriveUserIdFromKeyAndEmail(
         key,
         shop.shopId,
-        currentUser.email
+        currentUser.email || currentUser.phoneNumber || ""
       );
 
       // Generate recovery code
       const recovery = await generateRecoveryCodeFromKey(
         key,
-        currentUser.email,
+        currentUser.email || currentUser.phoneNumber || "",
         shop.shopId
       );
 

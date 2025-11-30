@@ -30,7 +30,6 @@ export default function EODHistoryTable() {
     null
   );
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [filterByUser, setFilterByUser] = useState<boolean>(false);
 
   useEffect(() => {
     const loadEODRecords = async () => {

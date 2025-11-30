@@ -180,7 +180,7 @@ export default function SalesList() {
     return () => {
       if (cleanup) cleanup();
     };
-  }, [dateRangeInfo]); // Re-fetch when date range changes
+  }, [dateRangeInfo, error, shop?.shopId]); // Re-fetch when date range changes
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

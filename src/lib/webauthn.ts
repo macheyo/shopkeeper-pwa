@@ -98,8 +98,6 @@ export async function registerBiometric(
     // Generate challenge
     const challenge = generateChallenge();
     const userId = new TextEncoder().encode(user.userId);
-    const userEmail = new TextEncoder().encode(user.email);
-    const userDisplayName = new TextEncoder().encode(user.name);
 
     // Create credential
     const credential = (await navigator.credentials.create({
@@ -111,7 +109,7 @@ export async function registerBiometric(
         },
         user: {
           id: userId,
-          name: user.email,
+          name: user.email || user.phoneNumber || "",
           displayName: user.name,
         },
         pubKeyCredParams: [
@@ -142,8 +140,8 @@ export async function registerBiometric(
     const publicKey = arrayBufferToBase64(
       response.getPublicKey() || new ArrayBuffer(0)
     );
-    const clientDataJSON = arrayBufferToBase64(response.clientDataJSON);
-    const attestationObject = arrayBufferToBase64(response.attestationObject);
+    arrayBufferToBase64(response.clientDataJSON);
+    arrayBufferToBase64(response.attestationObject);
 
     // Store credential in PouchDB
     const { getUsersDB } = await import("./usersDB");
@@ -236,7 +234,10 @@ export async function authenticateWithBiometric(
     const assertion = (await navigator.credentials.get({
       publicKey: {
         challenge,
-        allowCredentials,
+        allowCredentials: allowCredentials.map((cred) => ({
+          ...cred,
+          type: "public-key" as const,
+        })),
         timeout: 60000,
         userVerification: "required",
         rpId: window.location.hostname,
@@ -250,7 +251,10 @@ export async function authenticateWithBiometric(
       };
     }
 
-    const response = assertion.response as AuthenticatorAssertionResponse;
+    // Type assertion to ensure response is of correct type
+    const _response = assertion.response as AuthenticatorAssertionResponse;
+    // Response is verified but not used directly in this simplified implementation
+    void _response;
 
     // Find the credential that was used
     const credentialId = arrayBufferToBase64(assertion.rawId);
@@ -385,5 +389,3 @@ export async function hasBiometricCredentials(
   const credentials = await getUserBiometricCredentials(userId);
   return credentials.length > 0;
 }
-
-

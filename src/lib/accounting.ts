@@ -532,12 +532,17 @@ export async function generateTrialBalance(
   const ledgerDB = await getLedgerDB();
 
   // Get all posted entries within the date range
-  const selector: any = {
+  const selector: {
+    type: string;
+    status: string;
+    timestamp: { $gte: string; $lte: string };
+    shopId?: string;
+  } = {
     type: "ledger_entry",
     status: "posted",
     timestamp: {
       $gte: startDate,
-      $lt: endDate,
+      $lte: endDate,
     },
   };
   if (shopId) {
@@ -660,7 +665,7 @@ export async function getAccountHistory(
       status: "posted",
       timestamp: {
         $gte: startDate,
-        $lt: endDate,
+        $lte: endDate,
       },
     },
   });

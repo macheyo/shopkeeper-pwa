@@ -54,6 +54,7 @@ export default function InviteAcceptancePage() {
     if (token) {
       loadInvitation();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const loadInvitation = async () => {
@@ -115,8 +116,9 @@ export default function InviteAcceptancePage() {
       setCreatedUserId(userId); // Store userId in state for use in modal
 
       // Create user
-      const user = await createUser({
+      await createUser({
         userId,
+        type: "user",
         phoneNumber: invitation.phoneNumber || invitation.email || "", // Use phoneNumber, fallback to email for backwards compatibility
         email: invitation.email, // Optional, for backwards compatibility
         name: name.trim(),
@@ -307,7 +309,7 @@ export default function InviteAcceptancePage() {
                 const { storeLicenseKey } = await import(
                   "@/lib/licenseStorage"
                 );
-                storeLicenseKey(createdUserId, invitation.shopId, licenseKey);
+                storeLicenseKey(licenseKey);
               }
               setShowLicenseModal(false);
               setSuccess(true);

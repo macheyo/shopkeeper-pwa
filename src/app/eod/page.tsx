@@ -18,24 +18,14 @@ import {
   TextInput,
   SimpleGrid,
 } from "@mantine/core";
-import {
-  IconArrowLeft,
-  IconCash,
-  IconCheck,
-  IconAlertCircle,
-  IconInfoCircle,
-} from "@tabler/icons-react";
+import { IconArrowLeft, IconCheck, IconAlertCircle } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { hasPermission, Permission } from "@/lib/permissions";
+import { Permission, hasPermission } from "@/lib/permissions";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import MoneyInput from "@/components/MoneyInput";
-import { getTodayEODSummary, completeEOD, getOpeningBalance } from "@/lib/eod";
+import { getTodayEODSummary, completeEOD } from "@/lib/eod";
 import { getTodayDate, formatDateForDisplay } from "@/lib/tradingDay";
-import {
-  EODCashRecord,
-  VarianceExplanation,
-  VarianceExplanationType,
-} from "@/types/eod";
+import { VarianceExplanation, VarianceExplanationType } from "@/types/eod";
 import { Money, createMoney, formatMoney } from "@/types/money";
 import { useMoneyContext } from "@/contexts/MoneyContext";
 
@@ -150,7 +140,7 @@ export default function EODPage() {
     };
 
     loadEODSummary();
-  }, [shop, baseCurrency, exchangeRates]);
+  }, [shop, baseCurrency, exchangeRates, currentUser]);
 
   // Calculate variance when actual cash count changes
   useEffect(() => {
@@ -275,11 +265,21 @@ export default function EODPage() {
     );
   }
 
+  // Check permission
+  if (!currentUser || !hasPermission(currentUser, Permission.COMPLETE_EOD)) {
+    return (
+      <ProtectedRoute requireAuth={true}>
+        <Paper p="md">
+          <Alert color="red" title="Access Denied">
+            You don&apos;t have permission to access this page.
+          </Alert>
+        </Paper>
+      </ProtectedRoute>
+    );
+  }
+
   return (
-    <ProtectedRoute
-      requireAuth={true}
-      requiredPermission={Permission.COMPLETE_EOD}
-    >
+    <ProtectedRoute requireAuth={true}>
       <Paper p="md">
         <Group justify="space-between" mb="lg">
           <Title order={2}>End of Day Cash Reconciliation</Title>

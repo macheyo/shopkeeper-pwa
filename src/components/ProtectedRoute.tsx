@@ -25,7 +25,7 @@ export default function ProtectedRoute({
   const publicRoutes = ["/login", "/register"];
   const isPublicRoute = useMemo(
     () => publicRoutes.includes(pathname) || pathname.startsWith("/invite/"),
-    [pathname]
+    [pathname, publicRoutes]
   );
 
   // Handle redirects in useEffect

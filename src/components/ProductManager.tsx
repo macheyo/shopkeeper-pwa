@@ -16,7 +16,7 @@ import { IconAlertCircle, IconRefresh } from "@tabler/icons-react";
 import { getProductsDB } from "@/lib/databases";
 import { ProductDoc } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
-import { addShopIdFilter, filterByShopId } from "@/lib/queryHelpers";
+import { filterByShopId } from "@/lib/queryHelpers";
 import { formatMoney } from "@/types/money";
 
 export default function ProductManager() {
@@ -83,7 +83,7 @@ export default function ProductManager() {
     if (shop?.shopId) {
       fetchProducts();
     }
-  }, [shop?.shopId]);
+  }, [shop?.shopId, fetchProducts]);
 
   const handleRefresh = () => {
     fetchProducts();

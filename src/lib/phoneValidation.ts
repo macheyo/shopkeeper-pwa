@@ -75,12 +75,12 @@ export function validatePhoneNumber(phoneNumber: string): {
   } catch (error) {
     if (
       error instanceof z.ZodError &&
-      error.errors &&
-      error.errors.length > 0
+      error.issues &&
+      error.issues.length > 0
     ) {
       return {
         valid: false,
-        error: error.errors[0].message || "Invalid phone number",
+        error: error.issues[0].message || "Invalid phone number",
       };
     }
     return {
@@ -108,12 +108,12 @@ export function validateFullPhoneNumber(fullPhoneNumber: string): {
   } catch (error) {
     if (
       error instanceof z.ZodError &&
-      error.errors &&
-      error.errors.length > 0
+      error.issues &&
+      error.issues.length > 0
     ) {
       return {
         valid: false,
-        error: error.errors[0].message || "Invalid phone number format",
+        error: error.issues[0].message || "Invalid phone number format",
       };
     }
     return {

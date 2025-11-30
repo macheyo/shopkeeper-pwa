@@ -67,7 +67,7 @@ export default function SalesPage() {
             type: "sale",
             timestamp: {
               $gte: startDateISOString,
-              $lt: endDateISOString,
+              $lte: endDateISOString,
             },
           },
           shop?.shopId
@@ -130,7 +130,7 @@ export default function SalesPage() {
       console.error("Error fetching sales data:", error);
     } finally {
     }
-  }, [dateRange, customDateRange, dateRangeInfo]); // Re-fetch when date range changes
+  }, [dateRange, customDateRange, dateRangeInfo, shop?.shopId]); // Re-fetch when date range changes
 
   // Fetch data when component mounts or date range changes
   useEffect(() => {

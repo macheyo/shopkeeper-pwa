@@ -55,7 +55,7 @@ export default function PurchasesPage() {
     };
 
     fetchPurchases();
-  }, [dateRangeInfo.startDate, dateRangeInfo.endDate]);
+  }, [dateRangeInfo.startDate, dateRangeInfo.endDate, shop?.shopId]);
 
   // Group purchases by purchaseRunId
   const purchaseRuns = purchases.reduce((acc, purchase) => {

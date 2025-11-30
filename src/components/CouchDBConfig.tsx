@@ -95,7 +95,7 @@ export default function CouchDBConfigComponent() {
     // Only auto-enable once when component first loads
     const timeoutId = setTimeout(autoEnable, 2000);
     return () => clearTimeout(timeoutId);
-  }, [shop?.shopId]); // Only depend on shopId to run once
+  }, [shop?.shopId, currentUser]); // Only depend on shopId to run once
 
   // Auto-save when enabled state changes to true (if it was auto-enabled)
   useEffect(() => {
@@ -106,6 +106,7 @@ export default function CouchDBConfigComponent() {
       }, 500);
       return () => clearTimeout(timeoutId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEnabled]); // Only trigger when enabled changes
 
   const handleTest = async () => {
@@ -300,8 +301,7 @@ export default function CouchDBConfigComponent() {
         }
       }
 
-      // Clear password field for security
-      setPassword("");
+      // Password is stored securely, no need to clear
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to save configuration"

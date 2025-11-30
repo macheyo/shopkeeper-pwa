@@ -1,16 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { Stack, Alert, Text } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 
 interface KeyAuthEmbeddedProps {
-  onSuccess: (userInfo: EmbeddedUserInfo & { userId: string }) => void;
   onError: (error: string) => void;
 }
 
 export default function KeyAuthEmbedded({
-  onSuccess,
   onError,
 }: KeyAuthEmbeddedProps) {
   // Token-based authentication is no longer supported

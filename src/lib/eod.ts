@@ -1,4 +1,4 @@
-import { getSalesDB, getPurchasesDB, getLedgerDB } from "./databases";
+import { getSalesDB, getPurchasesDB } from "./databases";
 import {
   getEODRecord,
   saveEODRecord,
@@ -8,15 +8,11 @@ import {
   createVarianceLedgerEntry,
   createSurrenderLedgerEntry,
 } from "./eodAccounting";
-import {
-  EODCashRecord,
-  VarianceExplanation,
-  CashSurrender,
-  VarianceType,
-} from "@/types/eod";
+import { EODCashRecord, VarianceExplanation, VarianceType } from "@/types/eod";
 import { SaleDoc, PurchaseDoc } from "@/types";
 import {
   Money,
+  CurrencyCode,
   createMoney,
   BASE_CURRENCY,
   convertMoney,
@@ -85,7 +81,8 @@ export async function calculateExpectedClosingBalance(
 
     // Get shop settings for currency conversion
     const settings = await getShopSettings(shopId);
-    const baseCurrency = (settings?.baseCurrency || BASE_CURRENCY) as string;
+    const baseCurrency = (settings?.baseCurrency ||
+      BASE_CURRENCY) as CurrencyCode;
     const baseExchangeRate =
       DEFAULT_EXCHANGE_RATES[
         baseCurrency as keyof typeof DEFAULT_EXCHANGE_RATES
@@ -121,7 +118,7 @@ export async function calculateExpectedClosingBalance(
     return {
       expectedClosingBalance: createMoney(
         expectedInBase,
-        baseCurrency,
+        baseCurrency as CurrencyCode,
         baseExchangeRate
       ),
       cashSales: createMoney(cashSales, baseCurrency, baseExchangeRate),
@@ -155,7 +152,8 @@ export async function getOpeningBalance(
       // Use previous day's actual cash count as opening balance
       // Subtract any cash surrendered
       const settings = await getShopSettings(shopId);
-      const baseCurrency = (settings?.baseCurrency || BASE_CURRENCY) as string;
+      const baseCurrency = (settings?.baseCurrency ||
+        BASE_CURRENCY) as CurrencyCode;
       const baseExchangeRate =
         DEFAULT_EXCHANGE_RATES[
           baseCurrency as keyof typeof DEFAULT_EXCHANGE_RATES
@@ -178,7 +176,8 @@ export async function getOpeningBalance(
     const latestEOD = await getLatestEODRecordForUser(userId, shopId);
     if (latestEOD) {
       const settings = await getShopSettings(shopId);
-      const baseCurrency = (settings?.baseCurrency || BASE_CURRENCY) as string;
+      const baseCurrency = (settings?.baseCurrency ||
+        BASE_CURRENCY) as CurrencyCode;
       const baseExchangeRate =
         DEFAULT_EXCHANGE_RATES[
           baseCurrency as keyof typeof DEFAULT_EXCHANGE_RATES
@@ -199,7 +198,8 @@ export async function getOpeningBalance(
 
     // Default to zero if no EOD records exist for this user
     const settings = await getShopSettings(shopId);
-    const baseCurrency = (settings?.baseCurrency || BASE_CURRENCY) as string;
+    const baseCurrency = (settings?.baseCurrency ||
+      BASE_CURRENCY) as CurrencyCode;
     return createMoney(
       0,
       baseCurrency,
@@ -210,7 +210,8 @@ export async function getOpeningBalance(
   } catch (error) {
     console.error("Error getting opening balance:", error);
     const settings = await getShopSettings(shopId);
-    const baseCurrency = (settings?.baseCurrency || BASE_CURRENCY) as string;
+    const baseCurrency = (settings?.baseCurrency ||
+      BASE_CURRENCY) as CurrencyCode;
     return createMoney(
       0,
       baseCurrency,
@@ -288,7 +289,8 @@ export async function completeEOD(
 
     // Calculate variance
     const settings = await getShopSettings(shopId);
-    const baseCurrency = (settings?.baseCurrency || BASE_CURRENCY) as string;
+    const baseCurrency = (settings?.baseCurrency ||
+      BASE_CURRENCY) as CurrencyCode;
     const baseExchangeRate =
       DEFAULT_EXCHANGE_RATES[
         baseCurrency as keyof typeof DEFAULT_EXCHANGE_RATES

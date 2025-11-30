@@ -62,10 +62,15 @@ export async function getSettingsDB(): Promise<PouchDB.Database> {
             const crypto = await import("crypto-pouch");
 
             // Only register plugins if not already registered
-            if (!(PouchDB as any).__pluginsRegistered) {
+            if (
+              !(PouchDB as { __pluginsRegistered?: boolean })
+                .__pluginsRegistered
+            ) {
               PouchDB.plugin(PouchDBFind.default);
               PouchDB.plugin(crypto.default);
-              (PouchDB as any).__pluginsRegistered = true;
+              (
+                PouchDB as { __pluginsRegistered?: boolean }
+              ).__pluginsRegistered = true;
             }
             pouchDBInitialized = true;
           })();
@@ -125,7 +130,7 @@ export async function getShopSettings(
     const db = await getSettingsDB();
 
     // Build selector with shopId filter if provided
-    const selector: any = { type: "settings" };
+    const selector: { type: string; shopId?: string } = { type: "settings" };
     if (shopId) {
       selector.shopId = shopId;
     }
@@ -197,7 +202,11 @@ export async function saveShopSettings(
         }
 
         // Extract only the data fields (exclude _id and _rev from input)
-        const { _id, _rev, ...settingsData } = settings as any;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _id, _rev, ...settingsData } = settings as ShopSettings & {
+          _id?: string;
+          _rev?: string;
+        };
 
         // Merge existing settings with new settings
         const mergedSettings: ShopSettings = {
@@ -221,10 +230,10 @@ export async function saveShopSettings(
         // Return the saved document
         const saved = await db.get(result.id);
         return saved as ShopSettings;
-      } catch (err: any) {
-        lastError = err;
+      } catch (err: unknown) {
+        lastError = err as Error | null;
         // If it's a conflict error and we have retries left, try again
-        if (err?.status === 409 && retries > 1) {
+        if ((err as { status?: number })?.status === 409 && retries > 1) {
           retries--;
           // Wait a bit before retrying (exponential backoff)
           await new Promise((resolve) =>

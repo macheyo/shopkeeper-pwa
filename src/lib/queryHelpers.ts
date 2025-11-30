@@ -4,7 +4,7 @@
  * Helper function to add shopId filtering to PouchDB selectors
  * This ensures data isolation between shops in a multi-user environment
  */
-export function addShopIdFilter<T extends Record<string, any>>(
+export function addShopIdFilter<T extends Record<string, unknown>>(
   selector: T,
   shopId?: string
 ): T {

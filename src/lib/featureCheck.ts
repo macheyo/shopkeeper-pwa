@@ -23,7 +23,7 @@ export async function isFeatureEnabled(feature: Feature): Promise<boolean> {
 
     // Get license key from session or storage
     const licenseKey =
-      session.licenseKey || getLicenseKey(session.userId, session.shopId);
+      session.licenseKey || getLicenseKey();
 
     if (!licenseKey) {
       // No license - check if it's a core feature that should be available
@@ -87,7 +87,7 @@ export async function getEnabledFeatures(): Promise<Feature[]> {
     }
 
     const licenseKey =
-      session.licenseKey || getLicenseKey(session.userId, session.shopId);
+      session.licenseKey || getLicenseKey();
 
     if (!licenseKey) {
       // No license - return core features
@@ -143,7 +143,7 @@ export async function getLicenseData(): Promise<LicenseData | null> {
     }
 
     const licenseKey =
-      session.licenseKey || getLicenseKey(session.userId, session.shopId);
+      session.licenseKey || getLicenseKey();
 
     if (!licenseKey) {
       return null;

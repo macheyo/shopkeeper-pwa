@@ -7,7 +7,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { UserDoc, ShopDoc } from "@/types";
 import {
   getSession,
@@ -55,7 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [shop, setShop] = useState<ShopDoc | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
   // Check for existing session on mount
   useEffect(() => {
@@ -170,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Use phoneNumber from license, fallback to email for backwards compatibility
           const phoneNumber =
             licenseData.phoneNumber || licenseData.email || "";
-          let existingUser = phoneNumber
+          const existingUser = phoneNumber
             ? await getUserByPhoneNumber(phoneNumber)
             : null;
 
@@ -196,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             user = await createUser({
               userId,
+              type: "user",
               phoneNumber: phoneNumber.replace(/[\s\-\(\)]/g, ""), // Normalize phone number
               email: licenseData.email, // Optional, for backwards compatibility
               name: licenseData.ownerName,
@@ -210,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Get or create shop from license data
-        let shopData: ShopDoc;
+        let shopData: ShopDoc | null;
         try {
           const { getShopById, createShop } = await import("@/lib/usersDB");
           shopData = await getShopById(licenseData.shopId);
@@ -219,6 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Create shop from license data
             shopData = await createShop({
               shopId: licenseData.shopId,
+              type: "shop",
               shopName: licenseData.shopName,
               ownerId: user.userId,
               businessType: "retail",
@@ -273,8 +274,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const shopId = generateShopId();
 
         // Create shop
-        const shopData = await createShop({
+        await createShop({
           shopId,
+          type: "shop",
           shopName,
           ownerId: userId,
           businessType: "retail", // Default, can be updated later
@@ -283,8 +285,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         // Create user (owner)
-        const user = await createUser({
+        await createUser({
           userId,
+          type: "user",
           phoneNumber: normalizedPhone,
           name,
           role: "owner",

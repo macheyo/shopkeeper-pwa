@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { TextInput, Button, Stack, Alert, Text, Group } from "@mantine/core";
+import { TextInput, Button, Stack, Alert, Text } from "@mantine/core";
 import {
   IconKey,
   IconFingerprint,
@@ -9,7 +9,6 @@ import {
   IconCheck,
 } from "@tabler/icons-react";
 import {
-  authenticateWithKey,
   authenticateWithKeyAndBiometric,
 } from "@/lib/keyAuth";
 import { getKeyAuthData } from "@/lib/keyAuthStorage";
@@ -19,7 +18,7 @@ import { getUserById } from "@/lib/usersDB";
 interface KeyAuthLoginProps {
   userId: string;
   shopId: string;
-  onSuccess: (user: any) => void;
+  onSuccess: (user: { userId: string; shopId: string; [key: string]: unknown }) => void;
   onError: (error: string) => void;
 }
 
@@ -74,7 +73,7 @@ export default function KeyAuthLogin({
         if (!user) {
           throw new Error("User not found");
         }
-        onSuccess(user);
+        onSuccess(user as unknown as { userId: string; shopId: string; [key: string]: unknown });
       }
     } catch (err) {
       const errorMsg =
@@ -98,7 +97,7 @@ export default function KeyAuthLogin({
       }
 
       // Success - user authenticated with key + biometric
-      onSuccess(result.user);
+      onSuccess(result.user as unknown as { userId: string; shopId: string; [key: string]: unknown });
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Biometric authentication failed";

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
   Title,
   Paper,
@@ -118,7 +117,7 @@ function PurchaseRunItemsTable({
       }
     };
     fetchProgress();
-  }, [purchaseRunId, purchases]);
+  }, [purchaseRunId, purchases, shopId]);
 
   const getItemProgress = (productId: string) => {
     if (!progress) return null;
@@ -825,7 +824,6 @@ function PurchaseRunProgressCard({
 }
 
 export default function ReportsPage() {
-  const router = useRouter();
   const { shop, currentUser } = useAuth();
   const { dateRangeInfo } = useDateFilter();
   const { baseCurrency, exchangeRates, availableCurrencies } =
@@ -986,6 +984,8 @@ export default function ReportsPage() {
   }, [
     dateRangeInfo.startDate,
     dateRangeInfo.endDate,
+    convertToReportingCurrency,
+    shop?.shopId,
     reportingCurrency,
     exchangeRates,
   ]);

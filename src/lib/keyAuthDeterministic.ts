@@ -214,7 +214,11 @@ export async function authenticateKeyAfterDataClear(
   email: string,
   shopId: string,
   getUserByEmail: (email: string) => Promise<{ userId: string } | null>
-): Promise<{ valid: boolean; user?: any; error?: string }> {
+): Promise<{
+  valid: boolean;
+  user?: { userId: string; shopId: string; [key: string]: unknown };
+  error?: string;
+}> {
   // 1. Derive userId from key + email
   const derivedUserId = await deriveUserIdFromKeyAndEmail(
     providedKey,
@@ -246,6 +250,7 @@ export async function authenticateKeyAfterDataClear(
     user: {
       ...user,
       userId: derivedUserId,
+      shopId: shopId,
     },
   };
 }

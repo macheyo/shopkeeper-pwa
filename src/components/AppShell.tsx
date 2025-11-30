@@ -133,14 +133,14 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
     const whatsAppStatus = isOnline;
 
     return (
-      <Group gap={{ base: "xs", sm: "sm" }}>
+      <Group gap="sm">
         <Tooltip
           label={`WhatsApp: ${whatsAppStatus ? "Connected" : "Offline"}`}
         >
           <ActionIcon
             variant="light"
             color={whatsAppStatus ? "green" : "red"}
-            size={{ base: "md", sm: "lg" }}
+            size="md"
             style={{
               transition: "all 0.3s ease",
               animation: whatsAppStatus ? "pulse 2s infinite" : "none",
@@ -170,7 +170,7 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
                 ? "yellow"
                 : "gray"
             }
-            size={{ base: "md", sm: "lg" }}
+            size="md"
             style={{
               transition: "all 0.3s ease",
               animation: couchdbStatus.enabled ? "pulse 2s infinite" : "none",
@@ -231,12 +231,11 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
                 whiteSpace: "nowrap",
                 maxWidth: "100%",
               }}
-              size={{ base: "h5", sm: "h3" }}
             >
               {shop?.shopName || "ShopKeeper"}
             </Title>
           </Box>
-          <Group gap={{ base: "xs", sm: "md" }} wrap="nowrap">
+          <Group gap="md" wrap="nowrap">
             {isAuthenticated && currentUser && (
               <Menu shadow="md" width={200}>
                 <Menu.Target>

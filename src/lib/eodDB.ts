@@ -82,7 +82,11 @@ export async function getEODRecords(
     const startDateStr = startDate.split("T")[0];
     const endDateStr = endDate.split("T")[0];
 
-    const selector: any = {
+    const selector: {
+      type: string;
+      date: { $gte: string; $lte: string };
+      userId?: string;
+    } = {
       type: "eod_cash_record",
       date: {
         $gte: startDateStr,

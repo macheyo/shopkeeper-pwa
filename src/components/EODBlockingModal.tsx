@@ -69,8 +69,8 @@ export default function EODBlockingModal({
 
         <Text size="sm" c="dimmed">
           The EOD process ensures accurate cash tracking and prevents
-          discrepancies. Once you complete the previous day's EOD, you'll be
-          able to continue with normal operations.
+          discrepancies. Once you complete the previous day&apos;s EOD,
+          you&apos;ll be able to continue with normal operations.
         </Text>
 
         <Group justify="flex-end" mt="md">

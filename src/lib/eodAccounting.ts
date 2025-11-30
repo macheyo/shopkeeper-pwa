@@ -1,16 +1,10 @@
 import { getLedgerDB } from "./databases";
 import { getShopSettings } from "./settingsDB";
+import { EODCashRecord } from "@/types/eod";
 import {
-  EODCashRecord,
-  VarianceExplanation,
-  CashSurrenderMethod,
-} from "@/types/eod";
-import {
-  Money,
   CurrencyCode,
   createMoneyWithRates,
   convertMoneyWithRates,
-  BASE_CURRENCY,
 } from "@/types/money";
 import {
   AccountCode,
@@ -133,8 +127,8 @@ export async function createVarianceLedgerEntry(
             ),
           }
         );
-      } else if (explanation.type === "expense_paid" && isShortage) {
-        // Expense paid - debit expense, credit cash
+      } else if (explanation.type === "operating_expense" && isShortage) {
+        // Operating expense paid - debit expense, credit cash
         lines.push(
           {
             accountCode: AccountCode.OPERATING_EXPENSES,
@@ -165,8 +159,8 @@ export async function createVarianceLedgerEntry(
             ),
           }
         );
-      } else if (explanation.type === "deposit_received" && !isShortage) {
-        // Deposit received - debit cash, credit revenue
+      } else if (explanation.type === "customer_deposit" && !isShortage) {
+        // Customer deposit received - debit cash, credit revenue
         lines.push(
           {
             accountCode: AccountCode.CASH,
@@ -355,7 +349,7 @@ export async function createVarianceLedgerEntry(
         eodDate: eodRecord.date,
         varianceType: eodRecord.varianceType,
         varianceAmount: varianceInBase.amount,
-        hasExplanation: hasExplanation,
+        hasExplanation: hasExplanation ?? false,
       },
     };
 
@@ -471,8 +465,8 @@ export async function createSurrenderLedgerEntry(
       createdBy,
       metadata: {
         eodDate: eodRecord.date,
-        surrenderMethod: eodRecord.surrenderMethod,
-        surrenderReference: eodRecord.surrenderReference,
+        surrenderMethod: eodRecord.surrenderMethod || null,
+        surrenderReference: eodRecord.surrenderReference || null,
         surrenderAmount: surrenderInBase.amount,
       },
     };

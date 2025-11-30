@@ -172,7 +172,7 @@ export function OnboardingProvider({
                   setIsLoading(false);
                   return;
                 }
-              } catch (couchError: any) {
+              } catch (couchError: unknown) {
                 // Can't connect to CouchDB
                 console.error(
                   "[ONBOARDING] Cannot connect to CouchDB:",
@@ -248,7 +248,7 @@ export function OnboardingProvider({
                 });
 
                 if (remoteResult.docs.length > 0) {
-                  const remoteSettings = remoteResult.docs[0] as any;
+                  const remoteSettings = remoteResult.docs[0] as unknown as { hasCompletedOnboarding?: boolean; [key: string]: unknown };
                   if (remoteSettings.hasCompletedOnboarding === true) {
                     // CouchDB has correct status - directly save it to local
                     console.log(

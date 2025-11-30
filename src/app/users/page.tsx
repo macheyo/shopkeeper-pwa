@@ -13,7 +13,6 @@ import {
   Text,
   Paper,
   Modal,
-  TextInput,
   Select,
   Alert,
   Menu,
@@ -26,7 +25,6 @@ import {
 } from "@mantine/core";
 import {
   IconUserPlus,
-  IconMail,
   IconCheck,
   IconX,
   IconEdit,
@@ -37,7 +35,6 @@ import { hasPermission, Permission } from "@/lib/permissions";
 import { getShopUsers, updateUser } from "@/lib/usersDB";
 import { UserDoc, UserRole, UserStatus } from "@/types";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import FeatureGate from "@/components/FeatureGate";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import { validatePhoneNumber } from "@/lib/phoneValidation";
 
@@ -127,8 +124,9 @@ export default function UsersPage() {
 
       await createInvitation({
         inviteId,
+        type: "invitation",
         phoneNumber: fullPhoneNumber,
-        role: inviteRole,
+        role: (inviteRole === "owner" ? "manager" : inviteRole) as "manager" | "employee",
         shopId: shop.shopId,
         invitedBy: currentUser.userId,
         token,
@@ -210,7 +208,7 @@ export default function UsersPage() {
       <Stack gap="md" mb="lg">
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <Box style={{ flex: 1, minWidth: 200 }}>
-            <Title order={2} size={{ base: "h3", sm: "h2" }} mb="xs">
+            <Title order={2} mb="xs">
               User Management
             </Title>
             <Text c="dimmed" size="sm">
@@ -221,7 +219,7 @@ export default function UsersPage() {
             <Button
               leftSection={<IconUserPlus size={16} />}
               onClick={() => setInviteModalOpen(true)}
-              fullWidth={{ base: true, sm: false }}
+              fullWidth
             >
               Invite User
             </Button>
@@ -432,7 +430,7 @@ export default function UsersPage() {
           setInviteRole("employee");
         }}
         title="Invite User"
-        fullScreen={{ base: true, sm: false }}
+        fullScreen
         size="md"
       >
         <Stack gap="md">
@@ -466,14 +464,14 @@ export default function UsersPage() {
                 setInviteCountryCode("+263");
                 setInviteRole("employee");
               }}
-              fullWidth={{ base: true, sm: false }}
+              fullWidth
             >
               Cancel
             </Button>
             <Button
               onClick={handleInvite}
               leftSection={<IconUserPlus size={16} />}
-              fullWidth={{ base: true, sm: false }}
+              fullWidth
             >
               Send Invitation
             </Button>

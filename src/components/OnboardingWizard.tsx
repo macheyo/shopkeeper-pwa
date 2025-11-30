@@ -26,7 +26,7 @@ import { useOnboarding } from "@/contexts/OnboardingContext";
 import MoneyInput from "./MoneyInput";
 import { AccountSettings } from "@/types";
 import { getLicenseData } from "@/lib/featureCheck";
-import { IconWifi, IconWifiOff } from "@tabler/icons-react";
+import { IconWifiOff } from "@tabler/icons-react";
 
 interface CurrencySettings {
   code: CurrencyCode;

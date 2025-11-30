@@ -21,7 +21,6 @@ import {
 import {
   verifyKeyZeroLookup,
   verifyKeyWithShortId,
-  authenticateKeyZeroLookup,
 } from "@/lib/keyAuthZeroLookup";
 import { authenticateWithBiometric } from "@/lib/webauthn";
 import {
@@ -31,7 +30,7 @@ import {
 } from "@/lib/webauthn";
 
 interface KeyAuthLoginZeroLookupProps {
-  onSuccess: (user: { userId: string; email: string; shopId: string }) => void;
+  onSuccess: (user: { userId: string; email?: string; shopId: string; [key: string]: unknown }) => void;
   onError: (error: string) => void;
 }
 
@@ -143,7 +142,7 @@ export default function KeyAuthLoginZeroLookup({
       }
 
       // Success - user authenticated with key + biometric
-      onSuccess(validatedUser);
+      onSuccess(validatedUser as unknown as { userId: string; shopId: string; [key: string]: unknown });
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Biometric authentication failed";

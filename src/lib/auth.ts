@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { UserDoc } from "@/types";
-import { getUserByEmail, createUser, getUserById, updateUser } from "./usersDB";
+import { getUserById, updateUser } from "./usersDB";
 
 // Password hashing
 const SALT_ROUNDS = 10;
@@ -38,7 +38,7 @@ export function createSession(user: UserDoc, licenseKey?: string): SessionData {
 
   const session: SessionData = {
     userId: user.userId,
-    email: user.email,
+    email: user.email || user.phoneNumber || "",
     shopId: user.shopId,
     role: user.role,
     expiresAt: expiresAt.toISOString(),

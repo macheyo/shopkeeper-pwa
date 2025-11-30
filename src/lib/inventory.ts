@@ -60,7 +60,12 @@ export async function getAvailableLotsForProduct(
 ): Promise<InventoryLot[]> {
   const lotsDB = await getInventoryLotsDB();
 
-  const selector: any = {
+  const selector: {
+    type: string;
+    productId?: string;
+    shopId?: string;
+    remainingQuantity?: { $gt: number };
+  } = {
     type: "inventory_lot",
     productId,
     remainingQuantity: { $gt: 0 }, // Only lots with remaining stock
@@ -158,7 +163,7 @@ export async function getLotsByPurchaseRun(
 ): Promise<InventoryLot[]> {
   const lotsDB = await getInventoryLotsDB();
 
-  const selector: any = {
+  const selector: { type: string; purchaseRunId: string; shopId?: string } = {
     type: "inventory_lot",
     purchaseRunId,
   };
@@ -188,7 +193,7 @@ export async function getSalesForPurchaseRun(
   const salesDB = await getSalesDB();
 
   // Get all sales and filter those that used items from this purchase run
-  const selector: any = {
+  const selector: { type: string; shopId?: string } = {
     type: "sale",
   };
   if (shopId) {
@@ -251,8 +256,8 @@ export async function getPurchaseRunProgress(
     remaining: number;
   }>;
 }> {
-  const lots = await getLotsByPurchaseRun(purchaseRunId);
-  const sales = await getSalesForPurchaseRun(purchaseRunId);
+  const lots = await getLotsByPurchaseRun(purchaseRunId, shopId);
+  const sales = await getSalesForPurchaseRun(purchaseRunId, shopId);
 
   if (lots.length === 0) {
     throw new Error(

@@ -40,10 +40,15 @@ export async function getUsersDB(): Promise<PouchDB.Database> {
             const crypto = await import("crypto-pouch");
 
             // Only register plugins if not already registered
-            if (!(PouchDB as any).__pluginsRegistered) {
+            if (
+              !(PouchDB as { __pluginsRegistered?: boolean })
+                .__pluginsRegistered
+            ) {
               PouchDB.plugin(PouchDBFind.default);
               PouchDB.plugin(crypto.default);
-              (PouchDB as any).__pluginsRegistered = true;
+              (
+                PouchDB as { __pluginsRegistered?: boolean }
+              ).__pluginsRegistered = true;
             }
             pouchDBInitialized = true;
           })();
@@ -227,9 +232,9 @@ export async function createUser(
     const now = new Date().toISOString();
 
     const userDoc: UserDoc = {
+      ...user,
       _id: `user_${user.userId}`,
       type: "user",
-      ...user,
       phoneNumber: user.phoneNumber?.replace(/[\s\-\(\)]/g, "") || "",
       email: user.email?.toLowerCase(),
       createdAt: now,
@@ -264,7 +269,7 @@ export async function updateUser(user: UserDoc): Promise<UserDoc> {
     const db = await getUsersDB();
     const updatedUser: UserDoc = {
       ...user,
-      email: user.email.toLowerCase(),
+      email: user.email?.toLowerCase(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -323,9 +328,9 @@ export async function createInvitation(
 
     const db = await getUsersDB();
     const invitationDoc: InvitationDoc = {
+      ...invitation,
       _id: `invitation_${invitation.inviteId}`,
       type: "invitation",
-      ...invitation,
       phoneNumber: invitation.phoneNumber.replace(/[\s\-\(\)]/g, ""), // Normalize phone number
       email: invitation.email?.toLowerCase(), // Optional, for backwards compatibility
       createdAt: new Date().toISOString(),
@@ -414,9 +419,9 @@ export async function createShop(
     const now = new Date().toISOString();
 
     const shopDoc: ShopDoc = {
+      ...shop,
       _id: `shop_${shop.shopId}`,
       type: "shop",
-      ...shop,
       createdAt: now,
       updatedAt: now,
     };

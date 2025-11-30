@@ -71,8 +71,9 @@ export async function getCouchDBConfig(
 
       // If not enabled, return null (don't use env vars if sync is disabled)
       return null;
-    } catch (err: any) {
-      if (err.status === 404) {
+    } catch (err: unknown) {
+      const error = err as { status?: number };
+      if (error.status === 404) {
         // No config saved, use environment variables as default
         const defaultConfig = getDefaultCouchDBConfig();
         if (defaultConfig) {
@@ -121,8 +122,9 @@ export async function saveCouchDBConfig(
       };
 
       await db.put(configDoc);
-    } catch (err: any) {
-      if (err.status === 404) {
+    } catch (err: unknown) {
+      const error = err as { status?: number };
+      if (error.status === 404) {
         // Create new document
         const configDoc: CouchDBConfigDoc = {
           _id: docId,
@@ -178,8 +180,9 @@ export async function updateCouchDBTestResult(
       };
 
       await db.put(configDoc);
-    } catch (err: any) {
-      if (err.status === 404) {
+    } catch (err: unknown) {
+      const error = err as { status?: number };
+      if (error.status === 404) {
         // Config doesn't exist yet, that's fine
         return;
       }
@@ -223,8 +226,9 @@ export async function markFirstSyncCompleted(shopId: string): Promise<void> {
       };
 
       await db.put(configDoc);
-    } catch (err: any) {
-      if (err.status === 404) {
+    } catch (err: unknown) {
+      const error = err as { status?: number };
+      if (error.status === 404) {
         // Doesn't exist, that's fine
         return;
       }
@@ -251,8 +255,9 @@ export async function hasFirstSyncCompleted(shopId: string): Promise<boolean> {
       const doc = await db.get(docId);
       const configDoc = doc as CouchDBConfigDoc;
       return configDoc.firstSyncCompleted === true;
-    } catch (err: any) {
-      if (err.status === 404) {
+    } catch (err: unknown) {
+      const error = err as { status?: number };
+      if (error.status === 404) {
         return false;
       }
       throw err;
@@ -284,8 +289,9 @@ export async function disableCouchDBSync(shopId: string): Promise<void> {
       };
 
       await db.put(configDoc);
-    } catch (err: any) {
-      if (err.status === 404) {
+    } catch (err: unknown) {
+      const error = err as { status?: number };
+      if (error.status === 404) {
         // Doesn't exist, that's fine
         return;
       }

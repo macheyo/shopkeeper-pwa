@@ -47,9 +47,11 @@ export async function getDeviceFingerprint(): Promise<string> {
   if (
     typeof navigator !== "undefined" &&
     "deviceMemory" in navigator &&
-    (navigator as any).deviceMemory
+    (navigator as { deviceMemory?: number }).deviceMemory
   ) {
-    components.push((navigator as any).deviceMemory.toString());
+    components.push(
+      (navigator as { deviceMemory?: number }).deviceMemory?.toString() || ""
+    );
   }
 
   // Canvas fingerprint (if available)
@@ -76,10 +78,13 @@ export async function getDeviceFingerprint(): Promise<string> {
   // WebGL fingerprint (if available)
   try {
     const canvas = document.createElement("canvas");
-    const gl =
-      canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    const gl = (canvas.getContext("webgl") ||
+      canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null;
     if (gl) {
-      const debugInfo = (gl as any).getExtension("WEBGL_debug_renderer_info");
+      const debugInfo = gl.getExtension("WEBGL_debug_renderer_info") as {
+        UNMASKED_VENDOR_WEBGL: number;
+        UNMASKED_RENDERER_WEBGL: number;
+      } | null;
       if (debugInfo) {
         const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
         const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
@@ -137,4 +142,3 @@ export async function getStableDeviceId(): Promise<string> {
 
   return deviceId;
 }
-

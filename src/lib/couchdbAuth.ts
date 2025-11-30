@@ -90,8 +90,9 @@ export async function getCouchDBUserCredentials(
     const db = await getUsersDB();
     const doc = await db.get(`couchdb_user_${userId}`);
     return doc as CouchDBUserCredentials;
-  } catch (err: any) {
-    if (err.status === 404) {
+  } catch (err: unknown) {
+    const error = err as { status?: number };
+    if (error.status === 404) {
       return null;
     }
     console.error("Error getting CouchDB user credentials:", err);

@@ -85,12 +85,7 @@ type BeforeInstallPromptEvent = Event & {
 
 export default function Home() {
   const { hasCompletedOnboarding, completeOnboarding } = useOnboarding();
-  const {
-    isAuthenticated,
-    isLoading: authLoading,
-    shop,
-    currentUser,
-  } = useAuth();
+  const { shop, currentUser } = useAuth();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -196,7 +191,7 @@ export default function Home() {
             type: "sale",
             timestamp: {
               $gte: startDateISOString,
-              $lt: endDateISOString,
+              $lte: endDateISOString,
             },
           },
           shop?.shopId
@@ -310,7 +305,16 @@ export default function Home() {
       setSalesLoading(false);
       setRevenueLoading(false);
     }
-  }, [dateRange, customDateRange, startDate, endDate, label, shop]); // Re-fetch when date range changes
+  }, [
+    dateRange,
+    customDateRange,
+    startDate,
+    endDate,
+    label,
+    shop,
+    dateRangeInfo.endDate,
+    dateRangeInfo.startDate,
+  ]); // Re-fetch when date range changes
 
   // Function to load sales target from localStorage
   const loadSalesTarget = useCallback(() => {

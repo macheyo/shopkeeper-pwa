@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Title,
   Stack,
@@ -17,7 +17,6 @@ import {
   Select,
   Collapse,
   Alert,
-  Progress,
   Tabs,
 } from "@mantine/core";
 import {
@@ -41,7 +40,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { addShopIdFilter } from "@/lib/queryHelpers";
 import { getSyncManager, SyncEvent, SyncStatus } from "@/lib/syncManager";
 import {
-  getCouchDBConfig,
   isCouchDBSyncEnabled,
   hasFirstSyncCompleted,
   markFirstSyncCompleted,
@@ -103,16 +101,17 @@ export default function SyncPage() {
             try {
               await remoteSalesDB.get(transaction.id);
               // Document exists in CouchDB, mark as synced
-              const sale = await salesDB.get(transaction.id).catch(() => null);
+              const sale = await salesDB.get(transaction.id).catch(() => null) as SaleDoc | null;
               if (sale && sale.status !== "synced") {
                 await salesDB.put({ ...sale, status: "synced" });
                 console.log(
                   `[SYNC] Marked existing sale ${transaction.id} as synced`
                 );
               }
-            } catch (err: any) {
+            } catch (err: unknown) {
               // Document doesn't exist in CouchDB (404), leave as pending
-              if (err.status !== 404) {
+              const error = err as { status?: number };
+              if (error.status !== 404) {
                 console.error(
                   `Error checking sale ${transaction.id} in CouchDB:`,
                   err
@@ -126,16 +125,17 @@ export default function SyncPage() {
               // Document exists in CouchDB, mark as synced
               const purchase = await purchasesDB
                 .get(transaction.id)
-                .catch(() => null);
+                .catch(() => null) as PurchaseDoc | null;
               if (purchase && purchase.status !== "synced") {
                 await purchasesDB.put({ ...purchase, status: "synced" });
                 console.log(
                   `[SYNC] Marked existing purchase ${transaction.id} as synced`
                 );
               }
-            } catch (err: any) {
+            } catch (err: unknown) {
               // Document doesn't exist in CouchDB (404), leave as pending
-              if (err.status !== 404) {
+              const error = err as { status?: number };
+              if (error.status !== 404) {
                 console.error(
                   `Error checking purchase ${transaction.id} in CouchDB:`,
                   err
@@ -278,7 +278,7 @@ export default function SyncPage() {
     };
 
     fetchData();
-  }, [dateRangeInfo.startDate, dateRangeInfo.endDate, shop, couchdbEnabled]);
+  }, [dateRangeInfo.startDate, dateRangeInfo.endDate, shop, couchdbEnabled, checkSyncStatusForTransactions]);
 
   // Check if CouchDB is enabled and set default sync method
   useEffect(() => {
@@ -331,22 +331,22 @@ export default function SyncPage() {
             for (const docId of event.syncedDocumentIds || []) {
               // Try to update sale
               try {
-                const sale = await salesDB.get(docId).catch(() => null);
+                const sale = await salesDB.get(docId).catch(() => null) as SaleDoc | null;
                 if (sale && sale.status !== "synced") {
                   await salesDB.put({ ...sale, status: "synced" });
                   console.log(`[SYNC] Marked sale ${docId} as synced`);
                 }
-              } catch (err) {
+              } catch {
                 // Not a sale, try purchase
                 try {
                   const purchase = await purchasesDB
                     .get(docId)
-                    .catch(() => null);
+                    .catch(() => null) as PurchaseDoc | null;
                   if (purchase && purchase.status !== "synced") {
                     await purchasesDB.put({ ...purchase, status: "synced" });
                     console.log(`[SYNC] Marked purchase ${docId} as synced`);
                   }
-                } catch (err2) {
+                } catch {
                   // Not a sale or purchase, skip
                 }
               }
@@ -498,10 +498,10 @@ export default function SyncPage() {
       for (const item of selectedItems) {
         try {
           if (item.type === "sale") {
-            const sale = await salesDB.get(item.id);
+            const sale = await salesDB.get(item.id) as SaleDoc;
             await salesDB.put({ ...sale, status: "synced" });
           } else {
-            const purchase = await purchasesDB.get(item.id);
+            const purchase = await purchasesDB.get(item.id) as PurchaseDoc;
             await purchasesDB.put({ ...purchase, status: "synced" });
           }
         } catch (err) {
@@ -631,10 +631,10 @@ export default function SyncPage() {
 
         for (const item of selectedItems) {
           if (item.type === "sale") {
-            const sale = await salesDB.get(item.id);
+            const sale = await salesDB.get(item.id) as SaleDoc;
             await salesDB.put({ ...sale, status: "synced" });
           } else {
-            const purchase = await purchasesDB.get(item.id);
+            const purchase = await purchasesDB.get(item.id) as PurchaseDoc;
             await purchasesDB.put({ ...purchase, status: "synced" });
           }
         }
@@ -729,7 +729,6 @@ export default function SyncPage() {
                   <Alert
                     icon={<IconAlertCircle size={16} />}
                     color="red"
-                    size="sm"
                   >
                     {syncStatus.error}
                   </Alert>

@@ -64,7 +64,7 @@ export function CashInHandManager() {
           type: "cash_in_hand",
           timestamp: {
             $gte: dateRangeInfo.startDate.toISOString(),
-            $lt: dateRangeInfo.endDate.toISOString(),
+            $lte: dateRangeInfo.endDate.toISOString(),
           },
         },
         sort: [{ timestamp: "asc" }],
@@ -86,6 +86,7 @@ export function CashInHandManager() {
   useEffect(() => {
     calculateExpectedCash();
     calculateBalances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRangeInfo]); // Recalculate when date range changes
 
   useEffect(() => {
@@ -110,7 +111,7 @@ export function CashInHandManager() {
           paymentMethod: "cash",
           timestamp: {
             $gte: dateRangeInfo.startDate.toISOString(),
-            $lt: dateRangeInfo.endDate.toISOString(),
+            $lte: dateRangeInfo.endDate.toISOString(),
           },
         },
       });
@@ -122,7 +123,7 @@ export function CashInHandManager() {
           paymentMethod: "cash",
           timestamp: {
             $gte: dateRangeInfo.startDate.toISOString(),
-            $lt: dateRangeInfo.endDate.toISOString(),
+            $lte: dateRangeInfo.endDate.toISOString(),
           },
         },
       });

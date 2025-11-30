@@ -16,16 +16,14 @@ import {
   IconCheck,
 } from "@tabler/icons-react";
 import {
-  deriveUserIdFromKeyAndEmail,
   verifyKeyDeterministic,
-  authenticateKeyAfterDataClear,
 } from "@/lib/keyAuthDeterministic";
 import { getUserByEmail } from "@/lib/usersDB";
 import { authenticateWithBiometric } from "@/lib/webauthn";
 import { isWebAuthnSupported, isPlatformAuthenticatorAvailable } from "@/lib/webauthn";
 
 interface KeyAuthLoginDeterministicProps {
-  onSuccess: (user: any) => void;
+  onSuccess: (user: { userId: string; shopId: string; [key: string]: unknown }) => void;
   onError: (error: string) => void;
   shopId?: string; // Optional - user can provide if data cleared
 }
@@ -107,7 +105,7 @@ export default function KeyAuthLoginDeterministic({
       }
 
       // No biometric required, complete login
-      onSuccess(user);
+      onSuccess(user as unknown as { userId: string; shopId: string; [key: string]: unknown });
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Authentication failed";
@@ -132,7 +130,7 @@ export default function KeyAuthLoginDeterministic({
       }
 
       // Success - user authenticated with key + biometric
-      onSuccess(result.user);
+        onSuccess(result.user as unknown as { userId: string; shopId: string; [key: string]: unknown });
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Biometric authentication failed";

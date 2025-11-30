@@ -23,7 +23,6 @@ import {
   IconUser,
   IconMail,
   IconBuilding,
-  IconLicense,
   IconCalendar,
   IconDeviceDesktop,
   IconShield,
@@ -35,15 +34,15 @@ import {
   formatFeatureName,
   getFeatureCategory,
   FEATURE_METADATA,
+  type Feature,
 } from "@/lib/features";
+import { LicenseData } from "@/lib/licenseKey";
 
 export default function ProfilePage() {
   const { currentUser, shop } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
   const [licenseCopied, setLicenseCopied] = useState(false);
-  const [licenseDetails, setLicenseDetails] = useState<any>(null);
+  const [licenseDetails, setLicenseDetails] = useState<LicenseData | null>(null);
 
   // Load license key from session (or localStorage fallback) and decode details
   useEffect(() => {
@@ -56,7 +55,7 @@ export default function ProfilePage() {
         // Try session first, then fallback to dedicated storage
         const session = getSession();
         const storedLicense =
-          session?.licenseKey || getLicenseKey(currentUser.userId, shop.shopId);
+          session?.licenseKey || getLicenseKey();
         setLicenseKey(storedLicense);
 
         // Decode license details if license exists
@@ -345,13 +344,13 @@ export default function ProfilePage() {
                                         {licenseDetails.features.map(
                                           (feature: string) => {
                                             const category = getFeatureCategory(
-                                              feature as any
+                                              feature as Feature
                                             );
                                             const name = formatFeatureName(
-                                              feature as any
+                                              feature as Feature
                                             );
                                             const metadata =
-                                              FEATURE_METADATA[feature as any];
+                                              FEATURE_METADATA[feature as Feature];
                                             return (
                                               <Badge
                                                 key={feature}
