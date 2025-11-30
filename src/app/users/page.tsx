@@ -20,6 +20,9 @@ import {
   Card,
   ScrollArea,
   Divider,
+  Textarea,
+  CopyButton,
+  Tooltip,
 } from "@mantine/core";
 import {
   IconUserPlus,
@@ -27,6 +30,7 @@ import {
   IconCheck,
   IconX,
   IconEdit,
+  IconCopy,
 } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasPermission, Permission } from "@/lib/permissions";
@@ -43,6 +47,8 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState("");
   const [inviteCountryCode, setInviteCountryCode] = useState("+263");
   const [invitePhoneNumber, setInvitePhoneNumber] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("employee");
@@ -131,25 +137,21 @@ export default function UsersPage() {
       });
 
       // Generate shareable invitation link
-      const inviteLink = `${window.location.origin}/invite/${token}`;
+      const generatedInviteLink = `${window.location.origin}/invite/${token}`;
 
-      // Copy to clipboard and show success message
+      // Copy to clipboard
       try {
-        await navigator.clipboard.writeText(inviteLink);
-        setError(null);
-        // Show success message (you can replace this with a toast notification)
-        alert(
-          `Invitation created! The invitation link has been copied to your clipboard.\n\nShare this link via email, WhatsApp, or any other channel:\n${inviteLink}`
-        );
+        await navigator.clipboard.writeText(generatedInviteLink);
       } catch (err) {
-        // Fallback if clipboard API fails
-        setError(null);
-        alert(
-          `Invitation created! Share this link with the user:\n${inviteLink}\n\n(You can copy this link and share it via email, WhatsApp, etc.)`
-        );
+        // Clipboard copy failed, but continue anyway
+        console.warn("Failed to copy to clipboard:", err);
       }
 
+      // Show success modal
+      setInviteLink(generatedInviteLink);
+      setError(null);
       setInviteModalOpen(false);
+      setSuccessModalOpen(true);
       setInvitePhoneNumber("");
       setInviteCountryCode("+263");
       setInviteRole("employee");
@@ -475,6 +477,75 @@ export default function UsersPage() {
             >
               Send Invitation
             </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        opened={successModalOpen}
+        onClose={() => setSuccessModalOpen(false)}
+        title={
+          <Group>
+            <IconCheck size={20} color="green" />
+            <Text fw={600}>Invitation Created Successfully</Text>
+          </Group>
+        }
+        centered
+        size="lg"
+      >
+        <Stack gap="md">
+          <Alert
+            icon={<IconCheck size={16} />}
+            title="Invitation Link Ready"
+            color="green"
+          >
+            <Text size="sm">
+              The invitation link has been copied to your clipboard. Share this
+              link with the user via email, WhatsApp, or any other channel.
+            </Text>
+          </Alert>
+
+          <Box>
+            <Text size="sm" fw={500} mb="xs">
+              Invitation Link:
+            </Text>
+            <Group gap="xs">
+              <Textarea
+                value={inviteLink}
+                readOnly
+                minRows={2}
+                style={{ flex: 1 }}
+                styles={{
+                  input: {
+                    fontFamily: "monospace",
+                    fontSize: "0.875rem",
+                  },
+                }}
+              />
+              <CopyButton value={inviteLink}>
+                {({ copied, copy }) => (
+                  <Tooltip label={copied ? "Copied!" : "Copy link"}>
+                    <ActionIcon
+                      color={copied ? "teal" : "gray"}
+                      onClick={copy}
+                      variant="light"
+                      size="lg"
+                    >
+                      {copied ? (
+                        <IconCheck size={18} />
+                      ) : (
+                        <IconCopy size={18} />
+                      )}
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </CopyButton>
+            </Group>
+          </Box>
+
+          <Group justify="flex-end" mt="md">
+            <Button onClick={() => setSuccessModalOpen(false)}>Done</Button>
           </Group>
         </Stack>
       </Modal>
