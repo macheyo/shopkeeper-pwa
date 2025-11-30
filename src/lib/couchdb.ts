@@ -7,9 +7,11 @@ import { UserDoc } from "@/types";
  */
 export interface CouchDBConfig {
   url: string; // e.g., "http://localhost:5984" or "https://your-couchdb-instance.cloudant.com"
-  username: string;
-  password: string;
+  username: string; // Admin username (for creating users/databases)
+  password: string; // Admin password
   shopId: string;
+  syncUsername?: string; // Shop-specific sync user (shop_{shopId}_sync)
+  syncPassword?: string; // Shop-specific sync password (encrypted)
 }
 
 /**
@@ -36,11 +38,13 @@ export async function testCouchDBConnection(
     const cleanUrl = url.replace(/\/$/, "");
 
     // Test connection with CouchDB session endpoint
+    // Include credentials for CORS if needed
     const response = await fetch(`${cleanUrl}/_session`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "include", // Include credentials for CORS
       body: JSON.stringify({
         name: username,
         password: password,
@@ -48,21 +52,54 @@ export async function testCouchDBConnection(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      let errorText = "";
+      try {
+        errorText = await response.text();
+      } catch {
+        errorText = response.statusText;
+      }
       return {
         success: false,
         error: `Authentication failed: ${response.status} ${response.statusText}. ${errorText}`,
       };
     }
 
-    const data = await response.json();
+    let data: any;
+    try {
+      data = await response.json();
+    } catch (err) {
+      return {
+        success: false,
+        error: `Invalid response from server: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`,
+      };
+    }
+
+    // Validate response structure
+    // CouchDB _session endpoint can return different formats:
+    // 1. { ok: true, name: "...", roles: [...] } - direct response
+    // 2. { ok: true, userCtx: { name: "...", roles: [...] } } - session response
+    if (!data || (!data.name && !data.userCtx)) {
+      return {
+        success: false,
+        error: `Invalid response format from CouchDB. Expected name or userCtx but got: ${JSON.stringify(
+          data
+        )}`,
+      };
+    }
+
     const cookie = response.headers.get("Set-Cookie");
+
+    // Handle both response formats
+    const userName = data.userCtx?.name || data.name || username;
+    const userRoles = data.userCtx?.roles || data.roles || [];
 
     return {
       success: true,
       session: {
-        name: data.userCtx.name,
-        roles: data.userCtx.roles || [],
+        name: userName,
+        roles: userRoles,
         shopId: "", // Will be set by caller
         token: cookie ? extractTokenFromCookie(cookie) : undefined,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24h
@@ -103,8 +140,8 @@ export async function getRemoteDB(
   // Remove trailing slash from URL
   const cleanUrl = config.url.replace(/\/$/, "");
 
-  // Database naming: {shopId}_{databaseName}
-  const remoteDBName = `${config.shopId}_${localDBName}`;
+  // Database naming: shop_{shopId}_{databaseName} (for better isolation)
+  const remoteDBName = `shop_${config.shopId}_${localDBName}`;
   const remoteUrl = `${cleanUrl}/${remoteDBName}`;
 
   // Import PouchDB dynamically
@@ -126,16 +163,73 @@ export async function getRemoteDB(
 }
 
 /**
- * Ensure remote database exists (create if it doesn't)
+ * Set security document on a CouchDB database
+ * This ensures only authorized users can access the database
+ */
+export async function setDatabaseSecurity(
+  localDBName: string,
+  config: CouchDBConfig,
+  syncUsername: string
+): Promise<void> {
+  try {
+    const cleanUrl = config.url.replace(/\/$/, "");
+    const remoteDBName = `shop_${config.shopId}_${localDBName}`;
+    const securityUrl = `${cleanUrl}/${remoteDBName}/_security`;
+
+    const securityDoc = {
+      admins: {
+        names: [], // No admin users - use roles or admin credentials
+        roles: [],
+      },
+      members: {
+        names: [syncUsername], // Only sync user can access
+        roles: [],
+      },
+    };
+
+    const response = await fetch(securityUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${btoa(`${config.username}:${config.password}`)}`,
+      },
+      body: JSON.stringify(securityDoc),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      // If database doesn't exist yet, that's okay - we'll create it first
+      if (response.status === 404) {
+        return;
+      }
+      throw new Error(
+        `Failed to set security document: ${response.status} ${errorText}`
+      );
+    }
+  } catch (error) {
+    console.error(`Error setting security for ${localDBName}:`, error);
+    // Don't throw - security document setting is best effort
+    // The database will still work, just without explicit security
+  }
+}
+
+/**
+ * Ensure remote database exists (create if it doesn't) and set security
  */
 export async function ensureRemoteDatabase(
   localDBName: string,
-  config: CouchDBConfig
+  config: CouchDBConfig,
+  syncUsername?: string
 ): Promise<void> {
   try {
     const remoteDB = await getRemoteDB(localDBName, config);
     // Try to get database info - this will create it if it doesn't exist
     await remoteDB.info();
+
+    // Set security document if syncUsername is provided
+    if (syncUsername) {
+      await setDatabaseSecurity(localDBName, config, syncUsername);
+    }
   } catch (error) {
     console.error(`Error ensuring remote database ${localDBName}:`, error);
     throw new Error(

@@ -107,6 +107,15 @@ export default withPWA({
       },
     },
     {
+      // Exclude CouchDB from service worker - use NetworkOnly to bypass caching entirely
+      // This prevents the service worker from interfering with database sync operations
+      urlPattern: /^https?:\/\/[^\/]*:5984\/.*$/i,
+      handler: "NetworkOnly",
+      options: {
+        cacheName: "couchdb-bypass",
+      },
+    },
+    {
       urlPattern: /.*/i,
       handler: "NetworkFirst",
       options: {

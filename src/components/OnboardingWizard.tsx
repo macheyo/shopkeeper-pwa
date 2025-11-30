@@ -22,9 +22,11 @@ import { saveShopSettings } from "@/lib/settingsDB";
 import { createOpeningBalanceEntries } from "@/lib/accounting";
 import { AccountCode } from "@/types/accounting";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOnboarding } from "@/contexts/OnboardingContext";
 import MoneyInput from "./MoneyInput";
 import { AccountSettings } from "@/types";
 import { getLicenseData } from "@/lib/featureCheck";
+import { IconWifi, IconWifiOff } from "@tabler/icons-react";
 
 interface CurrencySettings {
   code: CurrencyCode;
@@ -37,6 +39,7 @@ export default function OnboardingWizard({
   onComplete: () => void;
 }) {
   const { currentUser, shop } = useAuth();
+  const { onboardingError, requiresInternet } = useOnboarding();
   const [active, setActive] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -221,6 +224,28 @@ export default function OnboardingWizard({
         setting up your shop&apos;s basic information, currencies, and accounts.
       </Text>
 
+      {onboardingError && requiresInternet && (
+        <Alert
+          icon={<IconWifiOff size={16} />}
+          color="orange"
+          title="Internet Connection Required"
+        >
+          <Text size="sm" mb="xs">
+            {onboardingError}
+          </Text>
+          <Text size="xs" c="dimmed">
+            Please connect to the internet to complete the initial setup. Once
+            connected, refresh this page.
+          </Text>
+        </Alert>
+      )}
+
+      {onboardingError && !requiresInternet && (
+        <Alert icon={<IconAlertCircle size={16} />} color="red" title="Error">
+          {onboardingError}
+        </Alert>
+      )}
+
       {error && (
         <Alert icon={<IconAlertCircle size={16} />} color="red" title="Error">
           {error}
@@ -229,9 +254,10 @@ export default function OnboardingWizard({
 
       <Stepper
         active={active}
-        onStepClick={setActive}
+        onStepClick={requiresInternet ? undefined : setActive}
         orientation={isMobile ? "vertical" : "horizontal"}
         size={isMobile ? "sm" : "md"}
+        allowNextStepsSelect={!requiresInternet}
       >
         <Stepper.Step
           label="Shop Details"
@@ -544,6 +570,7 @@ export default function OnboardingWizard({
             variant="default"
             onClick={prevStep}
             size={isMobile ? "sm" : "md"}
+            disabled={requiresInternet}
           >
             Back
           </Button>
@@ -553,6 +580,7 @@ export default function OnboardingWizard({
             onClick={nextStep}
             size={isMobile ? "sm" : "md"}
             disabled={
+              requiresInternet ||
               (active === 0 && (!shopName || !businessType)) ||
               (active === 1 && !baseCurrency) ||
               (active === 2 &&
@@ -568,7 +596,7 @@ export default function OnboardingWizard({
             onClick={handleFinish}
             color="blue"
             loading={isLoading}
-            disabled={isLoading}
+            disabled={requiresInternet || isLoading}
             size={isMobile ? "sm" : "md"}
           >
             Finish

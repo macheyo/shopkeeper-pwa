@@ -4,15 +4,12 @@ import React, { useState, useEffect } from "react";
 import {
   Card,
   Stack,
-  TextInput,
-  PasswordInput,
   Button,
   Title,
   Text,
   Alert,
   Group,
   Switch,
-  Badge,
   Divider,
 } from "@mantine/core";
 import {
@@ -29,6 +26,7 @@ import {
   saveCouchDBConfig,
   updateCouchDBTestResult,
   isCouchDBSyncEnabled,
+  markFirstSyncCompleted,
 } from "@/lib/couchdbConfig";
 
 export default function CouchDBConfigComponent() {
@@ -39,15 +37,17 @@ export default function CouchDBConfigComponent() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isEnabled, setIsEnabled] = useState(false);
 
-  const [url, setUrl] = useState("http://localhost:5984");
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("");
+  // Get config from environment variables
+  const url = process.env.NEXT_PUBLIC_COUCHDB_URL || "http://localhost:5984";
+  const username = process.env.NEXT_PUBLIC_COUCHDB_USERNAME || "admin";
+  const password = process.env.NEXT_PUBLIC_COUCHDB_PASSWORD || "secret";
+
   const [testResult, setTestResult] = useState<{
     success: boolean;
     error?: string;
   } | null>(null);
 
-  // Load existing configuration
+  // Load existing enabled state and enable by default if config exists
   useEffect(() => {
     const loadConfig = async () => {
       if (!shop) return;
@@ -56,10 +56,11 @@ export default function CouchDBConfigComponent() {
         const config = await getCouchDBConfig(shop.shopId);
         const enabled = await isCouchDBSyncEnabled(shop.shopId);
 
-        if (config) {
-          setUrl(config.url);
-          setUsername(config.username);
-          // Don't load password for security
+        // If config exists but sync is not enabled, enable it by default
+        if (config && !enabled) {
+          console.log("CouchDB config found - enabling sync by default");
+          setIsEnabled(true);
+        } else {
           setIsEnabled(enabled);
         }
       } catch (err) {
@@ -69,6 +70,43 @@ export default function CouchDBConfigComponent() {
 
     loadConfig();
   }, [shop]);
+
+  // Auto-enable sync when component mounts if config exists but sync is disabled
+  useEffect(() => {
+    const autoEnable = async () => {
+      if (!shop || !currentUser) return;
+
+      try {
+        const config = await getCouchDBConfig(shop.shopId);
+        const enabled = await isCouchDBSyncEnabled(shop.shopId);
+
+        // If config exists but sync is not enabled, auto-enable it
+        if (config && !enabled) {
+          console.log(
+            "Auto-enabling CouchDB sync (config exists but sync disabled)"
+          );
+          setIsEnabled(true);
+        }
+      } catch (err) {
+        console.error("Error checking sync status:", err);
+      }
+    };
+
+    // Only auto-enable once when component first loads
+    const timeoutId = setTimeout(autoEnable, 2000);
+    return () => clearTimeout(timeoutId);
+  }, [shop?.shopId]); // Only depend on shopId to run once
+
+  // Auto-save when enabled state changes to true (if it was auto-enabled)
+  useEffect(() => {
+    if (isEnabled && shop && currentUser && !loading && !testing) {
+      // Small delay to ensure state is set
+      const timeoutId = setTimeout(() => {
+        handleSave();
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isEnabled]); // Only trigger when enabled changes
 
   const handleTest = async () => {
     if (!shop) {
@@ -82,6 +120,37 @@ export default function CouchDBConfigComponent() {
     setTestResult(null);
 
     try {
+      // First, test if CouchDB is reachable
+      try {
+        const healthCheck = await fetch(url.replace(/\/$/, "") + "/", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!healthCheck.ok) {
+          setError(
+            `CouchDB not reachable: ${healthCheck.status} ${healthCheck.statusText}`
+          );
+          setTestResult({
+            success: false,
+            error: `Server returned ${healthCheck.status}`,
+          });
+          return;
+        }
+      } catch (healthErr) {
+        setError(
+          `Cannot reach CouchDB server. Make sure it's running and CORS is enabled. Error: ${
+            healthErr instanceof Error ? healthErr.message : "Unknown"
+          }`
+        );
+        setTestResult({
+          success: false,
+          error: "Connection failed - check if CouchDB is running",
+        });
+        return;
+      }
+
+      // Now test authentication
       const result = await testCouchDBConnection(url, username, password);
 
       setTestResult(result);
@@ -91,8 +160,9 @@ export default function CouchDBConfigComponent() {
         // Update test result in storage
         await updateCouchDBTestResult(shop.shopId, true);
       } else {
-        setError(result.error || "Connection failed");
-        await updateCouchDBTestResult(shop.shopId, false, result.error);
+        const errorMsg = result.error || "Connection failed";
+        setError(errorMsg);
+        await updateCouchDBTestResult(shop.shopId, false, errorMsg);
       }
     } catch (err) {
       const errorMsg =
@@ -111,22 +181,6 @@ export default function CouchDBConfigComponent() {
       return;
     }
 
-    // Validate inputs
-    if (!url.trim()) {
-      setError("CouchDB URL is required");
-      return;
-    }
-
-    if (!username.trim()) {
-      setError("Username is required");
-      return;
-    }
-
-    if (!password.trim()) {
-      setError("Password is required");
-      return;
-    }
-
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -137,12 +191,13 @@ export default function CouchDBConfigComponent() {
 
       if (!testResult.success) {
         setError(
-          `Connection test failed. Cannot save configuration. ${testResult.error}`
+          `Connection test failed. Cannot enable sync. ${testResult.error}`
         );
+        setLoading(false);
         return;
       }
 
-      // Save configuration
+      // Save configuration with values from environment variables
       const config: CouchDBConfig = {
         url: url.trim(),
         username: username.trim(),
@@ -150,10 +205,100 @@ export default function CouchDBConfigComponent() {
         shopId: shop.shopId,
       };
 
+      // Initialize shop sync (create sync user and databases) if enabled
+      let initResult: {
+        success: boolean;
+        syncUsername?: string;
+        syncPassword?: string;
+        error?: string;
+      } | null = null;
+
+      if (isEnabled) {
+        try {
+          const { initializeShopSync } = await import("@/lib/couchdbSecurity");
+          console.log("Initializing shop sync - creating databases...");
+          initResult = await initializeShopSync(shop.shopId, config);
+
+          if (
+            initResult.success &&
+            initResult.syncUsername &&
+            initResult.syncPassword
+          ) {
+            // Update config with sync user credentials
+            config.syncUsername = initResult.syncUsername;
+            config.syncPassword = initResult.syncPassword;
+            console.log(
+              "Shop sync initialized successfully - databases created"
+            );
+          } else {
+            console.warn(
+              "Shop sync initialization had issues:",
+              initResult.error
+            );
+            // Try to ensure databases exist anyway (in case initialization partially failed)
+            try {
+              const { ensureAllDatabasesExist } = await import(
+                "@/lib/couchdbSecurity"
+              );
+              await ensureAllDatabasesExist(shop.shopId, config);
+            } catch (ensureErr) {
+              console.error("Error ensuring databases exist:", ensureErr);
+            }
+            // Continue anyway - admin credentials can still be used
+          }
+        } catch (err) {
+          console.error("Error initializing shop sync:", err);
+          initResult = {
+            success: false,
+            error: err instanceof Error ? err.message : "Unknown error",
+          };
+          // Try to ensure databases exist anyway
+          try {
+            const { ensureAllDatabasesExist } = await import(
+              "@/lib/couchdbSecurity"
+            );
+            await ensureAllDatabasesExist(shop.shopId, config);
+          } catch (ensureErr) {
+            console.error("Error ensuring databases exist:", ensureErr);
+          }
+          // Continue anyway - admin credentials can still be used
+        }
+      }
+
       await saveCouchDBConfig(shop.shopId, config, isEnabled);
       setSuccess("Configuration saved successfully!");
       setTestResult({ success: true });
       await updateCouchDBTestResult(shop.shopId, true);
+
+      // If sync is enabled and initialized successfully, trigger first sync
+      if (isEnabled && initResult && initResult.success) {
+        try {
+          const { getSyncManager } = await import("@/lib/syncManager");
+          const syncManager = getSyncManager();
+
+          // Initialize sync manager
+          if (currentUser) {
+            await syncManager.initialize(currentUser);
+
+            // Trigger first sync for all databases
+            // This will push all local data to CouchDB
+            await syncManager.syncAll();
+
+            // Mark first sync as completed after a delay
+            setTimeout(async () => {
+              await markFirstSyncCompleted(shop.shopId);
+            }, 5000);
+
+            setSuccess("Configuration saved and first sync started!");
+          }
+        } catch (syncErr) {
+          console.error("Error starting first sync:", syncErr);
+          // Don't fail the save - sync can be started manually later
+          setSuccess(
+            "Configuration saved. You can start sync manually from the Sync tab."
+          );
+        }
+      }
 
       // Clear password field for security
       setPassword("");
@@ -191,45 +336,24 @@ export default function CouchDBConfigComponent() {
         </Group>
 
         <Text size="sm" c="dimmed">
-          Configure your CouchDB connection to enable automatic data
-          synchronization. Your data will be synced securely to your CouchDB
-          instance.
+          Enable automatic data synchronization with CouchDB. Your data will be
+          synced securely to your CouchDB instance.
         </Text>
 
         <Divider />
 
-        <TextInput
-          label="CouchDB URL"
-          placeholder="http://localhost:5984"
-          value={url}
-          onChange={(e) => setUrl(e.currentTarget.value)}
-          disabled={loading || testing}
-          required
-          description="Your CouchDB server URL (e.g., http://localhost:5984 for local Docker instance)"
-        />
-
-        <TextInput
-          label="Username"
-          placeholder="admin"
-          value={username}
-          onChange={(e) => setUsername(e.currentTarget.value)}
-          disabled={loading || testing}
-          required
-        />
-
-        <PasswordInput
-          label="Password"
-          placeholder="Enter your CouchDB password"
-          value={password}
-          onChange={(e) => setPassword(e.currentTarget.value)}
-          disabled={loading || testing}
-          required
-          description={
-            password
-              ? "Password will be saved securely (encrypted in local database)"
-              : "Enter password to save configuration"
-          }
-        />
+        <Alert icon={<IconSettings size={16} />} color="blue">
+          <Text size="sm" fw={500} mb="xs">
+            CouchDB Configuration (from environment variables)
+          </Text>
+          <Text size="xs" c="dimmed">
+            <strong>URL:</strong> {url}
+            <br />
+            <strong>Username:</strong> {username}
+            <br />
+            <strong>Password:</strong> ••••••••
+          </Text>
+        </Alert>
 
         {testResult && (
           <Alert
@@ -276,7 +400,7 @@ export default function CouchDBConfigComponent() {
             variant="outline"
             onClick={handleTest}
             loading={testing}
-            disabled={loading || !url || !username || !password}
+            disabled={loading}
             leftSection={<IconCloud size={16} />}
           >
             Test Connection
@@ -284,24 +408,32 @@ export default function CouchDBConfigComponent() {
           <Button
             onClick={handleSave}
             loading={loading}
-            disabled={testing || !url || !username || !password}
+            disabled={testing}
             leftSection={<IconCheck size={16} />}
           >
-            Save Configuration
+            {isEnabled ? "Update Configuration" : "Enable Sync"}
           </Button>
         </Group>
 
         <Divider />
 
         <Text size="xs" c="dimmed">
-          <strong>Note:</strong> For local Docker CouchDB, make sure:
+          <strong>Note:</strong> CouchDB configuration is set via environment
+          variables:
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-            <li>CouchDB is running and accessible</li>
-            <li>CORS is enabled (for browser access)</li>
-            <li>You have created a user with appropriate permissions</li>
+            <li>
+              <code>NEXT_PUBLIC_COUCHDB_URL</code> (default:
+              http://localhost:5984)
+            </li>
+            <li>
+              <code>NEXT_PUBLIC_COUCHDB_USERNAME</code> (default: admin)
+            </li>
+            <li>
+              <code>NEXT_PUBLIC_COUCHDB_PASSWORD</code> (default: secret)
+            </li>
             <li>
               Database names will be prefixed with your shop ID (e.g.,{" "}
-              <code>{shop.shopId}_products</code>)
+              <code>shop_{shop.shopId}_products</code>)
             </li>
           </ul>
         </Text>
@@ -309,5 +441,3 @@ export default function CouchDBConfigComponent() {
     </Card>
   );
 }
-
-

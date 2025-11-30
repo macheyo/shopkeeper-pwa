@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useOnboarding } from "@/contexts/OnboardingContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasPermission, Permission } from "@/lib/permissions";
@@ -45,6 +45,40 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
   const { hasCompletedOnboarding } = useOnboarding();
   const { currentUser, shop, logout, isAuthenticated } = useAuth();
 
+  // Check CouchDB sync status - MUST be before any conditional returns
+  const [couchdbStatus, setCouchdbStatus] = useState<{
+    enabled: boolean;
+    available: boolean;
+  }>({ enabled: false, available: false });
+
+  useEffect(() => {
+    const checkCouchdbStatus = async () => {
+      if (!shop) return;
+
+      try {
+        const { getCouchDBConfig, isCouchDBSyncEnabled } = await import(
+          "@/lib/couchdbConfig"
+        );
+        const config = await getCouchDBConfig(shop.shopId);
+        const enabled = await isCouchDBSyncEnabled(shop.shopId);
+
+        setCouchdbStatus({
+          enabled: enabled && !!config,
+          available: !!config,
+        });
+      } catch (err) {
+        console.error("Error checking CouchDB status:", err);
+        setCouchdbStatus({ enabled: false, available: false });
+      }
+    };
+
+    checkCouchdbStatus();
+
+    // Check periodically
+    const interval = setInterval(checkCouchdbStatus, 5000);
+    return () => clearInterval(interval);
+  }, [shop]);
+
   // Public routes that don't need the full app shell
   const publicRoutes = ["/login", "/register"];
   const isPublicRoute =
@@ -55,12 +89,11 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
     return <>{children}</>;
   }
 
-  // Status indicators for WhatsApp and GCP connections
+  // Status indicators for WhatsApp and CouchDB sync
   const getConnectionStatus = () => {
     const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
-    // TODO: Implement actual WhatsApp and GCP connection checks
+    // TODO: Implement actual WhatsApp connection check
     const whatsAppStatus = isOnline;
-    const gcpStatus = isOnline;
 
     return (
       <Group gap={{ base: "xs", sm: "sm" }}>
@@ -82,17 +115,45 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
             />
           </ActionIcon>
         </Tooltip>
-        <Tooltip label={`GCP: ${gcpStatus ? "Connected" : "Offline"}`}>
+        <Tooltip
+          label={
+            couchdbStatus.enabled
+              ? "CouchDB Sync: Enabled"
+              : couchdbStatus.available
+              ? "CouchDB Sync: Available (not enabled)"
+              : "CouchDB Sync: Not configured"
+          }
+        >
           <ActionIcon
             variant="light"
-            color={gcpStatus ? "green" : "red"}
+            color={
+              couchdbStatus.enabled
+                ? "green"
+                : couchdbStatus.available
+                ? "yellow"
+                : "gray"
+            }
             size={{ base: "md", sm: "lg" }}
             style={{
               transition: "all 0.3s ease",
-              animation: gcpStatus ? "pulse 2s infinite" : "none",
+              animation: couchdbStatus.enabled ? "pulse 2s infinite" : "none",
+            }}
+            onClick={() => {
+              if (couchdbStatus.available && !couchdbStatus.enabled) {
+                router.push("/sync?tab=config");
+              }
             }}
           >
-            <IconCloud size={18} style={{ opacity: gcpStatus ? 1 : 0.5 }} />
+            <IconCloud
+              size={18}
+              style={{
+                opacity: couchdbStatus.enabled
+                  ? 1
+                  : couchdbStatus.available
+                  ? 0.7
+                  : 0.5,
+              }}
+            />
           </ActionIcon>
         </Tooltip>
       </Group>

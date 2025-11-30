@@ -19,6 +19,7 @@ import {
   Table,
   Checkbox,
   Drawer,
+  ScrollArea,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -55,10 +56,19 @@ export default function NewSalePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [cashReceivedError, setCashReceivedError] = useState<string | null>(
+    null
+  );
+  const [profitabilityError, setProfitabilityError] = useState<string | null>(
+    null
+  );
   const [showScanner, setShowScanner] = useState(false);
   const [products, setProducts] = useState<ProductDoc[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ProductDoc[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<ProductDoc[]>([]);
+  const [productQuantities, setProductQuantities] = useState<
+    Record<string, number>
+  >({});
   const [quantityDrawerOpen, setQuantityDrawerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [cartItems, setCartItems] = useState<SaleItem[]>([]);
@@ -139,13 +149,68 @@ export default function NewSalePage() {
     setFilteredProducts(filtered);
   }, [searchTerm, products]);
 
+  // Check profitability and payment sufficiency when cart items or payment method changes
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      // Check profitability
+      const unprofitableItems = cartItems.filter((item) => {
+        const costAmount = item.costPrice.amount;
+        const sellingAmount = item.price.amount;
+        return sellingAmount <= costAmount;
+      });
+
+      if (unprofitableItems.length > 0) {
+        setProfitabilityError(
+          `The following items are not profitable: ${unprofitableItems
+            .map((item) => item.productName)
+            .join(", ")}`
+        );
+      } else {
+        setProfitabilityError(null);
+      }
+    } else {
+      setProfitabilityError(null);
+    }
+
+    // Check payment sufficiency for cash payments
+    if (paymentMethod === "cash" && cartItems.length > 0) {
+      // Calculate total price inside useEffect to avoid dependency issues
+      const currentTotalPrice = calculateTotalPrice();
+      const totalInBase = convertToBaseCurrency(currentTotalPrice);
+      const receivedInBase = convertToBaseCurrency(cashReceivedMoney);
+      const isSufficient = receivedInBase.amount >= totalInBase.amount;
+
+      if (!isSufficient && cashReceivedMoney.amount > 0) {
+        setCashReceivedError(
+          `Insufficient amount. Total is ${formatMoney(
+            currentTotalPrice
+          )}, but received ${formatMoney(cashReceivedMoney)}`
+        );
+      } else {
+        setCashReceivedError(null);
+      }
+    } else {
+      setCashReceivedError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartItems, paymentMethod, cashReceivedMoney]);
+
   const handleProductSelect = (product: ProductDoc, isSelected: boolean) => {
     if (isSelected) {
       setSelectedProducts([...selectedProducts, product]);
+      // Initialize quantity for this product
+      setProductQuantities({
+        ...productQuantities,
+        [product._id]: 1,
+      });
     } else {
       setSelectedProducts(
         selectedProducts.filter((p) => p._id !== product._id)
       );
+      // Remove quantity for this product
+      const newQuantities = { ...productQuantities };
+      delete newQuantities[product._id];
+      setProductQuantities(newQuantities);
     }
   };
 
@@ -198,16 +263,19 @@ export default function NewSalePage() {
     });
 
     if (unprofitableItems.length > 0) {
-      setError(
-        `The following items are not profitable (selling price must be greater than cost price): ${unprofitableItems.join(
-          ", "
-        )}`
-      );
+      const errorMsg = `The following items are not profitable (selling price must be greater than cost price): ${unprofitableItems.join(
+        ", "
+      )}`;
+      setError(errorMsg);
+      setProfitabilityError(errorMsg);
       return;
     }
 
+    setProfitabilityError(null);
+
     const newItems: SaleItem[] = selectedProducts.map((product) => {
-      const quantity = form.values.quantity;
+      // Use product-specific quantity, fallback to 1 if not set
+      const quantity = productQuantities[product._id] || 1;
 
       // Calculate total for this item
       const itemTotal = {
@@ -230,8 +298,9 @@ export default function NewSalePage() {
     // Add to cart
     setCartItems([...cartItems, ...newItems]);
 
-    // Reset selection
+    // Reset selection and quantities
     setSelectedProducts([]);
+    setProductQuantities({});
     setQuantityDrawerOpen(false);
     setSearchTerm("");
     form.reset();
@@ -241,6 +310,27 @@ export default function NewSalePage() {
     const newCartItems = [...cartItems];
     newCartItems.splice(index, 1);
     setCartItems(newCartItems);
+    // Re-check profitability after removing item
+    setTimeout(() => {
+      if (newCartItems.length > 0) {
+        const unprofitableItems = newCartItems.filter((item) => {
+          const costAmount = item.costPrice.amount;
+          const sellingAmount = item.price.amount;
+          return sellingAmount <= costAmount;
+        });
+        if (unprofitableItems.length > 0) {
+          setProfitabilityError(
+            `The following items are not profitable: ${unprofitableItems
+              .map((item) => item.productName)
+              .join(", ")}`
+          );
+        } else {
+          setProfitabilityError(null);
+        }
+      } else {
+        setProfitabilityError(null);
+      }
+    }, 0);
   };
 
   const handleEditCartItem = (index: number) => {
@@ -281,6 +371,26 @@ export default function NewSalePage() {
     setEditingCartItemIndex(null);
     setEditCartItemForm(null);
     setError(null);
+    setProfitabilityError(null);
+
+    // Re-check profitability after editing
+    setTimeout(() => {
+      const unprofitableItems = newCartItems.filter((item) => {
+        const costAmount = item.costPrice.amount;
+        const sellingAmount = item.price.amount;
+        return sellingAmount <= costAmount;
+      });
+      if (unprofitableItems.length > 0) {
+        setProfitabilityError(
+          `The following items are not profitable: ${unprofitableItems
+            .map((item) => item.productName)
+            .join(", ")}`
+        );
+      } else {
+        setProfitabilityError(null);
+      }
+    }, 0);
+    setProfitabilityError(null);
 
     // Recalculate change if cash payment
     if (paymentMethod === "cash") {
@@ -291,7 +401,12 @@ export default function NewSalePage() {
         ...cashReceivedMoney,
         amount: Math.max(0, changeAmount * cashReceivedMoney.exchangeRate),
       });
+      // Re-check payment sufficiency
+      isPaymentSufficient();
     }
+
+    // Re-check profitability
+    isSaleProfitable();
   };
 
   // Calculate total price for all items in the cart
@@ -332,16 +447,31 @@ export default function NewSalePage() {
 
   // Check if sale is profitable (selling price > cost price for all items)
   const isSaleProfitable = () => {
-    return cartItems.every((item) => {
+    const unprofitableItems = cartItems.filter((item) => {
       const costAmount = item.costPrice.amount;
       const sellingAmount = item.price.amount;
-      return sellingAmount > costAmount;
+      return sellingAmount <= costAmount;
     });
+
+    if (unprofitableItems.length > 0) {
+      setProfitabilityError(
+        `The following items are not profitable: ${unprofitableItems
+          .map((item) => item.productName)
+          .join(", ")}`
+      );
+      return false;
+    }
+
+    setProfitabilityError(null);
+    return true;
   };
 
   // Check if payment is sufficient and calculate change
   const isPaymentSufficient = () => {
-    if (paymentMethod !== "cash") return true;
+    if (paymentMethod !== "cash") {
+      setCashReceivedError(null);
+      return true;
+    }
 
     // Convert both amounts to base currency for comparison
     const totalInBase = convertToBaseCurrency(totalPrice);
@@ -356,7 +486,20 @@ export default function NewSalePage() {
       amount: Math.max(0, changeAmount * cashReceivedMoney.exchangeRate),
     });
 
-    return receivedInBase.amount >= totalInBase.amount;
+    const isSufficient = receivedInBase.amount >= totalInBase.amount;
+
+    // Set error state for UI feedback
+    if (!isSufficient && cashReceivedMoney.amount > 0) {
+      setCashReceivedError(
+        `Insufficient amount. Total is ${formatMoney(
+          totalPrice
+        )}, but received ${formatMoney(cashReceivedMoney)}`
+      );
+    } else {
+      setCashReceivedError(null);
+    }
+
+    return isSufficient;
   };
 
   const handleSaveSale = async () => {
@@ -372,17 +515,19 @@ export default function NewSalePage() {
 
     // Validate profitability
     if (!isSaleProfitable()) {
-      setError(
-        "Sale is not profitable. Selling price must be greater than cost price for all items."
-      );
+      const errorMsg =
+        profitabilityError ||
+        "Sale is not profitable. Selling price must be greater than cost price for all items.";
+      setError(errorMsg);
       return;
     }
 
     // Double-check payment is sufficient for cash payments
     if (paymentMethod === "cash" && !isPaymentSufficient()) {
-      setError(
-        "Payment amount is insufficient. Please enter the correct amount."
-      );
+      const errorMsg =
+        cashReceivedError ||
+        "Payment amount is insufficient. Please enter the correct amount.";
+      setError(errorMsg);
       return;
     }
 
@@ -390,6 +535,32 @@ export default function NewSalePage() {
     setError(null);
 
     try {
+      // Recalculate change right before saving to ensure accuracy
+      let finalChange: Money | undefined = undefined;
+      if (paymentMethod === "cash" && cashReceivedMoney.amount > 0) {
+        const totalInBase = convertToBaseCurrency(totalPrice);
+        const receivedInBase = convertToBaseCurrency(cashReceivedMoney);
+        const changeAmount = receivedInBase.amount - totalInBase.amount;
+        // Calculate change in the payment currency
+        finalChange = {
+          ...cashReceivedMoney,
+          amount: Math.max(0, changeAmount * cashReceivedMoney.exchangeRate),
+        };
+        // Update state as well
+        setChange(finalChange);
+        console.log("[SALE] Calculated change before save:", {
+          totalInBase: totalInBase.amount,
+          receivedInBase: receivedInBase.amount,
+          changeAmount,
+          finalChange: finalChange.amount,
+          currency: finalChange.currency,
+        });
+      } else if (paymentMethod === "cash") {
+        // Cash payment but no amount received yet - set change to 0
+        finalChange = createMoney(0, cashReceivedMoney.currency || "USD");
+        setChange(finalChange);
+      }
+
       const now = new Date();
       const saleId = `sale_${now.getTime()}`;
 
@@ -458,7 +629,8 @@ export default function NewSalePage() {
         profit: profit,
         paymentMethod: paymentMethod,
         cashReceived: paymentMethod === "cash" ? cashReceivedMoney : undefined,
-        change: paymentMethod === "cash" ? change : undefined,
+        change:
+          paymentMethod === "cash" ? finalChange || createMoney(0) : undefined,
         timestamp: now.toISOString(),
         status: "pending", // Will be synced later via WhatsApp
         shopId: shop?.shopId,
@@ -466,6 +638,11 @@ export default function NewSalePage() {
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
+      console.log("[SALE] Saving sale document with change:", {
+        paymentMethod,
+        cashReceived: saleDoc.cashReceived,
+        change: saleDoc.change,
+      });
       await salesDB.put(saleDoc);
 
       // Create ledger entry for the sale
@@ -479,12 +656,18 @@ export default function NewSalePage() {
         currentUser?.userId
       );
 
-      // Set receipt data for display
+      // Set receipt data for display - use the final calculated change
+      // For cash payments, always include change (even if 0)
+      // For non-cash payments, change should be undefined
       setReceiptData({
         items: cartItems,
         totalAmount: totalPrice,
-        cashReceived: cashReceivedMoney,
-        change: change,
+        cashReceived:
+          paymentMethod === "cash" ? cashReceivedMoney : createMoney(0),
+        change:
+          paymentMethod === "cash"
+            ? finalChange || createMoney(0)
+            : createMoney(0),
         timestamp: now.toISOString(),
         paymentMethod: paymentMethod,
       });
@@ -645,14 +828,28 @@ export default function NewSalePage() {
                     ...newMoney,
                     amount: Math.max(0, changeAmount * newMoney.exchangeRate),
                   });
+
+                  // Check payment sufficiency in real-time
+                  isPaymentSufficient();
                 }
               }}
+              error={cashReceivedError}
               variant="light"
               size="md"
             />
           )}
 
-          <Card withBorder p="md" mb="md">
+          <Card
+            withBorder
+            p="md"
+            mb="md"
+            style={{
+              borderColor: profitabilityError
+                ? "var(--mantine-color-red-6)"
+                : undefined,
+              borderWidth: profitabilityError ? 2 : undefined,
+            }}
+          >
             <Group justify="space-between">
               <Text fw={700} size="lg">
                 Total Amount:
@@ -662,16 +859,37 @@ export default function NewSalePage() {
               </Text>
             </Group>
 
+            {profitabilityError && (
+              <Text size="sm" c="red" mt="xs">
+                {profitabilityError}
+              </Text>
+            )}
+
             {paymentMethod === "cash" && (
               <>
                 <Group justify="space-between" mt="xs">
                   <Text>Cash Received:</Text>
-                  <Text>{formatMoney(cashReceivedMoney)}</Text>
+                  <Text
+                    c={cashReceivedError ? "red" : undefined}
+                    fw={cashReceivedError ? 600 : undefined}
+                  >
+                    {formatMoney(cashReceivedMoney)}
+                  </Text>
                 </Group>
                 <Group justify="space-between" mt="xs">
                   <Text>Change:</Text>
-                  <Text>{formatMoney(change)}</Text>
+                  <Text
+                    c={cashReceivedError ? "red" : undefined}
+                    fw={cashReceivedError ? 600 : undefined}
+                  >
+                    {formatMoney(change)}
+                  </Text>
                 </Group>
+                {cashReceivedError && (
+                  <Text size="sm" c="red" mt="xs">
+                    {cashReceivedError}
+                  </Text>
+                )}
               </>
             )}
           </Card>
@@ -828,9 +1046,12 @@ export default function NewSalePage() {
               <Group justify="space-between" align="center">
                 <Text fw={500}>Quantity:</Text>
                 <NumberInput
-                  value={form.values.quantity}
+                  value={productQuantities[product._id] || 1}
                   onChange={(value) =>
-                    form.setFieldValue("quantity", Number(value))
+                    setProductQuantities({
+                      ...productQuantities,
+                      [product._id]: Number(value) || 1,
+                    })
                   }
                   min={1}
                   max={product.stockQuantity || 0}
@@ -839,13 +1060,15 @@ export default function NewSalePage() {
                 />
               </Group>
 
-              {form.values.quantity > 0 && (
+              {(productQuantities[product._id] || 1) > 0 && (
                 <Group justify="space-between" mt="md">
                   <Text fw={500}>Total:</Text>
                   <Text fw={700}>
                     {formatMoney({
                       ...product.price,
-                      amount: product.price.amount * form.values.quantity,
+                      amount:
+                        product.price.amount *
+                        (productQuantities[product._id] || 1),
                     })}
                   </Text>
                 </Group>

@@ -46,6 +46,22 @@ self.addEventListener("activate", (event) => {
 
 // Fetch event - serve from cache or network
 self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+
+  // Skip service worker for CouchDB requests - let them go directly to network
+  // This prevents the service worker from interfering with database sync
+  if (url.hostname === "localhost" && url.port === "5984") {
+    // Don't intercept - let the request pass through to network
+    return;
+  }
+
+  // Skip service worker for other external API requests
+  if (url.hostname !== self.location.hostname && url.hostname !== "localhost") {
+    // Don't intercept external requests
+    return;
+  }
+
+  // Only handle same-origin requests (our app assets)
   event.respondWith(
     caches.match(event.request).then((response) => {
       // Cache hit - return response
@@ -71,19 +87,24 @@ self.addEventListener("fetch", (event) => {
           const responseToCache = response.clone();
 
           caches.open(CACHE_NAME).then((cache) => {
-            // Don't cache auth requests or problematic paths
-            if (!event.request.url.includes("/_next/app-build-manifest.json")) {
+            // Don't cache auth requests, problematic paths, or non-GET requests
+            if (
+              !event.request.url.includes("/_next/app-build-manifest.json") &&
+              event.request.method === "GET"
+            ) {
               cache.put(event.request, responseToCache);
             }
           });
 
           return response;
         })
-        .catch(() => {
+        .catch((error) => {
           // If fetch fails, return the offline page for navigate requests
           if (event.request.mode === "navigate") {
             return caches.match("/offline.html");
           }
+          // For non-navigate requests, rethrow to let the browser handle it
+          throw error;
         });
     })
   );

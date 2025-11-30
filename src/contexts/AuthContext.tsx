@@ -87,6 +87,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
   }, []);
 
+  // Auto-start sync when user and shop are loaded and CouchDB is enabled
+  useEffect(() => {
+    const startAutoSync = async () => {
+      // Only start if user and shop are available
+      if (!currentUser || !shop) return;
+
+      try {
+        // Check if CouchDB is enabled
+        const { getCouchDBConfig } = await import("@/lib/couchdbConfig");
+        const config = await getCouchDBConfig(shop.shopId);
+
+        if (!config) {
+          // CouchDB not configured, skip auto-sync
+          return;
+        }
+
+        // Initialize sync manager
+        const { getSyncManager } = await import("@/lib/syncManager");
+        const syncManager = getSyncManager();
+
+        // Check if already initialized
+        try {
+          await syncManager.initialize(currentUser);
+        } catch (initError) {
+          // If initialization fails, sync might not be ready yet
+          console.log("Sync manager not ready yet:", initError);
+          return;
+        }
+
+        // Check if first sync has been completed
+        const { hasFirstSyncCompleted } = await import("@/lib/couchdbConfig");
+        const firstSyncDone = await hasFirstSyncCompleted(shop.shopId);
+
+        // Start sync for all databases (if not already syncing)
+        // syncAll() will check if syncs are already active
+        await syncManager.syncAll();
+
+        // Mark first sync as completed if this was the first time
+        if (!firstSyncDone) {
+          const { markFirstSyncCompleted } = await import(
+            "@/lib/couchdbConfig"
+          );
+          setTimeout(async () => {
+            await markFirstSyncCompleted(shop.shopId);
+            console.log("Auto-sync started and first sync marked as completed");
+          }, 5000);
+        } else {
+          console.log("Auto-sync resumed for existing session");
+        }
+      } catch (error) {
+        // Don't show errors to user - sync is optional
+        // Just log for debugging
+        console.log("Auto-sync not available:", error);
+      }
+    };
+
+    // Small delay to ensure everything is loaded
+    const timeoutId = setTimeout(startAutoSync, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [currentUser, shop]);
+
   const loginWithLicense = useCallback(
     async (licenseKey: string) => {
       try {

@@ -40,7 +40,12 @@ import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { addShopIdFilter } from "@/lib/queryHelpers";
 import { getSyncManager, SyncEvent, SyncStatus } from "@/lib/syncManager";
-import { getCouchDBConfig, isCouchDBSyncEnabled } from "@/lib/couchdbConfig";
+import {
+  getCouchDBConfig,
+  isCouchDBSyncEnabled,
+  hasFirstSyncCompleted,
+  markFirstSyncCompleted,
+} from "@/lib/couchdbConfig";
 import CouchDBConfigComponent from "@/components/CouchDBConfig";
 
 interface SyncItem {
@@ -59,8 +64,9 @@ export default function SyncPage() {
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [countryCode, setCountryCode] = useState("+254");
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  // Default to CouchDB if enabled, otherwise WhatsApp
   const [syncMethod, setSyncMethod] = useState<"whatsapp" | "couchdb">(
-    "whatsapp"
+    "couchdb"
   );
 
   // CouchDB sync state
@@ -68,6 +74,86 @@ export default function SyncPage() {
   const [couchdbEnabled, setCouchdbEnabled] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Check if documents exist in CouchDB and mark them as synced
+  const checkSyncStatusForTransactions = async (
+    transactions: Array<{ id: string; type: "sale" | "purchase" }>
+  ): Promise<void> => {
+    if (!couchdbEnabled || !shop || !currentUser) return;
+
+    try {
+      const { getRemoteDB } = await import("@/lib/couchdb");
+      const { getCouchDBConfigForUser } = await import("@/lib/couchdbAuth");
+      const config = await getCouchDBConfigForUser(currentUser);
+
+      if (!config) return;
+
+      const salesDB = await getSalesDB();
+      const purchasesDB = await getPurchasesDB();
+
+      // Get remote databases
+      const remoteSalesDB = await getRemoteDB("sales", config);
+      const remotePurchasesDB = await getRemoteDB("purchases", config);
+
+      // Check each transaction
+      for (const transaction of transactions) {
+        try {
+          if (transaction.type === "sale") {
+            // Check if sale exists in CouchDB
+            try {
+              await remoteSalesDB.get(transaction.id);
+              // Document exists in CouchDB, mark as synced
+              const sale = await salesDB.get(transaction.id).catch(() => null);
+              if (sale && sale.status !== "synced") {
+                await salesDB.put({ ...sale, status: "synced" });
+                console.log(
+                  `[SYNC] Marked existing sale ${transaction.id} as synced`
+                );
+              }
+            } catch (err: any) {
+              // Document doesn't exist in CouchDB (404), leave as pending
+              if (err.status !== 404) {
+                console.error(
+                  `Error checking sale ${transaction.id} in CouchDB:`,
+                  err
+                );
+              }
+            }
+          } else {
+            // Check if purchase exists in CouchDB
+            try {
+              await remotePurchasesDB.get(transaction.id);
+              // Document exists in CouchDB, mark as synced
+              const purchase = await purchasesDB
+                .get(transaction.id)
+                .catch(() => null);
+              if (purchase && purchase.status !== "synced") {
+                await purchasesDB.put({ ...purchase, status: "synced" });
+                console.log(
+                  `[SYNC] Marked existing purchase ${transaction.id} as synced`
+                );
+              }
+            } catch (err: any) {
+              // Document doesn't exist in CouchDB (404), leave as pending
+              if (err.status !== 404) {
+                console.error(
+                  `Error checking purchase ${transaction.id} in CouchDB:`,
+                  err
+                );
+              }
+            }
+          }
+        } catch (err) {
+          console.error(
+            `Error checking sync status for ${transaction.id}:`,
+            err
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error checking sync status for transactions:", err);
+    }
+  };
 
   // Fetch all sales and purchases within date range
   useEffect(() => {
@@ -127,6 +213,63 @@ export default function SyncPage() {
         );
 
         setItems(allItems);
+
+        // Check which transactions are already synced to CouchDB
+        if (couchdbEnabled && allItems.length > 0) {
+          await checkSyncStatusForTransactions(allItems);
+
+          // Re-fetch to get updated statuses
+          const updatedSalesResult = await salesDB.find({
+            selector: addShopIdFilter(
+              {
+                type: "sale",
+                timestamp: {
+                  $gte: dateRangeInfo.startDate.toISOString(),
+                  $lte: dateRangeInfo.endDate.toISOString(),
+                },
+              },
+              shop?.shopId
+            ),
+          });
+          const updatedSales = (updatedSalesResult.docs as SaleDoc[]).map(
+            (sale) => ({
+              id: sale._id,
+              type: "sale" as const,
+              timestamp: sale.timestamp,
+              amount: sale.totalAmount.amount,
+              status: sale.status || "pending",
+            })
+          );
+
+          const updatedPurchasesResult = await purchasesDB.find({
+            selector: addShopIdFilter(
+              {
+                type: "purchase",
+                timestamp: {
+                  $gte: dateRangeInfo.startDate.toISOString(),
+                  $lte: dateRangeInfo.endDate.toISOString(),
+                },
+              },
+              shop?.shopId
+            ),
+          });
+          const updatedPurchases = (
+            updatedPurchasesResult.docs as PurchaseDoc[]
+          ).map((purchase) => ({
+            id: purchase._id,
+            type: "purchase" as const,
+            timestamp: purchase.timestamp,
+            amount: purchase.totalAmount.amount,
+            status: purchase.status || "pending",
+          }));
+
+          const updatedItems = [...updatedSales, ...updatedPurchases].sort(
+            (a, b) =>
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+
+          setItems(updatedItems);
+        }
       } catch (err) {
         console.error("Error fetching data:", err);
       } finally {
@@ -135,14 +278,18 @@ export default function SyncPage() {
     };
 
     fetchData();
-  }, [dateRangeInfo.startDate, dateRangeInfo.endDate, shop]);
+  }, [dateRangeInfo.startDate, dateRangeInfo.endDate, shop, couchdbEnabled]);
 
-  // Check if CouchDB is enabled
+  // Check if CouchDB is enabled and set default sync method
   useEffect(() => {
     const checkCouchDB = async () => {
       if (!shop) return;
       const enabled = await isCouchDBSyncEnabled(shop.shopId);
       setCouchdbEnabled(enabled);
+      // If CouchDB is enabled, default to CouchDB sync method to show sync status
+      if (enabled) {
+        setSyncMethod("couchdb");
+      }
     };
     checkCouchDB();
   }, [shop]);
@@ -163,11 +310,109 @@ export default function SyncPage() {
     updateStatus();
     const interval = setInterval(updateStatus, 2000);
 
-    // Listen to sync events
+    // Listen to sync events and update transaction status
     const unsubscribe = syncManager.onEvent((event: SyncEvent) => {
       updateStatus();
       if (event.type === "error" && event.error) {
         setSyncError(event.error.message);
+      }
+
+      // When documents are pushed to CouchDB, mark them as synced
+      if (
+        event.type === "change" &&
+        event.direction === "push" &&
+        event.syncedDocumentIds
+      ) {
+        const updateTransactionStatus = async () => {
+          try {
+            const salesDB = await getSalesDB();
+            const purchasesDB = await getPurchasesDB();
+
+            for (const docId of event.syncedDocumentIds || []) {
+              // Try to update sale
+              try {
+                const sale = await salesDB.get(docId).catch(() => null);
+                if (sale && sale.status !== "synced") {
+                  await salesDB.put({ ...sale, status: "synced" });
+                  console.log(`[SYNC] Marked sale ${docId} as synced`);
+                }
+              } catch (err) {
+                // Not a sale, try purchase
+                try {
+                  const purchase = await purchasesDB
+                    .get(docId)
+                    .catch(() => null);
+                  if (purchase && purchase.status !== "synced") {
+                    await purchasesDB.put({ ...purchase, status: "synced" });
+                    console.log(`[SYNC] Marked purchase ${docId} as synced`);
+                  }
+                } catch (err2) {
+                  // Not a sale or purchase, skip
+                }
+              }
+            }
+
+            // Refresh the items list
+            const fetchData = async () => {
+              const salesDB = await getSalesDB();
+              const salesResult = await salesDB.find({
+                selector: addShopIdFilter(
+                  {
+                    type: "sale",
+                    timestamp: {
+                      $gte: dateRangeInfo.startDate.toISOString(),
+                      $lte: dateRangeInfo.endDate.toISOString(),
+                    },
+                  },
+                  shop?.shopId
+                ),
+              });
+              const sales = (salesResult.docs as SaleDoc[]).map((sale) => ({
+                id: sale._id,
+                type: "sale" as const,
+                timestamp: sale.timestamp,
+                amount: sale.totalAmount.amount,
+                status: sale.status || "pending",
+              }));
+
+              const purchasesDB = await getPurchasesDB();
+              const purchasesResult = await purchasesDB.find({
+                selector: addShopIdFilter(
+                  {
+                    type: "purchase",
+                    timestamp: {
+                      $gte: dateRangeInfo.startDate.toISOString(),
+                      $lte: dateRangeInfo.endDate.toISOString(),
+                    },
+                  },
+                  shop?.shopId
+                ),
+              });
+              const purchases = (purchasesResult.docs as PurchaseDoc[]).map(
+                (purchase) => ({
+                  id: purchase._id,
+                  type: "purchase" as const,
+                  timestamp: purchase.timestamp,
+                  amount: purchase.totalAmount.amount,
+                  status: purchase.status || "pending",
+                })
+              );
+
+              const allItems = [...sales, ...purchases].sort(
+                (a, b) =>
+                  new Date(b.timestamp).getTime() -
+                  new Date(a.timestamp).getTime()
+              );
+              setItems(allItems);
+            };
+
+            fetchData();
+          } catch (err) {
+            console.error("Error updating transaction status:", err);
+          }
+        };
+
+        updateTransactionStatus();
       }
     });
 
@@ -175,9 +420,15 @@ export default function SyncPage() {
       clearInterval(interval);
       unsubscribe();
     };
-  }, [couchdbEnabled, shop, currentUser]);
+  }, [
+    couchdbEnabled,
+    shop,
+    currentUser,
+    dateRangeInfo.startDate,
+    dateRangeInfo.endDate,
+  ]);
 
-  // Initialize sync manager when CouchDB is enabled
+  // Initialize sync manager and start auto-sync when CouchDB is enabled
   useEffect(() => {
     const initSync = async () => {
       if (!couchdbEnabled || !shop || !currentUser) return;
@@ -185,6 +436,27 @@ export default function SyncPage() {
       try {
         const syncManager = getSyncManager();
         await syncManager.initialize(currentUser);
+
+        // Check if first sync has been completed
+        const firstSyncDone = await hasFirstSyncCompleted(shop.shopId);
+
+        // Auto-start sync if first sync hasn't been done yet
+        if (!firstSyncDone) {
+          console.log(
+            "First sync - starting automatic sync for all databases..."
+          );
+          await syncManager.syncAll();
+
+          // Mark first sync as completed after a short delay (to allow sync to start)
+          setTimeout(async () => {
+            await markFirstSyncCompleted(shop.shopId);
+            console.log("First sync completed and marked");
+          }, 5000); // 5 seconds should be enough for sync to initialize
+        } else {
+          // For subsequent loads, just initialize - sync is live/continuous
+          // The sync handles from previous sessions will resume automatically
+          console.log("Sync manager initialized - existing syncs will resume");
+        }
       } catch (error) {
         console.error("Error initializing sync:", error);
         setSyncError("Failed to initialize sync");
@@ -420,19 +692,31 @@ export default function SyncPage() {
                 <Group justify="space-between">
                   <Text fw={500}>Sync Status</Text>
                   <Badge
-                    color={syncStatus.isSyncing ? "blue" : "green"}
+                    color={
+                      syncStatus.isSyncing
+                        ? "blue"
+                        : syncStatus.error
+                        ? "red"
+                        : "green"
+                    }
                     leftSection={
                       syncStatus.isSyncing ? (
                         <IconRefresh
                           size={12}
                           style={{ animation: "spin 1s linear infinite" }}
                         />
+                      ) : syncStatus.error ? (
+                        <IconX size={12} />
                       ) : (
                         <IconCheck size={12} />
                       )
                     }
                   >
-                    {syncStatus.isSyncing ? "Syncing..." : "Idle"}
+                    {syncStatus.isSyncing
+                      ? "Syncing..."
+                      : syncStatus.error
+                      ? "Error"
+                      : "Connected"}
                   </Badge>
                 </Group>
                 {syncStatus.lastSyncAt && (
@@ -442,30 +726,62 @@ export default function SyncPage() {
                   </Text>
                 )}
                 {syncStatus.error && (
-                  <Text size="sm" c="red">
-                    Error: {syncStatus.error}
-                  </Text>
+                  <Alert
+                    icon={<IconAlertCircle size={16} />}
+                    color="red"
+                    size="sm"
+                  >
+                    {syncStatus.error}
+                  </Alert>
                 )}
                 {Object.keys(syncStatus.databases).length > 0 && (
                   <Stack gap="xs" mt="xs">
+                    <Text size="sm" fw={500}>
+                      Database Status:
+                    </Text>
                     {Object.entries(syncStatus.databases).map(
                       ([dbName, dbStatus]) => (
-                        <Group key={dbName} justify="space-between">
-                          <Text size="sm">{dbName}</Text>
-                          <Group gap="xs">
-                            {dbStatus.isSyncing && (
-                              <Badge size="xs" color="blue">
+                        <Group
+                          key={dbName}
+                          justify="space-between"
+                          wrap="nowrap"
+                        >
+                          <Text size="sm" style={{ minWidth: 120 }}>
+                            {dbName}
+                          </Text>
+                          <Group gap="xs" wrap="nowrap">
+                            {dbStatus.isSyncing ? (
+                              <Badge size="xs" color="blue" variant="light">
+                                <IconRefresh
+                                  size={10}
+                                  style={{
+                                    animation: "spin 1s linear infinite",
+                                  }}
+                                />{" "}
                                 Syncing
+                              </Badge>
+                            ) : dbStatus.lastSyncAt ? (
+                              <Badge size="xs" color="green" variant="light">
+                                <IconCheck size={10} /> Synced
+                              </Badge>
+                            ) : (
+                              <Badge size="xs" color="gray" variant="light">
+                                Idle
                               </Badge>
                             )}
                             {dbStatus.pendingChanges > 0 && (
-                              <Badge size="xs" color="yellow">
+                              <Badge size="xs" color="yellow" variant="light">
                                 {dbStatus.pendingChanges} pending
                               </Badge>
                             )}
                             {dbStatus.conflicts > 0 && (
-                              <Badge size="xs" color="red">
+                              <Badge size="xs" color="red" variant="light">
                                 {dbStatus.conflicts} conflicts
+                              </Badge>
+                            )}
+                            {dbStatus.error && (
+                              <Badge size="xs" color="red" variant="light">
+                                Error
                               </Badge>
                             )}
                           </Group>

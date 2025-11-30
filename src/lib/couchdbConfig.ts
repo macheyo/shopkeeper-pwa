@@ -20,12 +20,35 @@ interface CouchDBConfigDoc {
     success: boolean;
     error?: string;
   };
+  firstSyncCompleted?: boolean; // Track if first sync has been done
   createdAt: string;
   updatedAt: string;
 }
 
 /**
+ * Get default CouchDB configuration from environment variables
+ */
+function getDefaultCouchDBConfig(): CouchDBConfig | null {
+  const url = process.env.NEXT_PUBLIC_COUCHDB_URL || "http://localhost:5984";
+  const username = process.env.NEXT_PUBLIC_COUCHDB_USERNAME || "admin";
+  const password = process.env.NEXT_PUBLIC_COUCHDB_PASSWORD || "secret";
+
+  // Only return config if URL is set (not empty)
+  if (!url || url.trim() === "") {
+    return null;
+  }
+
+  return {
+    url: url.trim(),
+    username: username.trim(),
+    password: password.trim(),
+    shopId: "", // Will be set by caller
+  };
+}
+
+/**
  * Get CouchDB configuration for a shop
+ * Falls back to environment variables if not configured
  */
 export async function getCouchDBConfig(
   shopId: string
@@ -46,16 +69,27 @@ export async function getCouchDBConfig(
         return configDoc.config;
       }
 
+      // If not enabled, return null (don't use env vars if sync is disabled)
       return null;
     } catch (err: any) {
       if (err.status === 404) {
-        return null;
+        // No config saved, use environment variables as default
+        const defaultConfig = getDefaultCouchDBConfig();
+        if (defaultConfig) {
+          defaultConfig.shopId = shopId;
+        }
+        return defaultConfig;
       }
       throw err;
     }
   } catch (error) {
     console.error("Error getting CouchDB config:", error);
-    return null;
+    // Fallback to environment variables
+    const defaultConfig = getDefaultCouchDBConfig();
+    if (defaultConfig) {
+      defaultConfig.shopId = shopId;
+    }
+    return defaultConfig;
   }
 }
 
@@ -169,6 +203,67 @@ export async function isCouchDBSyncEnabled(shopId: string): Promise<boolean> {
 }
 
 /**
+ * Mark first sync as completed
+ */
+export async function markFirstSyncCompleted(shopId: string): Promise<void> {
+  try {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const db = await getSettingsDB();
+    const docId = `${COUCHDB_CONFIG_KEY}_${shopId}`;
+
+    try {
+      const existing = await db.get(docId);
+      const configDoc: CouchDBConfigDoc = {
+        ...(existing as CouchDBConfigDoc),
+        firstSyncCompleted: true,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await db.put(configDoc);
+    } catch (err: any) {
+      if (err.status === 404) {
+        // Doesn't exist, that's fine
+        return;
+      }
+      throw err;
+    }
+  } catch (error) {
+    console.error("Error marking first sync completed:", error);
+  }
+}
+
+/**
+ * Check if first sync has been completed
+ */
+export async function hasFirstSyncCompleted(shopId: string): Promise<boolean> {
+  try {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    const db = await getSettingsDB();
+    const docId = `${COUCHDB_CONFIG_KEY}_${shopId}`;
+
+    try {
+      const doc = await db.get(docId);
+      const configDoc = doc as CouchDBConfigDoc;
+      return configDoc.firstSyncCompleted === true;
+    } catch (err: any) {
+      if (err.status === 404) {
+        return false;
+      }
+      throw err;
+    }
+  } catch (error) {
+    console.error("Error checking first sync status:", error);
+    return false;
+  }
+}
+
+/**
  * Disable CouchDB sync
  */
 export async function disableCouchDBSync(shopId: string): Promise<void> {
@@ -201,5 +296,3 @@ export async function disableCouchDBSync(shopId: string): Promise<void> {
     throw error;
   }
 }
-
-
