@@ -72,6 +72,7 @@ export default function SyncPage() {
   const [couchdbEnabled, setCouchdbEnabled] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [liveSyncEnabled, setLiveSyncEnabled] = useState(false);
 
   // Check if documents exist in CouchDB and mark them as synced
   const checkSyncStatusForTransactions = async (
@@ -294,21 +295,54 @@ export default function SyncPage() {
     checkCouchDB();
   }, [shop]);
 
-  // Setup sync status listener
+  // Setup sync status listener (only when page is visible)
   useEffect(() => {
     if (!couchdbEnabled || !shop || !currentUser) return;
 
     const syncManager = getSyncManager();
 
-    // Update status periodically
+    // Update status
     const updateStatus = () => {
       const status = syncManager.getStatus();
       setSyncStatus(status);
+      setLiveSyncEnabled(syncManager.isLiveSyncActive());
     };
 
     // Initial status
     updateStatus();
-    const interval = setInterval(updateStatus, 2000);
+    
+    // Only poll when tab is visible, and at a slower rate
+    let interval: NodeJS.Timeout | null = null;
+    
+    const startPolling = () => {
+      if (!interval) {
+        interval = setInterval(updateStatus, 5000); // 5 seconds instead of 2
+      }
+    };
+    
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+    
+    // Start polling if visible
+    if (document.visibilityState === "visible") {
+      startPolling();
+    }
+    
+    // Handle visibility changes
+    const visibilityHandler = () => {
+      if (document.visibilityState === "visible") {
+        updateStatus(); // Immediate update when becoming visible
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    
+    document.addEventListener("visibilitychange", visibilityHandler);
 
     // Listen to sync events and update transaction status
     const unsubscribe = syncManager.onEvent((event: SyncEvent) => {
@@ -417,7 +451,8 @@ export default function SyncPage() {
     });
 
     return () => {
-      clearInterval(interval);
+      stopPolling();
+      document.removeEventListener("visibilitychange", visibilityHandler);
       unsubscribe();
     };
   }, [
@@ -428,35 +463,36 @@ export default function SyncPage() {
     dateRangeInfo.endDate,
   ]);
 
-  // Initialize sync manager and start auto-sync when CouchDB is enabled
+  // Initialize sync manager (but don't auto-start live sync)
   useEffect(() => {
     const initSync = async () => {
       if (!couchdbEnabled || !shop || !currentUser) return;
 
       try {
         const syncManager = getSyncManager();
-        await syncManager.initialize(currentUser);
+        
+        // Skip if already initialized
+        if (syncManager.isInitialized()) {
+          console.log("[SYNC PAGE] Sync manager already initialized");
+          setLiveSyncEnabled(syncManager.isLiveSyncActive());
+          return;
+        }
 
+        await syncManager.initialize(currentUser);
+        console.log("[SYNC PAGE] Sync manager initialized");
+        
         // Check if first sync has been completed
         const firstSyncDone = await hasFirstSyncCompleted(shop.shopId);
 
-        // Auto-start sync if first sync hasn't been done yet
+        // Auto-start ONE-TIME sync if first sync hasn't been done yet
         if (!firstSyncDone) {
-          console.log(
-            "First sync - starting automatic sync for all databases..."
-          );
-          await syncManager.syncAll();
-
-          // Mark first sync as completed after a short delay (to allow sync to start)
-          setTimeout(async () => {
-            await markFirstSyncCompleted(shop.shopId);
-            console.log("First sync completed and marked");
-          }, 5000); // 5 seconds should be enough for sync to initialize
-        } else {
-          // For subsequent loads, just initialize - sync is live/continuous
-          // The sync handles from previous sessions will resume automatically
-          console.log("Sync manager initialized - existing syncs will resume");
+          console.log("[SYNC PAGE] First sync - running one-time sync...");
+          await syncManager.syncOnce();
+          await markFirstSyncCompleted(shop.shopId);
+          console.log("[SYNC PAGE] First sync completed");
         }
+        
+        // Don't auto-start live sync - let user control it
       } catch (error) {
         console.error("Error initializing sync:", error);
         setSyncError("Failed to initialize sync");
@@ -465,6 +501,53 @@ export default function SyncPage() {
 
     initSync();
   }, [couchdbEnabled, shop, currentUser]);
+
+  // Toggle live sync on/off
+  const toggleLiveSync = async () => {
+    const syncManager = getSyncManager();
+    
+    if (liveSyncEnabled) {
+      // Stop live sync
+      syncManager.disableLiveSync();
+      setLiveSyncEnabled(false);
+      console.log("[SYNC PAGE] Live sync disabled");
+    } else {
+      // Start live sync
+      try {
+        setSyncing(true);
+        await syncManager.enableLiveSync();
+        setLiveSyncEnabled(true);
+        console.log("[SYNC PAGE] Live sync enabled");
+      } catch (error) {
+        setSyncError(error instanceof Error ? error.message : "Failed to enable live sync");
+      } finally {
+        setSyncing(false);
+      }
+    }
+  };
+
+  // Manual one-time sync
+  const handleManualSync = async () => {
+    if (!currentUser) return;
+    
+    const syncManager = getSyncManager();
+    
+    try {
+      setSyncing(true);
+      setSyncError(null);
+      
+      if (!syncManager.isInitialized()) {
+        await syncManager.initialize(currentUser);
+      }
+      
+      await syncManager.syncOnce();
+      console.log("[SYNC PAGE] Manual sync completed");
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Handle CouchDB sync
   const handleCouchDBSync = async (selectedItems: SyncItem[]) => {
@@ -691,34 +774,72 @@ export default function SyncPage() {
               <Stack gap="sm">
                 <Group justify="space-between">
                   <Text fw={500}>Sync Status</Text>
-                  <Badge
-                    color={
-                      syncStatus.isSyncing
-                        ? "blue"
+                  <Group gap="xs">
+                    <Badge
+                      color={liveSyncEnabled ? "green" : "gray"}
+                      variant={liveSyncEnabled ? "filled" : "light"}
+                    >
+                      {liveSyncEnabled ? "Live Sync ON" : "Live Sync OFF"}
+                    </Badge>
+                    <Badge
+                      color={
+                        syncStatus.isSyncing
+                          ? "blue"
+                          : syncStatus.error
+                          ? "red"
+                          : "green"
+                      }
+                      leftSection={
+                        syncStatus.isSyncing ? (
+                          <IconRefresh
+                            size={12}
+                            style={{ animation: "spin 1s linear infinite" }}
+                          />
+                        ) : syncStatus.error ? (
+                          <IconX size={12} />
+                        ) : (
+                          <IconCheck size={12} />
+                        )
+                      }
+                    >
+                      {syncStatus.isSyncing
+                        ? "Syncing..."
                         : syncStatus.error
-                        ? "red"
-                        : "green"
-                    }
-                    leftSection={
-                      syncStatus.isSyncing ? (
-                        <IconRefresh
-                          size={12}
-                          style={{ animation: "spin 1s linear infinite" }}
-                        />
-                      ) : syncStatus.error ? (
-                        <IconX size={12} />
-                      ) : (
-                        <IconCheck size={12} />
-                      )
-                    }
-                  >
-                    {syncStatus.isSyncing
-                      ? "Syncing..."
-                      : syncStatus.error
-                      ? "Error"
-                      : "Connected"}
-                  </Badge>
+                        ? "Error"
+                        : "Connected"}
+                    </Badge>
+                  </Group>
                 </Group>
+                
+                {/* Sync Control Buttons */}
+                <Group gap="xs">
+                  <Button
+                    size="xs"
+                    variant={liveSyncEnabled ? "filled" : "light"}
+                    color={liveSyncEnabled ? "red" : "green"}
+                    onClick={toggleLiveSync}
+                    loading={syncing}
+                    leftSection={liveSyncEnabled ? <IconX size={14} /> : <IconRefresh size={14} />}
+                  >
+                    {liveSyncEnabled ? "Stop Live Sync" : "Enable Live Sync"}
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    onClick={handleManualSync}
+                    loading={syncing}
+                    disabled={liveSyncEnabled}
+                    leftSection={<IconRefresh size={14} />}
+                  >
+                    Sync Now
+                  </Button>
+                </Group>
+                
+                <Text size="xs" c="dimmed">
+                  {liveSyncEnabled 
+                    ? "Live sync keeps data synchronized in real-time. Disable to save battery."
+                    : "Live sync is off. Data syncs once on login. Click 'Sync Now' for manual sync."}
+                </Text>
                 {syncStatus.lastSyncAt && (
                   <Text size="sm" c="dimmed">
                     Last sync:{" "}

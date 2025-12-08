@@ -87,12 +87,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
   }, []);
 
-  // Auto-start sync when user and shop are loaded and CouchDB is enabled
+  // Auto-start ONE-TIME sync when user and shop are loaded and CouchDB is enabled
+  // This ensures data is synced on login without continuous background fetching
   useEffect(() => {
     let isMounted = true;
-    let syncAttempted = false; // Prevent multiple sync attempts
+    let syncAttempted = false; // Prevent multiple sync attempts in same session
 
-    const startAutoSync = async () => {
+    const startOneTimeSync = async () => {
       // Only start if user and shop are available
       if (!currentUser || !shop) return;
 
@@ -106,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const config = await getCouchDBConfig(shop.shopId);
 
         if (!config) {
-          // CouchDB not configured, skip auto-sync
+          // CouchDB not configured, skip sync
           return;
         }
 
@@ -119,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
 
         if (!connectionTest.success) {
-          console.log("CouchDB not reachable, skipping auto-sync:", connectionTest.error);
+          console.log("[AUTH] CouchDB not reachable, skipping sync:", connectionTest.error);
           return;
         }
 
@@ -129,48 +130,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { getSyncManager } = await import("@/lib/syncManager");
         const syncManager = getSyncManager();
 
-        // Check if already initialized
+        // Skip if already initialized (e.g., from sync page)
+        if (syncManager.isInitialized()) {
+          console.log("[AUTH] Sync manager already initialized, skipping");
+          return;
+        }
+
         try {
           await syncManager.initialize(currentUser);
         } catch (initError) {
-          // If initialization fails, sync might not be ready yet
-          console.log("Sync manager not ready yet:", initError);
+          console.log("[AUTH] Sync manager init failed:", initError);
           return;
         }
 
         if (!isMounted) return;
 
-        // Check if first sync has been completed
-        const { hasFirstSyncCompleted } = await import("@/lib/couchdbConfig");
+        // Perform ONE-TIME sync (not live/continuous)
+        // This syncs all data once and then stops
+        console.log("[AUTH] Starting one-time sync on login...");
+        await syncManager.syncOnce();
+
+        // Mark first sync as completed
+        const { hasFirstSyncCompleted, markFirstSyncCompleted } = await import("@/lib/couchdbConfig");
         const firstSyncDone = await hasFirstSyncCompleted(shop.shopId);
-
-        // Start sync for all databases (if not already syncing)
-        // syncAll() will check if syncs are already active
-        await syncManager.syncAll();
-
-        // Mark first sync as completed if this was the first time
+        
         if (!firstSyncDone && isMounted) {
-          const { markFirstSyncCompleted } = await import(
-            "@/lib/couchdbConfig"
-          );
-          setTimeout(async () => {
-            if (isMounted) {
-              await markFirstSyncCompleted(shop.shopId);
-              console.log("Auto-sync started and first sync marked as completed");
-            }
-          }, 5000);
-        } else {
-          console.log("Auto-sync resumed for existing session");
+          await markFirstSyncCompleted(shop.shopId);
+          console.log("[AUTH] First sync completed");
         }
       } catch (error) {
         // Don't show errors to user - sync is optional
-        // Just log for debugging
-        console.log("Auto-sync not available:", error);
+        console.log("[AUTH] Auto-sync not available:", error);
       }
     };
 
     // Small delay to ensure everything is loaded
-    const timeoutId = setTimeout(startAutoSync, 1000);
+    const timeoutId = setTimeout(startOneTimeSync, 1000);
 
     return () => {
       isMounted = false;

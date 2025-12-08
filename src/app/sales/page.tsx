@@ -132,13 +132,50 @@ export default function SalesPage() {
     }
   }, [dateRange, customDateRange, dateRangeInfo, shop?.shopId]); // Re-fetch when date range changes
 
-  // Fetch data when component mounts or date range changes
+  // Fetch data when component mounts or date range changes (visibility-aware)
   useEffect(() => {
     fetchSalesData();
 
-    // Set up interval to refresh data every 30 seconds
-    const intervalId = setInterval(fetchSalesData, 30000);
-    return () => clearInterval(intervalId);
+    // Only refresh when tab is visible
+    let intervalId: NodeJS.Timeout | null = null;
+    
+    const startPolling = () => {
+      if (!intervalId) {
+        intervalId = setInterval(fetchSalesData, 60000); // 60 seconds instead of 30
+      }
+    };
+    
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    
+    // Start polling only if visible
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      startPolling();
+    }
+    
+    const visibilityHandler = () => {
+      if (document.visibilityState === "visible") {
+        fetchSalesData(); // Immediate refresh when visible
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", visibilityHandler);
+    }
+    
+    return () => {
+      stopPolling();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", visibilityHandler);
+      }
+    };
   }, [fetchSalesData]);
 
   // Calculate percentage of target achieved (without capping at 100%)

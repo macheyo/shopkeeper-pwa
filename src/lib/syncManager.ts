@@ -51,6 +51,13 @@ export interface SyncEvent {
 }
 
 /**
+ * Sync options for controlling sync behavior
+ */
+export interface SyncOptions {
+  live?: boolean; // If true, continuous sync. If false, one-time sync then stop.
+}
+
+/**
  * Sync Manager - Handles PouchDB to CouchDB synchronization
  */
 export class SyncManager {
@@ -62,12 +69,35 @@ export class SyncManager {
   private eventListeners: Array<(event: SyncEvent) => void> = [];
   private config: CouchDBConfig | null = null;
   private user: UserDoc | null = null;
+  private initialized: boolean = false;
+  private isLiveMode: boolean = false;
+  private visibilityHandler: (() => void) | null = null;
+
+  /**
+   * Check if sync manager is initialized
+   */
+  isInitialized(): boolean {
+    return this.initialized && this.config !== null;
+  }
+
+  /**
+   * Check if live sync is active
+   */
+  isLiveSyncActive(): boolean {
+    return this.isLiveMode && this.syncHandles.size > 0;
+  }
 
   /**
    * Initialize sync manager with configuration
    * Tries to get user-specific CouchDB config, falls back to shop-level
    */
   async initialize(user: UserDoc): Promise<void> {
+    // If already initialized with same user, skip
+    if (this.initialized && this.user?.userId === user.userId) {
+      console.log("[SYNC] Already initialized for this user, skipping");
+      return;
+    }
+
     this.user = user;
 
     // Try to get user-specific CouchDB config
@@ -84,16 +114,72 @@ export class SyncManager {
     if (user.shopId !== config.shopId) {
       throw new Error("Shop ID mismatch between user and config");
     }
+
+    this.initialized = true;
+    
+    // Set up visibility change handler to pause/resume sync
+    this.setupVisibilityHandler();
+  }
+
+  /**
+   * Set up handler to pause sync when tab is hidden
+   */
+  private setupVisibilityHandler(): void {
+    if (typeof document === "undefined") return;
+    
+    // Remove existing handler if any
+    if (this.visibilityHandler) {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
+    }
+
+    this.visibilityHandler = () => {
+      if (document.visibilityState === "hidden") {
+        // Tab is hidden - pause live sync to save resources
+        if (this.isLiveMode) {
+          console.log("[SYNC] Tab hidden, pausing live sync");
+          this.pauseAllSyncs();
+        }
+      } else if (document.visibilityState === "visible") {
+        // Tab is visible again - resume if we were in live mode
+        if (this.isLiveMode && this.syncHandles.size === 0) {
+          console.log("[SYNC] Tab visible, resuming live sync");
+          this.syncAll({ live: true }).catch(console.error);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", this.visibilityHandler);
+  }
+
+  /**
+   * Pause all active syncs without clearing live mode flag
+   */
+  private pauseAllSyncs(): void {
+    this.syncHandles.forEach((sync, dbName) => {
+      sync.cancel();
+      this.updateStatus(dbName, { isSyncing: false });
+    });
+    this.syncHandles.clear();
   }
 
   // Removed permission checks - sync all data for the shop
 
   /**
    * Sync all databases
+   * @param options - Sync options (live: true for continuous, false for one-time)
    */
-  async syncAll(): Promise<void> {
+  async syncAll(options: SyncOptions = { live: false }): Promise<void> {
     if (!this.config || !this.user) {
       throw new Error("SyncManager not initialized. Call initialize() first.");
+    }
+
+    const { live = false } = options;
+    this.isLiveMode = live;
+
+    // If we already have active syncs and requesting same mode, skip
+    if (this.syncHandles.size > 0) {
+      console.log(`[SYNC] Syncs already active, skipping duplicate request`);
+      return;
     }
 
     // Define databases list first
@@ -135,35 +221,17 @@ export class SyncManager {
       // Continue with sync anyway - databases might be created lazily
     }
 
-    // Check local database contents before syncing
-    for (const dbName of databases) {
-      try {
-        const localDB = await getLocalDB(dbName);
-        const allDocs = await localDB.allDocs({ include_docs: false });
-        const docCount = allDocs.rows.length;
-        console.log(
-          `Local ${dbName} database has ${docCount} document(s) to sync`
-        );
-      } catch (err) {
-        console.error(`Error checking local ${dbName} database:`, err);
-      }
-    }
-
     // Start syncing all databases in parallel
-    console.log(`[SYNC] Starting sync for ${databases.length} databases...`);
+    const modeLabel = live ? "LIVE" : "ONE-TIME";
+    console.log(`[SYNC] Starting ${modeLabel} sync for ${databases.length} databases...`);
 
     const syncPromises = databases.map(async (dbName) => {
       try {
-        console.log(`[SYNC] Attempting to sync database: ${dbName}`);
-        await this.syncDatabase(dbName);
-        console.log(`[SYNC] ✅ Sync handle created successfully for ${dbName}`);
+        await this.syncDatabase(dbName, { live });
+        console.log(`[SYNC] ✅ ${modeLabel} sync started for ${dbName}`);
         return { dbName, success: true };
       } catch (error) {
         console.error(`[SYNC] ❌ Error syncing ${dbName}:`, error);
-        console.error(`[SYNC] Error details:`, {
-          message: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        });
         this.updateStatus(dbName, {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -184,19 +252,24 @@ export class SyncManager {
     ).length;
 
     console.log(
-      `[SYNC] ✅ Sync initiation complete. Successful: ${successful}, Failed: ${failed}, Total: ${databases.length}`
+      `[SYNC] ✅ ${modeLabel} sync complete. Successful: ${successful}, Failed: ${failed}, Total: ${databases.length}`
     );
   }
 
   /**
    * Sync individual database
+   * @param dbName - Name of the database to sync
+   * @param options - Sync options (live: true for continuous, false for one-time)
    */
   async syncDatabase(
-    dbName: string
+    dbName: string,
+    options: SyncOptions = { live: false }
   ): Promise<PouchDB.Replication.Sync<Record<string, never>>> {
     if (!this.config || !this.user) {
       throw new Error("SyncManager not initialized. Call initialize() first.");
     }
+
+    const { live = false } = options;
 
     // Check if already syncing
     if (this.syncHandles.has(dbName)) {
@@ -206,7 +279,8 @@ export class SyncManager {
       return this.syncHandles.get(dbName)!;
     }
 
-    console.log(`[SYNC] Creating new sync for ${dbName}...`);
+    const modeLabel = live ? "LIVE" : "ONE-TIME";
+    console.log(`[SYNC] Creating ${modeLabel} sync for ${dbName}...`);
 
     // Note: We sync all data for the shop, regardless of user permissions
     // Shop isolation is still enforced via shopId validation
@@ -255,7 +329,7 @@ export class SyncManager {
       error: null,
     });
 
-    // Track retry count for this database
+    // Track retry count for this database (only used for live sync)
     let retryCount = 0;
     const maxRetries = 5; // Stop retrying after 5 failures
 
@@ -264,22 +338,24 @@ export class SyncManager {
     // Filter functions don't work well with sync, they're for replication
     const sync = localDB
       .sync(remoteDB, {
-        live: true, // Continuous sync
-        retry: true, // Retry on failure (but we limit retries in error handler)
-        back_off_function: (delay) => {
-          retryCount++;
-          // Stop retrying after max retries
-          if (retryCount > maxRetries) {
-            console.log(`[SYNC] ${dbName}: Max retries (${maxRetries}) reached, stopping sync`);
-            // Cancel the sync by returning a very long delay
-            // This effectively stops retries without breaking PouchDB
-            return 999999999;
-          }
-          // Exponential backoff for retries, max 30 seconds
-          const newDelay = Math.min(delay * 2, 30000);
-          console.log(`[SYNC] ${dbName}: Retry ${retryCount}/${maxRetries}, next attempt in ${newDelay}ms`);
-          return newDelay;
-        },
+        live, // Continuous sync only if requested
+        retry: live, // Only retry for live sync
+        ...(live && {
+          back_off_function: (delay: number) => {
+            retryCount++;
+            // Stop retrying after max retries
+            if (retryCount > maxRetries) {
+              console.log(`[SYNC] ${dbName}: Max retries (${maxRetries}) reached, stopping sync`);
+              // Cancel the sync by returning a very long delay
+              // This effectively stops retries without breaking PouchDB
+              return 999999999;
+            }
+            // Exponential backoff for retries, max 30 seconds
+            const newDelay = Math.min(delay * 2, 30000);
+            console.log(`[SYNC] ${dbName}: Retry ${retryCount}/${maxRetries}, next attempt in ${newDelay}ms`);
+            return newDelay;
+          },
+        }),
         // Don't use filter - validate in handleSyncChange instead
       })
       .on("change", (info) => {
@@ -340,6 +416,12 @@ export class SyncManager {
           type: "complete",
           dbName,
         });
+
+        // For one-time sync, clean up the handle after completion
+        if (!live) {
+          this.syncHandles.delete(dbName);
+          console.log(`[SYNC] One-time sync completed for ${dbName}`);
+        }
       });
 
     this.syncHandles.set(dbName, sync);
@@ -676,13 +758,42 @@ export class SyncManager {
    * Stop all syncs
    */
   stopAll(): void {
+    this.isLiveMode = false;
     this.syncHandles.forEach((sync) => sync.cancel());
     this.syncHandles.clear();
-    this.syncStatus.forEach((status, dbName) => {
+    this.syncStatus.forEach((_, dbName) => {
       this.updateStatus(dbName, {
         isSyncing: false,
       });
     });
+    console.log("[SYNC] All syncs stopped");
+  }
+
+  /**
+   * Enable live (continuous) sync
+   */
+  async enableLiveSync(): Promise<void> {
+    if (!this.initialized) {
+      throw new Error("SyncManager not initialized");
+    }
+    await this.syncAll({ live: true });
+  }
+
+  /**
+   * Disable live sync (stops all continuous syncs)
+   */
+  disableLiveSync(): void {
+    this.stopAll();
+  }
+
+  /**
+   * Perform one-time sync (sync once then stop)
+   */
+  async syncOnce(): Promise<void> {
+    if (!this.initialized) {
+      throw new Error("SyncManager not initialized");
+    }
+    await this.syncAll({ live: false });
   }
 
   /**

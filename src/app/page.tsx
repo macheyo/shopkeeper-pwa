@@ -399,9 +399,24 @@ export default function Home() {
 
     let productsChangeListener: { cancel(): void } | null = null;
     let salesChangeListener: { cancel(): void } | null = null;
+    let refreshIntervalId: NodeJS.Timeout | null = null;
+    let debounceTimeout: NodeJS.Timeout | null = null;
 
-    // Set up database change listeners
+    // Debounced fetch to prevent rapid refetches from change listeners
+    const debouncedFetch = () => {
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+      }
+      debounceTimeout = setTimeout(() => {
+        fetchDashboardData();
+      }, 500); // Wait 500ms before fetching to batch changes
+    };
+
+    // Set up database change listeners (only when visible)
     async function setupChangeListeners() {
+      // Don't set up live listeners if tab is hidden
+      if (document.visibilityState !== "visible") return;
+      
       try {
         const [productsDB, salesDB] = await Promise.all([
           getProductsDB(),
@@ -414,8 +429,8 @@ export default function Home() {
             live: true,
           })
           .on("change", () => {
-            // Refresh products count when changes occur
-            fetchDashboardData();
+            // Use debounced fetch to prevent rapid updates
+            debouncedFetch();
           });
 
         salesChangeListener = salesDB
@@ -427,12 +442,24 @@ export default function Home() {
           .on("change", (change) => {
             const changedDoc = change.doc as SaleDoc;
             if (changedDoc?.type === "sale") {
-              // Refresh sales data when changes occur
-              fetchDashboardData();
+              // Use debounced fetch to prevent rapid updates
+              debouncedFetch();
             }
           });
       } catch (error) {
         console.error("Error setting up change listeners:", error);
+      }
+    }
+
+    // Cancel change listeners
+    function cancelChangeListeners() {
+      if (productsChangeListener) {
+        productsChangeListener.cancel();
+        productsChangeListener = null;
+      }
+      if (salesChangeListener) {
+        salesChangeListener.cancel();
+        salesChangeListener = null;
       }
     }
 
@@ -443,8 +470,40 @@ export default function Home() {
     fetchDashboardData();
     setupChangeListeners();
 
-    // Set up interval to refresh data every minute
-    const intervalId = setInterval(fetchDashboardData, 60000);
+    // Visibility-based interval (only refresh when visible)
+    const startRefreshInterval = () => {
+      if (!refreshIntervalId) {
+        refreshIntervalId = setInterval(fetchDashboardData, 120000); // 2 minutes instead of 1
+      }
+    };
+    
+    const stopRefreshInterval = () => {
+      if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+      }
+    };
+    
+    // Start interval only if visible
+    if (document.visibilityState === "visible") {
+      startRefreshInterval();
+    }
+    
+    // Handle visibility changes
+    const visibilityHandler = () => {
+      if (document.visibilityState === "visible") {
+        // Refresh immediately when becoming visible
+        fetchDashboardData();
+        setupChangeListeners();
+        startRefreshInterval();
+      } else {
+        // Pause everything when hidden
+        stopRefreshInterval();
+        cancelChangeListeners();
+      }
+    };
+    
+    document.addEventListener("visibilitychange", visibilityHandler);
 
     // Check if already installed
     const checkInstalled = () => {
@@ -493,15 +552,12 @@ export default function Home() {
 
     // Return cleanup function
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
+      stopRefreshInterval();
+      cancelChangeListeners();
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
       }
-      if (productsChangeListener) {
-        productsChangeListener.cancel();
-      }
-      if (salesChangeListener) {
-        salesChangeListener.cancel();
-      }
+      document.removeEventListener("visibilitychange", visibilityHandler);
       window.removeEventListener(
         "beforeinstallprompt",
         handleBeforeInstallPrompt

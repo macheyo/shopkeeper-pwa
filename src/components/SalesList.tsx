@@ -130,8 +130,8 @@ export default function SalesList() {
         setError(`Initial data load failed: ${err.message}`);
       });
 
-      // Only set up changes listener if initial fetch was successful
-      if (!error)
+      // Only set up changes listener if initial fetch was successful and tab is visible
+      if (!error && document.visibilityState === "visible") {
         try {
           // Set up change listener for real-time updates
           const salesDB = await getSalesDB().catch((err) => {
@@ -139,6 +139,18 @@ export default function SalesList() {
               `Failed to initialize sales database for changes: ${err.message}`
             );
           });
+
+          // Debounce to prevent rapid refetches
+          let debounceTimeout: NodeJS.Timeout | null = null;
+          const debouncedFetch = () => {
+            if (debounceTimeout) clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+              fetchSales().catch((err) => {
+                console.error("Error fetching sales after change:", err);
+                setError(`Failed to refresh sales: ${err.message}`);
+              });
+            }, 500);
+          };
 
           const changes = salesDB
             .changes({
@@ -154,10 +166,7 @@ export default function SalesList() {
                 "type" in doc &&
                 doc.type === "sale"
               ) {
-                fetchSales().catch((err) => {
-                  console.error("Error fetching sales after change:", err);
-                  setError(`Failed to refresh sales: ${err.message}`);
-                });
+                debouncedFetch();
               }
             })
             .on("error", (err) => {
@@ -167,18 +176,37 @@ export default function SalesList() {
 
           cleanup = () => {
             changes.cancel();
+            if (debounceTimeout) clearTimeout(debounceTimeout);
           };
         } catch (err) {
           console.error("Error setting up changes listener:", err);
           const message = err instanceof Error ? err.message : String(err);
           setError(`Failed to set up real-time updates: ${message}`);
         }
+      }
     };
 
     init();
 
+    // Visibility handler to pause/resume listener
+    const visibilityHandler = () => {
+      if (document.visibilityState === "visible") {
+        // Re-init when becoming visible
+        init();
+      } else {
+        // Clean up when hidden
+        if (cleanup) {
+          cleanup();
+          cleanup = undefined;
+        }
+      }
+    };
+    
+    document.addEventListener("visibilitychange", visibilityHandler);
+
     return () => {
       if (cleanup) cleanup();
+      document.removeEventListener("visibilitychange", visibilityHandler);
     };
   }, [dateRangeInfo, error, shop?.shopId]); // Re-fetch when date range changes
 

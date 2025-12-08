@@ -76,9 +76,46 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
 
     checkCouchdbStatus();
 
-    // Check periodically
-    const interval = setInterval(checkCouchdbStatus, 5000);
-    return () => clearInterval(interval);
+    // Only check periodically when tab is visible (reduced frequency)
+    let interval: NodeJS.Timeout | null = null;
+    
+    const startPolling = () => {
+      if (!interval) {
+        interval = setInterval(checkCouchdbStatus, 30000); // 30 seconds instead of 5
+      }
+    };
+    
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+    
+    // Start polling only if visible
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      startPolling();
+    }
+    
+    const visibilityHandler = () => {
+      if (document.visibilityState === "visible") {
+        checkCouchdbStatus(); // Immediate check when visible
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", visibilityHandler);
+    }
+    
+    return () => {
+      stopPolling();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", visibilityHandler);
+      }
+    };
   }, [shop]);
 
   // Trading day enforcement - check if previous day EOD is completed
