@@ -10,30 +10,34 @@ import { NextRequest, NextResponse } from "next/server";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return handleProxyRequest(request, params, "GET");
+  const resolvedParams = await params;
+  return handleProxyRequest(request, resolvedParams, "GET");
 }
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return handleProxyRequest(request, params, "POST");
+  const resolvedParams = await params;
+  return handleProxyRequest(request, resolvedParams, "POST");
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return handleProxyRequest(request, params, "PUT");
+  const resolvedParams = await params;
+  return handleProxyRequest(request, resolvedParams, "PUT");
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return handleProxyRequest(request, params, "DELETE");
+  const resolvedParams = await params;
+  return handleProxyRequest(request, resolvedParams, "DELETE");
 }
 
 async function handleProxyRequest(
