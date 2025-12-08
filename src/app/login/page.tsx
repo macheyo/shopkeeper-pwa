@@ -12,6 +12,7 @@ import {
   Stack,
   Alert,
   Group,
+  Box,
 } from "@mantine/core";
 import { IconAlertCircle, IconLicense } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,70 +47,80 @@ export default function LoginPage() {
 
   return (
     <ProtectedRoute requireAuth={false}>
-      <Container size="xs" py="xl">
-        <Paper shadow="md" p="xl" radius="md" withBorder>
-          <Stack gap="md">
-            <div>
-              <Title order={2} ta="center" mb="xs">
-                ShopKeeper
-              </Title>
-              <Text c="dimmed" ta="center" size="sm">
-                Sign in with your license key
-              </Text>
-            </div>
+      <Box
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "1rem",
+        }}
+      >
+        <Container size="xs" w="100%">
+          <Paper shadow="md" p="xl" radius="md" withBorder>
+            <Stack gap="md">
+              <div>
+                <Title order={2} ta="center" mb="xs">
+                  ShopKeeper
+                </Title>
+                <Text c="dimmed" ta="center" size="sm">
+                  Sign in with your license key
+                </Text>
+              </div>
 
-            {error && (
-              <Alert
-                icon={<IconAlertCircle size={16} />}
-                title="Error"
-                color="red"
-                onClose={() => setError(null)}
-                withCloseButton
-              >
-                {error}
-              </Alert>
-            )}
-
-            <form onSubmit={handleLogin}>
-              <Stack gap="md">
-                <TextInput
-                  label="License Key"
-                  placeholder="Enter your license key"
-                  value={licenseKey}
-                  onChange={(e) => setLicenseKey(e.currentTarget.value)}
-                  required
-                  disabled={loading}
-                  leftSection={<IconLicense size={16} />}
-                  description="Your device-tied license key from registration"
-                />
-
-                <Button
-                  type="submit"
-                  fullWidth
-                  leftSection={<IconLicense size={16} />}
-                  loading={loading}
-                  size="md"
+              {error && (
+                <Alert
+                  icon={<IconAlertCircle size={16} />}
+                  title="Error"
+                  color="red"
+                  onClose={() => setError(null)}
+                  withCloseButton
                 >
-                  Sign In with License
-                </Button>
-              </Stack>
-            </form>
+                  {error}
+                </Alert>
+              )}
 
-            <Group justify="center">
-              <Text size="sm" c="dimmed">
-                Don&apos;t have an account?{" "}
-              </Text>
-              <Button
-                variant="subtle"
-                size="sm"
-                onClick={() => router.push("/register")}
-              >
-                Sign Up
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
-      </Container>
+              <form onSubmit={handleLogin}>
+                <Stack gap="md">
+                  <TextInput
+                    label="License Key"
+                    placeholder="Enter your license key"
+                    value={licenseKey}
+                    onChange={(e) => setLicenseKey(e.currentTarget.value)}
+                    required
+                    disabled={loading}
+                    leftSection={<IconLicense size={16} />}
+                    description="Your device-tied license key from registration"
+                  />
+
+                  <Button
+                    type="submit"
+                    fullWidth
+                    leftSection={<IconLicense size={16} />}
+                    loading={loading}
+                    size="md"
+                  >
+                    Sign In with License
+                  </Button>
+                </Stack>
+              </form>
+
+              <Group justify="center">
+                <Text size="sm" c="dimmed">
+                  Don&apos;t have an account?{" "}
+                </Text>
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => router.push("/register")}
+                >
+                  Sign Up
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
+        </Container>
+      </Box>
     </ProtectedRoute>
   );
 }

@@ -87,6 +87,10 @@ export default function InviteAcceptancePage() {
       }
 
       setInvitation(invite);
+      // Pre-fill name if provided by owner
+      if (invite.name) {
+        setName(invite.name);
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load invitation"
@@ -111,8 +115,8 @@ export default function InviteAcceptancePage() {
     try {
       setLoading(true);
 
-      // Generate user ID
-      const userId = generateUserId();
+      // Use pre-generated userId from invitation if available, otherwise generate new one
+      const userId = invitation.userId || generateUserId();
       setCreatedUserId(userId); // Store userId in state for use in modal
 
       // Create user
@@ -131,29 +135,32 @@ export default function InviteAcceptancePage() {
 
       // Note: We use license-based auth, no password needed
 
-      // Generate employee license (tied to device)
-      // License will be shown to user in modal - they must save it
-      // We'll store it in localStorage after user confirms they saved it
-      let licenseKey: string | undefined;
-      try {
-        const { generateEmployeeLicense } = await import("@/lib/licenseKey");
-        const { getShopById } = await import("@/lib/usersDB");
-        const shopData = await getShopById(invitation.shopId);
-        const phoneNumber = invitation.phoneNumber || invitation.email || "";
-        const licenseResult = await generateEmployeeLicense(
-          phoneNumber,
-          invitation.shopId,
-          shopData?.shopName || "Shop",
-          name.trim(),
-          userId
-        );
-        licenseKey = licenseResult.licenseKey;
-      } catch (err) {
-        console.error(
-          "Failed to generate employee license (non-critical):",
-          err
-        );
-        // Continue anyway - invitation acceptance succeeds even if license generation fails
+      // Use pre-generated license from invitation if available
+      // Otherwise generate a new device-tied license
+      let licenseKey: string | undefined = invitation.licenseKey;
+
+      if (!licenseKey) {
+        // Generate employee license (tied to device) if no pre-generated license
+        try {
+          const { generateEmployeeLicense } = await import("@/lib/licenseKey");
+          const { getShopById } = await import("@/lib/usersDB");
+          const shopData = await getShopById(invitation.shopId);
+          const phoneNumber = invitation.phoneNumber || invitation.email || "";
+          const licenseResult = await generateEmployeeLicense(
+            phoneNumber,
+            invitation.shopId,
+            shopData?.shopName || "Shop",
+            name.trim(),
+            userId
+          );
+          licenseKey = licenseResult.licenseKey;
+        } catch (err) {
+          console.error(
+            "Failed to generate employee license (non-critical):",
+            err
+          );
+          // Continue anyway - invitation acceptance succeeds even if license generation fails
+        }
       }
 
       // Update invitation status

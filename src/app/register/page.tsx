@@ -128,280 +128,294 @@ export default function RegisterPage() {
 
   return (
     <ProtectedRoute requireAuth={false}>
-      <Container size="xs" py="xl">
-        <Paper shadow="md" p="xl" radius="md" withBorder>
-          <Stack gap="md">
-            <div>
-              <Title order={2} ta="center" mb="xs">
-                Create Account
-              </Title>
-              <Text c="dimmed" ta="center" size="sm">
-                Set up your shop and start managing your business
-              </Text>
-            </div>
+      <Box
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "1rem",
+        }}
+      >
+        <Container size="xs" w="100%">
+          <Paper shadow="md" p="xl" radius="md" withBorder>
+            <Stack gap="md">
+              <div>
+                <Title order={2} ta="center" mb="xs">
+                  Create Account
+                </Title>
+                <Text c="dimmed" ta="center" size="sm">
+                  Set up your shop and start managing your business
+                </Text>
+              </div>
 
-            {error && (
-              <Alert
-                icon={<IconAlertCircle size={16} />}
-                title="Error"
-                color="red"
-                onClose={() => setError(null)}
-                withCloseButton
-              >
-                {error}
-              </Alert>
-            )}
-
-            {/* License Modal - shown after registration */}
-            <Modal
-              opened={showLicenseModal}
-              onClose={() => {}}
-              title="Save Your License Key"
-              size="lg"
-              closeOnClickOutside={false}
-              closeOnEscape={false}
-              withCloseButton={false}
-            >
-              <Stack gap="md">
-                <Alert icon={<IconAlertCircle size={16} />} color="yellow">
-                  <Text size="sm" fw={500} mb="xs">
-                    Important: Save this license key securely!
-                  </Text>
-                  <Text size="xs">
-                    This license key is tied to this device and valid for 14
-                    days. If you clear your browser data or use a different
-                    device, you&apos;ll need this license key to continue using
-                    the app.
-                  </Text>
-                </Alert>
-
-                <Box>
-                  <Text size="sm" fw={500} mb="xs">
-                    Your License Key:
-                  </Text>
-                  <Group gap="xs" align="flex-start">
-                    <Code
-                      style={{
-                        flex: 1,
-                        wordBreak: "break-all",
-                        fontSize: "11px",
-                        padding: "12px",
-                        fontFamily: "monospace",
-                      }}
-                      block
-                    >
-                      {licenseKey}
-                    </Code>
-                    <Tooltip label="Copy license key">
-                      <ActionIcon
-                        variant="light"
-                        color="blue"
-                        onClick={async () => {
-                          if (licenseKey) {
-                            await navigator.clipboard.writeText(licenseKey);
-                          }
-                        }}
-                      >
-                        <IconCopy size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </Group>
-                </Box>
-
-                <Button
-                  fullWidth
-                  leftSection={<IconCopy size={16} />}
-                  onClick={async () => {
-                    if (licenseKey) {
-                      await navigator.clipboard.writeText(licenseKey);
-                    }
-                  }}
-                  variant="light"
+              {error && (
+                <Alert
+                  icon={<IconAlertCircle size={16} />}
+                  title="Error"
+                  color="red"
+                  onClose={() => setError(null)}
+                  withCloseButton
                 >
-                  Copy License Key
-                </Button>
+                  {error}
+                </Alert>
+              )}
 
-                <Checkbox
-                  label="I have saved my license key securely"
-                  checked={licenseConfirmed}
-                  onChange={(e) => setLicenseConfirmed(e.currentTarget.checked)}
-                />
+              {/* License Modal - shown after registration */}
+              <Modal
+                opened={showLicenseModal}
+                onClose={() => {}}
+                title="Save Your License Key"
+                size="lg"
+                closeOnClickOutside={false}
+                closeOnEscape={false}
+                withCloseButton={false}
+              >
+                <Stack gap="md">
+                  <Alert icon={<IconAlertCircle size={16} />} color="yellow">
+                    <Text size="sm" fw={500} mb="xs">
+                      Important: Save this license key securely!
+                    </Text>
+                    <Text size="xs">
+                      This license key is tied to this device and valid for 14
+                      days. If you clear your browser data or use a different
+                      device, you&apos;ll need this license key to continue
+                      using the app.
+                    </Text>
+                  </Alert>
 
-                <Button
-                  fullWidth
-                  disabled={!licenseConfirmed}
-                  onClick={async () => {
-                    try {
+                  <Box>
+                    <Text size="sm" fw={500} mb="xs">
+                      Your License Key:
+                    </Text>
+                    <Group gap="xs" align="flex-start">
+                      <Code
+                        style={{
+                          flex: 1,
+                          wordBreak: "break-all",
+                          fontSize: "11px",
+                          padding: "12px",
+                          fontFamily: "monospace",
+                        }}
+                        block
+                      >
+                        {licenseKey}
+                      </Code>
+                      <Tooltip label="Copy license key">
+                        <ActionIcon
+                          variant="light"
+                          color="blue"
+                          onClick={async () => {
+                            if (licenseKey) {
+                              await navigator.clipboard.writeText(licenseKey);
+                            }
+                          }}
+                        >
+                          <IconCopy size={16} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
+                  </Box>
+
+                  <Button
+                    fullWidth
+                    leftSection={<IconCopy size={16} />}
+                    onClick={async () => {
                       if (licenseKey) {
-                        // Store license in localStorage
-                        // We need to get user info - but session might not exist yet
-                        // So we'll need to create session first, then store license
-                        const { createSession, getSession } = await import(
-                          "@/lib/auth"
-                        );
-                        const { getUserByPhoneNumber, getShopById } =
-                          await import("@/lib/usersDB");
+                        await navigator.clipboard.writeText(licenseKey);
+                      }
+                    }}
+                    variant="light"
+                  >
+                    Copy License Key
+                  </Button>
 
-                        // Get user and shop to create session
-                        // Normalize phone number (remove spaces, dashes, parentheses)
-                        const fullPhone =
-                          registeredPhoneNumber ||
-                          `${countryCode}${phoneNumber
-                            .replace(/^0+/, "")
-                            .replace(/[\s\-\(\)]/g, "")}`;
-                        const normalizedPhone = fullPhone.replace(
-                          /[\s\-\(\)]/g,
-                          ""
-                        );
-                        const user = await getUserByPhoneNumber(
-                          normalizedPhone
-                        );
-                        if (!user) {
-                          setError("User not found. Please try logging in.");
-                          return;
-                        }
+                  <Checkbox
+                    label="I have saved my license key securely"
+                    checked={licenseConfirmed}
+                    onChange={(e) =>
+                      setLicenseConfirmed(e.currentTarget.checked)
+                    }
+                  />
 
-                        const shopData = await getShopById(user.shopId);
-                        if (!shopData) {
-                          setError("Shop data not found. Please try again.");
-                          return;
-                        }
-
-                        // Create session with license key
-                        createSession(user, licenseKey);
-
-                        // Verify session was created
-                        const session = getSession();
-                        if (!session) {
-                          setError(
-                            "Failed to create session. Please try again."
+                  <Button
+                    fullWidth
+                    disabled={!licenseConfirmed}
+                    onClick={async () => {
+                      try {
+                        if (licenseKey) {
+                          // Store license in localStorage
+                          // We need to get user info - but session might not exist yet
+                          // So we'll need to create session first, then store license
+                          const { createSession, getSession } = await import(
+                            "@/lib/auth"
                           );
-                          return;
+                          const { getUserByPhoneNumber, getShopById } =
+                            await import("@/lib/usersDB");
+
+                          // Get user and shop to create session
+                          // Normalize phone number (remove spaces, dashes, parentheses)
+                          const fullPhone =
+                            registeredPhoneNumber ||
+                            `${countryCode}${phoneNumber
+                              .replace(/^0+/, "")
+                              .replace(/[\s\-\(\)]/g, "")}`;
+                          const normalizedPhone = fullPhone.replace(
+                            /[\s\-\(\)]/g,
+                            ""
+                          );
+                          const user = await getUserByPhoneNumber(
+                            normalizedPhone
+                          );
+                          if (!user) {
+                            setError("User not found. Please try logging in.");
+                            return;
+                          }
+
+                          const shopData = await getShopById(user.shopId);
+                          if (!shopData) {
+                            setError("Shop data not found. Please try again.");
+                            return;
+                          }
+
+                          // Create session with license key
+                          createSession(user, licenseKey);
+
+                          // Verify session was created
+                          const session = getSession();
+                          if (!session) {
+                            setError(
+                              "Failed to create session. Please try again."
+                            );
+                            return;
+                          }
+
+                          // Store license
+                          const { storeLicenseKey } = await import(
+                            "@/lib/licenseStorage"
+                          );
+                          storeLicenseKey(licenseKey);
+
+                          // Refresh auth context to update state
+                          // This will load user and shop from the session we just created
+                          await refreshUser();
+
+                          // Small delay to ensure state is updated
+                          await new Promise((resolve) =>
+                            setTimeout(resolve, 100)
+                          );
                         }
 
-                        // Store license
-                        const { storeLicenseKey } = await import(
-                          "@/lib/licenseStorage"
-                        );
-                        storeLicenseKey(licenseKey);
-
-                        // Refresh auth context to update state
-                        // This will load user and shop from the session we just created
-                        await refreshUser();
-
-                        // Small delay to ensure state is updated
+                        setShowLicenseModal(false);
+                        // Small delay to ensure state is updated before navigating
                         await new Promise((resolve) =>
-                          setTimeout(resolve, 100)
+                          setTimeout(resolve, 200)
+                        );
+                        // Proceed to onboarding
+                        router.push("/");
+                      } catch (err) {
+                        console.error("Error creating session:", err);
+                        setError(
+                          err instanceof Error
+                            ? err.message
+                            : "Failed to create session. Please try again."
                         );
                       }
-
-                      setShowLicenseModal(false);
-                      // Small delay to ensure state is updated before navigating
-                      await new Promise((resolve) => setTimeout(resolve, 200));
-                      // Proceed to onboarding
-                      router.push("/");
-                    } catch (err) {
-                      console.error("Error creating session:", err);
-                      setError(
-                        err instanceof Error
-                          ? err.message
-                          : "Failed to create session. Please try again."
-                      );
-                    }
-                  }}
-                >
-                  I&apos;ve Saved It - Continue
-                </Button>
-              </Stack>
-            </Modal>
-
-            {!showLicenseModal && (
-              <form onSubmit={handleRegister}>
-                <Stack gap="md">
-                  <TextInput
-                    label="Full Name"
-                    placeholder="John Doe"
-                    value={name}
-                    onChange={(e) => setName(e.currentTarget.value)}
-                    required
-                    disabled={loading}
-                  />
-
-                  <TextInput
-                    label="Shop Name"
-                    placeholder="My Shop"
-                    value={shopName}
-                    onChange={(e) => setShopName(e.currentTarget.value)}
-                    required
-                    disabled={loading}
-                  />
-
-                  <div>
-                    <Text size="sm" fw={500} mb="xs">
-                      Phone Number
-                    </Text>
-                    <Group wrap="nowrap" gap="xs">
-                      <Select
-                        value={countryCode}
-                        onChange={(value) => setCountryCode(value || "+263")}
-                        data={getCountryCodeSelectData()}
-                        searchable
-                        placeholder="Code"
-                        style={{ width: 120 }}
-                        disabled={loading}
-                      />
-                      <TextInput
-                        placeholder="771 802 312"
-                        type="tel"
-                        value={phoneNumber}
-                        onChange={handlePhoneNumberChange}
-                        required
-                        disabled={loading}
-                        style={{ flex: 1 }}
-                        error={
-                          phoneNumber.trim() &&
-                          !validatePhoneNumber(phoneNumber).valid
-                            ? validatePhoneNumber(phoneNumber).error
-                            : undefined
-                        }
-                      />
-                    </Group>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    fullWidth
-                    leftSection={<IconUserPlus size={16} />}
-                    loading={loading}
-                    size="md"
+                    }}
                   >
-                    Create Account
+                    I&apos;ve Saved It - Continue
                   </Button>
                 </Stack>
-              </form>
-            )}
+              </Modal>
 
-            {!showLicenseModal && (
-              <>
-                <Divider label="OR" labelPosition="center" />
+              {!showLicenseModal && (
+                <form onSubmit={handleRegister}>
+                  <Stack gap="md">
+                    <TextInput
+                      label="Full Name"
+                      placeholder="John Doe"
+                      value={name}
+                      onChange={(e) => setName(e.currentTarget.value)}
+                      required
+                      disabled={loading}
+                    />
 
-                <Group justify="center">
-                  <Text size="sm" c="dimmed">
-                    Already have an account?{" "}
-                  </Text>
-                  <Button
-                    variant="subtle"
-                    size="sm"
-                    onClick={() => router.push("/login")}
-                  >
-                    Sign In
-                  </Button>
-                </Group>
-              </>
-            )}
-          </Stack>
-        </Paper>
-      </Container>
+                    <TextInput
+                      label="Shop Name"
+                      placeholder="My Shop"
+                      value={shopName}
+                      onChange={(e) => setShopName(e.currentTarget.value)}
+                      required
+                      disabled={loading}
+                    />
+
+                    <div>
+                      <Text size="sm" fw={500} mb="xs">
+                        Phone Number
+                      </Text>
+                      <Group wrap="nowrap" gap="xs">
+                        <Select
+                          value={countryCode}
+                          onChange={(value) => setCountryCode(value || "+263")}
+                          data={getCountryCodeSelectData()}
+                          searchable
+                          placeholder="Code"
+                          style={{ width: 120 }}
+                          disabled={loading}
+                        />
+                        <TextInput
+                          placeholder="771 802 312"
+                          type="tel"
+                          value={phoneNumber}
+                          onChange={handlePhoneNumberChange}
+                          required
+                          disabled={loading}
+                          style={{ flex: 1 }}
+                          error={
+                            phoneNumber.trim() &&
+                            !validatePhoneNumber(phoneNumber).valid
+                              ? validatePhoneNumber(phoneNumber).error
+                              : undefined
+                          }
+                        />
+                      </Group>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      fullWidth
+                      leftSection={<IconUserPlus size={16} />}
+                      loading={loading}
+                      size="md"
+                    >
+                      Create Account
+                    </Button>
+                  </Stack>
+                </form>
+              )}
+
+              {!showLicenseModal && (
+                <>
+                  <Divider label="OR" labelPosition="center" />
+
+                  <Group justify="center">
+                    <Text size="sm" c="dimmed">
+                      Already have an account?{" "}
+                    </Text>
+                    <Button
+                      variant="subtle"
+                      size="sm"
+                      onClick={() => router.push("/login")}
+                    >
+                      Sign In
+                    </Button>
+                  </Group>
+                </>
+              )}
+            </Stack>
+          </Paper>
+        </Container>
+      </Box>
     </ProtectedRoute>
   );
 }

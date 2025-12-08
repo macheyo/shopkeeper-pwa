@@ -182,13 +182,17 @@ export interface InvitationDoc {
   inviteId: string;
   phoneNumber: string; // Phone number (replaces email)
   email?: string; // Optional email (for backwards compatibility)
-  role: "manager" | "employee";
+  name?: string; // Invitee name (if provided by owner at invite time)
+  role: "owner" | "manager" | "employee";
   shopId: string;
   invitedBy: string;
   token: string; // Secure token for invitation acceptance
   expiresAt: string;
   status: InvitationStatus;
   createdAt: string;
+  // Pre-generated license for the invited user (portable, works on any device)
+  licenseKey?: string;
+  userId?: string; // Pre-generated userId for the invited user
 }
 
 export interface ShopDoc {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Title,
   Paper,
@@ -843,25 +843,28 @@ export default function ReportsPage() {
   const [reportingCurrency, setReportingCurrency] =
     useState<CurrencyCode>(baseCurrency);
 
-  // Convert money to reporting currency
-  const convertToReportingCurrency = (money: Money): Money => {
-    if (money.currency === reportingCurrency) return money;
+  // Convert money to reporting currency (memoized to prevent infinite re-renders)
+  const convertToReportingCurrency = useCallback(
+    (money: Money): Money => {
+      if (money.currency === reportingCurrency) return money;
 
-    // First convert to base currency if not already
-    const amountInBase =
-      money.currency === baseCurrency
-        ? money.amount
-        : money.amount / money.exchangeRate;
+      // First convert to base currency if not already
+      const amountInBase =
+        money.currency === baseCurrency
+          ? money.amount
+          : money.amount / money.exchangeRate;
 
-    // Then convert from base to reporting currency
-    const finalAmount = amountInBase * exchangeRates[reportingCurrency];
+      // Then convert from base to reporting currency
+      const finalAmount = amountInBase * exchangeRates[reportingCurrency];
 
-    return {
-      amount: finalAmount,
-      currency: reportingCurrency,
-      exchangeRate: exchangeRates[reportingCurrency],
-    };
-  };
+      return {
+        amount: finalAmount,
+        currency: reportingCurrency,
+        exchangeRate: exchangeRates[reportingCurrency],
+      };
+    },
+    [reportingCurrency, baseCurrency, exchangeRates]
+  );
 
   // Sum money values in reporting currency
   const sumMoney = (moneyArray: Money[]): Money => {

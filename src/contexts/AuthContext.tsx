@@ -6,6 +6,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useMemo,
 } from "react";
 import { useRouter } from "next/navigation";
 import { UserDoc, ShopDoc } from "@/types";
@@ -371,16 +372,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const value: AuthContextType = {
-    currentUser,
-    shop,
-    isAuthenticated: !!currentUser,
-    isLoading,
-    loginWithLicense,
-    logout,
-    register,
-    refreshUser,
-  };
+  // Memoize the context value to prevent unnecessary re-renders
+  const value: AuthContextType = useMemo(
+    () => ({
+      currentUser,
+      shop,
+      isAuthenticated: !!currentUser,
+      isLoading,
+      loginWithLicense,
+      logout,
+      register,
+      refreshUser,
+    }),
+    [
+      currentUser,
+      shop,
+      isLoading,
+      loginWithLicense,
+      logout,
+      register,
+      refreshUser,
+    ]
+  );
 
   // Don't block rendering - let ProtectedRoute handle loading states
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

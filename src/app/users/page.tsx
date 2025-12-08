@@ -20,6 +20,7 @@ import {
   ScrollArea,
   Divider,
   Textarea,
+  TextInput,
   CopyButton,
   Tooltip,
 } from "@mantine/core";
@@ -46,8 +47,10 @@ export default function UsersPage() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
+  const [inviteLicenseKey, setInviteLicenseKey] = useState("");
   const [inviteCountryCode, setInviteCountryCode] = useState("+263");
   const [invitePhoneNumber, setInvitePhoneNumber] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("employee");
 
   const loadUsers = useCallback(async () => {
@@ -113,25 +116,46 @@ export default function UsersPage() {
 
       // Create invitation
       const { createInvitation } = await import("@/lib/usersDB");
-      const { generateInviteId, generateInviteToken } = await import(
-        "@/lib/auth"
-      );
+      const { generateInviteId, generateInviteToken, generateUserId } =
+        await import("@/lib/auth");
 
       const inviteId = generateInviteId();
       const token = generateInviteToken();
+      const userId = generateUserId(); // Pre-generate userId for the invited user
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
+
+      // Generate license key for the invited user (portable, works on any device)
+      let licenseKey = "";
+      try {
+        const { generateInviteLicense } = await import("@/lib/licenseKey");
+        const licenseResult = await generateInviteLicense(
+          fullPhoneNumber,
+          shop.shopId,
+          shop.shopName,
+          inviteRole as "owner" | "manager" | "employee",
+          userId,
+          inviteName.trim() || undefined // Pass name if provided
+        );
+        licenseKey = licenseResult.licenseKey;
+      } catch (err) {
+        console.error("Failed to generate invite license:", err);
+        // Continue anyway - invitation can work without pre-generated license
+      }
 
       await createInvitation({
         inviteId,
         type: "invitation",
         phoneNumber: fullPhoneNumber,
-        role: (inviteRole === "owner" ? "manager" : inviteRole) as "manager" | "employee",
+        name: inviteName.trim() || undefined,
+        role: inviteRole as "owner" | "manager" | "employee",
         shopId: shop.shopId,
         invitedBy: currentUser.userId,
         token,
         expiresAt: expiresAt.toISOString(),
         status: "pending",
+        licenseKey: licenseKey || undefined,
+        userId,
       });
 
       // Generate shareable invitation link
@@ -147,11 +171,13 @@ export default function UsersPage() {
 
       // Show success modal
       setInviteLink(generatedInviteLink);
+      setInviteLicenseKey(licenseKey);
       setError(null);
       setInviteModalOpen(false);
       setSuccessModalOpen(true);
       setInvitePhoneNumber("");
       setInviteCountryCode("+263");
+      setInviteName("");
       setInviteRole("employee");
       await loadUsers();
     } catch (err) {
@@ -427,6 +453,7 @@ export default function UsersPage() {
           setInviteModalOpen(false);
           setInvitePhoneNumber("");
           setInviteCountryCode("+263");
+          setInviteName("");
           setInviteRole("employee");
         }}
         title="Invite User"
@@ -434,6 +461,13 @@ export default function UsersPage() {
         size="md"
       >
         <Stack gap="md">
+          <TextInput
+            label="Full Name"
+            placeholder="John Doe"
+            value={inviteName}
+            onChange={(e) => setInviteName(e.currentTarget.value)}
+            description="Employee's name (will be encoded in their license key)"
+          />
           <PhoneNumberInput
             countryCode={inviteCountryCode}
             phoneNumber={invitePhoneNumber}
@@ -452,6 +486,9 @@ export default function UsersPage() {
             data={[
               { value: "employee", label: "Employee" },
               { value: "manager", label: "Manager" },
+              ...(currentUser?.role === "owner"
+                ? [{ value: "owner", label: "Owner (Full Access)" }]
+                : []),
             ]}
             disabled={currentUser?.role !== "owner"}
           />
@@ -462,6 +499,7 @@ export default function UsersPage() {
                 setInviteModalOpen(false);
                 setInvitePhoneNumber("");
                 setInviteCountryCode("+263");
+                setInviteName("");
                 setInviteRole("employee");
               }}
               fullWidth
@@ -495,12 +533,12 @@ export default function UsersPage() {
         <Stack gap="md">
           <Alert
             icon={<IconCheck size={16} />}
-            title="Invitation Link Ready"
+            title="Invitation Ready"
             color="green"
           >
             <Text size="sm">
-              The invitation link has been copied to your clipboard. Share this
-              link with the user via email, WhatsApp, or any other channel.
+              Share both the invitation link and license key with the user. They
+              can use either to access their account.
             </Text>
           </Alert>
 
@@ -541,6 +579,52 @@ export default function UsersPage() {
               </CopyButton>
             </Group>
           </Box>
+
+          {inviteLicenseKey && (
+            <Box>
+              <Divider my="sm" />
+              <Text size="sm" fw={500} mb="xs">
+                License Key (for direct login):
+              </Text>
+              <Group gap="xs">
+                <Textarea
+                  value={inviteLicenseKey}
+                  readOnly
+                  minRows={3}
+                  style={{ flex: 1 }}
+                  styles={{
+                    input: {
+                      fontFamily: "monospace",
+                      fontSize: "0.75rem",
+                      wordBreak: "break-all",
+                    },
+                  }}
+                />
+                <CopyButton value={inviteLicenseKey}>
+                  {({ copied, copy }) => (
+                    <Tooltip label={copied ? "Copied!" : "Copy license key"}>
+                      <ActionIcon
+                        color={copied ? "teal" : "gray"}
+                        onClick={copy}
+                        variant="light"
+                        size="lg"
+                      >
+                        {copied ? (
+                          <IconCheck size={18} />
+                        ) : (
+                          <IconCopy size={18} />
+                        )}
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                </CopyButton>
+              </Group>
+              <Text size="xs" c="dimmed" mt="xs">
+                The employee can use this license key to log in directly without
+                accepting the invitation link. Works on any device.
+              </Text>
+            </Box>
+          )}
 
           <Group justify="flex-end" mt="md">
             <Button onClick={() => setSuccessModalOpen(false)}>Done</Button>

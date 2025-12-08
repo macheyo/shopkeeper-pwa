@@ -210,6 +210,13 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
         header: {
           transition: "box-shadow 0.3s ease",
           boxShadow: "var(--mantine-shadow-sm)",
+          backgroundColor: "var(--mantine-color-body)",
+        },
+        main: {
+          backgroundColor: "var(--mantine-color-gray-0)",
+        },
+        navbar: {
+          backgroundColor: "var(--mantine-color-body)",
         },
       }}
     >
@@ -505,13 +512,13 @@ export default function ShopkeeperAppShell({ children }: AppShellProps) {
               top: 70, // Below the header
               zIndex: 100,
               width: "100%",
-              backgroundColor: "var(--mantine-color-gray-0)",
-              boxShadow: "var(--mantine-shadow-xs)",
+              backgroundColor: "rgba(248, 249, 250, 0.95)", // Semi-transparent to blend
+              boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
               padding: "12px 16px",
-              borderBottom: "1px solid var(--mantine-color-default-border)",
+              borderBottom: "1px solid var(--mantine-color-gray-2)",
               marginBottom: "16px",
               transition: "all 0.3s ease",
-              backdropFilter: "blur(10px)",
+              backdropFilter: "blur(8px)",
             }}
           >
             <DateFilter />

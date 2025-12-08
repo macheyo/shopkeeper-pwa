@@ -419,3 +419,54 @@ export async function generateEmployeeLicense(
     userId,
   });
 }
+
+/**
+ * Generate a portable license for an invited user (not device-tied)
+ * This is generated at invitation time and shared with the user
+ * Works on any device - useful for sharing before user sets up
+ */
+export async function generateInviteLicense(
+  phoneNumber: string,
+  shopId: string,
+  shopName: string,
+  role: "owner" | "manager" | "employee",
+  userId: string,
+  userName?: string // Optional - inviter can provide name at invite time
+): Promise<{ licenseKey: string; formattedKey: string }> {
+  const {
+    OWNER_DEFAULT_FEATURES,
+    EMPLOYEE_DEFAULT_FEATURES,
+    MANAGER_DEFAULT_FEATURES,
+  } = await import("./features");
+
+  const issuedAt = new Date().toISOString();
+  // Invite licenses have long expiration
+  const expiresAt = new Date();
+  expiresAt.setFullYear(expiresAt.getFullYear() + 10); // 10 years
+
+  // Use appropriate features based on role
+  let features;
+  switch (role) {
+    case "owner":
+      features = OWNER_DEFAULT_FEATURES;
+      break;
+    case "manager":
+      features = MANAGER_DEFAULT_FEATURES;
+      break;
+    default:
+      features = EMPLOYEE_DEFAULT_FEATURES;
+  }
+
+  return generateLicenseKey({
+    phoneNumber,
+    shopId,
+    shopName,
+    ownerName: userName || "", // Use provided name or empty
+    issuedAt,
+    expiresAt: expiresAt.toISOString(),
+    features,
+    // No deviceId - this license works on any device
+    role,
+    userId,
+  });
+}

@@ -1,6 +1,6 @@
 "use client"; // This component interacts with browser APIs
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Table,
   Button,
@@ -25,12 +25,42 @@ export default function ProductManager() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isMockData, setIsMockData] = useState<boolean>(false);
+  const lastFetchedShopIdRef = useRef<string | null>(null);
+  const isFetchingRef = useRef<boolean>(false);
+  const shopIdRef = useRef<string | null>(null);
+
+  // Track shopId in state, but only update when value actually changes
+  const [shopId, setShopId] = useState<string | null>(
+    () => shop?.shopId ?? null
+  );
+
+  // Update shopId state only when the actual value changes
+  useEffect(() => {
+    const newShopId = shop?.shopId ?? null;
+    if (newShopId !== shopIdRef.current) {
+      shopIdRef.current = newShopId;
+      setShopId(newShopId);
+    }
+  }, [shop?.shopId]);
 
   // Function to fetch products from the database
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async (targetShopId: string) => {
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) {
+      return;
+    }
+
+    // Prevent fetching if shopId hasn't changed
+    if (targetShopId === lastFetchedShopIdRef.current) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
+      isFetchingRef.current = true;
       setIsLoading(true);
       setError(null);
+      lastFetchedShopIdRef.current = targetShopId;
 
       // Get the products database
       const db = await getProductsDB();
@@ -55,7 +85,7 @@ export default function ProductManager() {
         .filter((doc) => doc && doc.type === "product");
 
       // Filter by shopId for data isolation
-      const fetchedProducts = filterByShopId(allProducts, shop?.shopId);
+      const fetchedProducts = filterByShopId(allProducts, targetShopId);
 
       if (fetchedProducts.length > 0) {
         setProducts(fetchedProducts);
@@ -75,18 +105,51 @@ export default function ProductManager() {
       setError(`Error fetching products: ${message}`);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, []);
 
-  // Fetch products when component mounts or shop changes
+  // Fetch products when component mounts or shopId changes
   useEffect(() => {
-    if (shop?.shopId) {
-      fetchProducts();
+    // Skip if already fetching or if shopId matches last fetched
+    if (isFetchingRef.current) {
+      return;
     }
-  }, [shop?.shopId, fetchProducts]);
+
+    if (!shopId) {
+      // No shopId - clear products if we had some before
+      if (lastFetchedShopIdRef.current !== null) {
+        console.log("[ProductManager] Clearing products - shopId removed");
+        setProducts((prev) => (prev.length === 0 ? prev : []));
+        setIsLoading(false);
+        lastFetchedShopIdRef.current = null;
+      } else if (isLoading) {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // Skip if this shopId was already fetched
+    if (shopId === lastFetchedShopIdRef.current) {
+      if (isLoading) {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // Fetch products for this shopId
+    console.log("[ProductManager] Fetching products for shopId:", shopId);
+    fetchProducts(shopId);
+  }, [shopId, fetchProducts]);
 
   const handleRefresh = () => {
-    fetchProducts();
+    // Reset the ref to force a fresh fetch
+    lastFetchedShopIdRef.current = null;
+    isFetchingRef.current = false;
+    const currentShopId = shop?.shopId;
+    if (currentShopId) {
+      fetchProducts(currentShopId);
+    }
   };
 
   if (isLoading) {
