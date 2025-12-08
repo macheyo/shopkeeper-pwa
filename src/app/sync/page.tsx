@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Title,
   Stack,
@@ -75,7 +75,7 @@ export default function SyncPage() {
   const [liveSyncEnabled, setLiveSyncEnabled] = useState(false);
 
   // Check if documents exist in CouchDB and mark them as synced
-  const checkSyncStatusForTransactions = async (
+  const checkSyncStatusForTransactions = useCallback(async (
     transactions: Array<{ id: string; type: "sale" | "purchase" }>
   ): Promise<void> => {
     if (!couchdbEnabled || !shop || !currentUser) return;
@@ -154,7 +154,7 @@ export default function SyncPage() {
     } catch (err) {
       console.error("Error checking sync status for transactions:", err);
     }
-  };
+  }, [couchdbEnabled, shop, currentUser]);
 
   // Fetch all sales and purchases within date range
   useEffect(() => {
