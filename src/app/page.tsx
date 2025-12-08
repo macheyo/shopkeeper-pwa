@@ -416,7 +416,7 @@ export default function Home() {
     async function setupChangeListeners() {
       // Don't set up live listeners if tab is hidden
       if (document.visibilityState !== "visible") return;
-      
+
       try {
         const [productsDB, salesDB] = await Promise.all([
           getProductsDB(),
@@ -476,19 +476,19 @@ export default function Home() {
         refreshIntervalId = setInterval(fetchDashboardData, 120000); // 2 minutes instead of 1
       }
     };
-    
+
     const stopRefreshInterval = () => {
       if (refreshIntervalId) {
         clearInterval(refreshIntervalId);
         refreshIntervalId = null;
       }
     };
-    
+
     // Start interval only if visible
     if (document.visibilityState === "visible") {
       startRefreshInterval();
     }
-    
+
     // Handle visibility changes
     const visibilityHandler = () => {
       if (document.visibilityState === "visible") {
@@ -502,7 +502,7 @@ export default function Home() {
         cancelChangeListeners();
       }
     };
-    
+
     document.addEventListener("visibilitychange", visibilityHandler);
 
     // Check if already installed

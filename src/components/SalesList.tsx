@@ -201,7 +201,7 @@ export default function SalesList() {
         }
       }
     };
-    
+
     document.addEventListener("visibilitychange", visibilityHandler);
 
     return () => {

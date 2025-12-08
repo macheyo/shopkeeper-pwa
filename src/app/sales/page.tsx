@@ -138,25 +138,28 @@ export default function SalesPage() {
 
     // Only refresh when tab is visible
     let intervalId: NodeJS.Timeout | null = null;
-    
+
     const startPolling = () => {
       if (!intervalId) {
         intervalId = setInterval(fetchSalesData, 60000); // 60 seconds instead of 30
       }
     };
-    
+
     const stopPolling = () => {
       if (intervalId) {
         clearInterval(intervalId);
         intervalId = null;
       }
     };
-    
+
     // Start polling only if visible
-    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState === "visible"
+    ) {
       startPolling();
     }
-    
+
     const visibilityHandler = () => {
       if (document.visibilityState === "visible") {
         fetchSalesData(); // Immediate refresh when visible
@@ -165,11 +168,11 @@ export default function SalesPage() {
         stopPolling();
       }
     };
-    
+
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", visibilityHandler);
     }
-    
+
     return () => {
       stopPolling();
       if (typeof document !== "undefined") {
