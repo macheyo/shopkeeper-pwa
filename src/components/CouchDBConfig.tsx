@@ -342,25 +342,6 @@ export default function CouchDBConfigComponent() {
 
         <Divider />
 
-        {/* Mixed Content Warning */}
-        {typeof window !== "undefined" &&
-          window.location.protocol === "https:" &&
-          url.startsWith("http://") && (
-            <Alert icon={<IconAlertCircle size={16} />} color="red" title="Mixed Content Error">
-              <Text size="sm" mb="xs">
-                Your app is served over HTTPS, but CouchDB URL uses HTTP. Browsers
-                will block this connection.
-              </Text>
-              <Text size="xs" c="dimmed">
-                <strong>Solutions:</strong>
-                <br />• Use HTTPS for CouchDB: Change URL to{" "}
-                <code>https://34.32.91.162:5984</code> (requires SSL certificate)
-                <br />• Use a reverse proxy (nginx/traefik) that terminates SSL
-                <br />• Use a CouchDB service with HTTPS (e.g., Cloudant)
-              </Text>
-            </Alert>
-          )}
-
         <Alert icon={<IconSettings size={16} />} color="blue">
           <Text size="sm" fw={500} mb="xs">
             CouchDB Configuration (from environment variables)

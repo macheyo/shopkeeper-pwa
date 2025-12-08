@@ -1,6 +1,5 @@
 "use client";
 
-
 /**
  * CouchDB connection configuration
  */
@@ -33,26 +32,21 @@ export async function testCouchDBConnection(
   password: string
 ): Promise<{ success: boolean; error?: string; session?: CouchDBSession }> {
   try {
-    // Remove trailing slash
-    const cleanUrl = url.replace(/\/$/, "");
-    
-    // Check for mixed content issues
-    const mixedContentError = checkMixedContent(cleanUrl);
-    if (mixedContentError) {
-      return {
-        success: false,
-        error: mixedContentError,
-      };
-    }
+    // Always use server-side proxy for CouchDB requests
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const testUrl = `${baseUrl}/api/couchdb-proxy/_session`;
 
-    // Test connection with CouchDB session endpoint
-    // Include credentials for CORS if needed
-    const response = await fetch(`${cleanUrl}/_session`, {
+    // Encode credentials for proxy
+    const credentials = btoa(`${username}:${password}`);
+
+    // Test connection with CouchDB session endpoint via proxy
+    const response = await fetch(testUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-CouchDB-Credentials": credentials,
       },
-      credentials: "include", // Include credentials for CORS
+      credentials: "same-origin",
       body: JSON.stringify({
         name: username,
         password: password,
@@ -72,7 +66,11 @@ export async function testCouchDBConnection(
       };
     }
 
-    let data: { userCtx?: { name?: string; roles?: string[] }; name?: string; roles?: string[] };
+    let data: {
+      userCtx?: { name?: string; roles?: string[] };
+      name?: string;
+      roles?: string[];
+    };
     try {
       data = await response.json();
     } catch (err) {
@@ -132,33 +130,8 @@ function extractTokenFromCookie(cookie: string | null): string | undefined {
 }
 
 /**
- * Check for mixed content issues (HTTPS page -> HTTP CouchDB)
- * Returns error message if mixed content detected, null otherwise
- */
-function checkMixedContent(url: string): string | null {
-  // Check if we're on HTTPS
-  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
-  
-  // If page is HTTPS and CouchDB URL is HTTP, we have mixed content
-  if (isHttps && url.startsWith("http://")) {
-    return (
-      `Mixed Content Error: Your app is served over HTTPS, but CouchDB URL uses HTTP.\n` +
-      `Browsers block HTTP requests from HTTPS pages for security.\n\n` +
-      `Solutions:\n` +
-      `1. Use HTTPS for CouchDB: Change URL to https://34.32.91.162:5984 (requires SSL certificate)\n` +
-      `2. Use a reverse proxy (nginx/traefik) that terminates SSL in front of CouchDB\n` +
-      `3. Use a CouchDB service with HTTPS support (e.g., Cloudant, CouchDB Cloud)\n\n` +
-      `Current URL: ${url}`
-    );
-  }
-  
-  return null;
-}
-
-/**
  * Get remote CouchDB database connection
- * Uses basic auth for PouchDB replication
- * Automatically handles mixed content (HTTPS page -> HTTP CouchDB)
+ * Always uses server-side proxy for all CouchDB requests
  */
 export async function getRemoteDB(
   localDBName: string,
@@ -170,33 +143,34 @@ export async function getRemoteDB(
     );
   }
 
-  // Remove trailing slash from URL
-  const cleanUrl = config.url.replace(/\/$/, "");
-  
-  // Check for mixed content issues
-  const mixedContentError = checkMixedContent(cleanUrl);
-  if (mixedContentError) {
-    throw new Error(mixedContentError);
-  }
-
-  // Database naming: shop_{shopId}_{databaseName} (for better isolation)
+  // Always use server-side proxy for CouchDB requests
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const remoteDBName = `shop_${config.shopId}_${localDBName}`;
-  const remoteUrl = `${cleanUrl}/${remoteDBName}`;
+  const remoteUrl = `${baseUrl}/api/couchdb-proxy/${remoteDBName}`;
+
+  // Encode credentials for proxy
+  const credentials = btoa(`${config.username}:${config.password}`);
+
+  // Custom fetch to add credentials header for proxy
+  const pouchdbConfig = {
+    skip_setup: false,
+    fetch: (url: string | Request, opts?: RequestInit) => {
+      // Add credentials header so proxy knows which user to authenticate as
+      const headers = new Headers(opts?.headers || {});
+      headers.set("X-CouchDB-Credentials", credentials);
+      return fetch(url, {
+        ...opts,
+        headers,
+      });
+    },
+  };
 
   // Import PouchDB dynamically
   // PouchDB 9.x includes HTTP adapter by default
   const PouchDB = (await import("pouchdb-browser")).default;
 
-  // Create remote database with authentication
-  // PouchDB will automatically use HTTP adapter for remote URLs
-  const remoteDB = new PouchDB(remoteUrl, {
-    auth: {
-      username: config.username,
-      password: config.password,
-    },
-    // Enable CORS if needed (for local development)
-    skip_setup: false, // Will create database if it doesn't exist
-  });
+  // Create remote database connection
+  const remoteDB = new PouchDB(remoteUrl, pouchdbConfig);
 
   return remoteDB;
 }
@@ -211,9 +185,13 @@ export async function setDatabaseSecurity(
   syncUsername: string
 ): Promise<void> {
   try {
-    const cleanUrl = config.url.replace(/\/$/, "");
+    // Always use server-side proxy
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
     const remoteDBName = `shop_${config.shopId}_${localDBName}`;
-    const securityUrl = `${cleanUrl}/${remoteDBName}/_security`;
+    const securityUrl = `${baseUrl}/api/couchdb-proxy/${remoteDBName}/_security`;
+
+    // Encode credentials for proxy
+    const credentials = btoa(`${config.username}:${config.password}`);
 
     const securityDoc = {
       admins: {
@@ -230,8 +208,9 @@ export async function setDatabaseSecurity(
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Basic ${btoa(`${config.username}:${config.password}`)}`,
+        "X-CouchDB-Credentials": credentials,
       },
+      credentials: "same-origin",
       body: JSON.stringify(securityDoc),
     });
 
@@ -261,13 +240,7 @@ export async function ensureRemoteDatabase(
   syncUsername?: string
 ): Promise<void> {
   try {
-    // Check for mixed content before attempting connection
-    const cleanUrl = config.url.replace(/\/$/, "");
-    const mixedContentError = checkMixedContent(cleanUrl);
-    if (mixedContentError) {
-      throw new Error(mixedContentError);
-    }
-    
+    // getRemoteDB will automatically use proxy if needed
     const remoteDB = await getRemoteDB(localDBName, config);
     // Try to get database info - this will create it if it doesn't exist
     await remoteDB.info();
@@ -325,6 +298,9 @@ export async function getLocalDB(dbName: string): Promise<PouchDB.Database> {
 /**
  * Validate that a document belongs to the correct shop
  */
-export function validateShopId(doc: { shopId?: string }, expectedShopId: string): boolean {
+export function validateShopId(
+  doc: { shopId?: string },
+  expectedShopId: string
+): boolean {
   return doc.shopId === expectedShopId;
 }
