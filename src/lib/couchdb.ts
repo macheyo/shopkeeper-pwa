@@ -35,6 +35,15 @@ export async function testCouchDBConnection(
   try {
     // Remove trailing slash
     const cleanUrl = url.replace(/\/$/, "");
+    
+    // Check for mixed content issues
+    const mixedContentError = checkMixedContent(cleanUrl);
+    if (mixedContentError) {
+      return {
+        success: false,
+        error: mixedContentError,
+      };
+    }
 
     // Test connection with CouchDB session endpoint
     // Include credentials for CORS if needed
@@ -123,8 +132,33 @@ function extractTokenFromCookie(cookie: string | null): string | undefined {
 }
 
 /**
+ * Check for mixed content issues (HTTPS page -> HTTP CouchDB)
+ * Returns error message if mixed content detected, null otherwise
+ */
+function checkMixedContent(url: string): string | null {
+  // Check if we're on HTTPS
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  
+  // If page is HTTPS and CouchDB URL is HTTP, we have mixed content
+  if (isHttps && url.startsWith("http://")) {
+    return (
+      `Mixed Content Error: Your app is served over HTTPS, but CouchDB URL uses HTTP.\n` +
+      `Browsers block HTTP requests from HTTPS pages for security.\n\n` +
+      `Solutions:\n` +
+      `1. Use HTTPS for CouchDB: Change URL to https://34.32.91.162:5984 (requires SSL certificate)\n` +
+      `2. Use a reverse proxy (nginx/traefik) that terminates SSL in front of CouchDB\n` +
+      `3. Use a CouchDB service with HTTPS support (e.g., Cloudant, CouchDB Cloud)\n\n` +
+      `Current URL: ${url}`
+    );
+  }
+  
+  return null;
+}
+
+/**
  * Get remote CouchDB database connection
  * Uses basic auth for PouchDB replication
+ * Automatically handles mixed content (HTTPS page -> HTTP CouchDB)
  */
 export async function getRemoteDB(
   localDBName: string,
@@ -138,6 +172,12 @@ export async function getRemoteDB(
 
   // Remove trailing slash from URL
   const cleanUrl = config.url.replace(/\/$/, "");
+  
+  // Check for mixed content issues
+  const mixedContentError = checkMixedContent(cleanUrl);
+  if (mixedContentError) {
+    throw new Error(mixedContentError);
+  }
 
   // Database naming: shop_{shopId}_{databaseName} (for better isolation)
   const remoteDBName = `shop_${config.shopId}_${localDBName}`;
@@ -221,6 +261,13 @@ export async function ensureRemoteDatabase(
   syncUsername?: string
 ): Promise<void> {
   try {
+    // Check for mixed content before attempting connection
+    const cleanUrl = config.url.replace(/\/$/, "");
+    const mixedContentError = checkMixedContent(cleanUrl);
+    if (mixedContentError) {
+      throw new Error(mixedContentError);
+    }
+    
     const remoteDB = await getRemoteDB(localDBName, config);
     // Try to get database info - this will create it if it doesn't exist
     await remoteDB.info();
