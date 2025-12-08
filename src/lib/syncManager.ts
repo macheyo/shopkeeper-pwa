@@ -255,16 +255,30 @@ export class SyncManager {
       error: null,
     });
 
+    // Track retry count for this database
+    let retryCount = 0;
+    const maxRetries = 5; // Stop retrying after 5 failures
+
     // Create sync - PouchDB sync is bidirectional
     // We'll validate shopId in handleSyncChange instead of using filter
     // Filter functions don't work well with sync, they're for replication
     const sync = localDB
       .sync(remoteDB, {
         live: true, // Continuous sync
-        retry: true, // Retry on failure
+        retry: true, // Retry on failure (but we limit retries in error handler)
         back_off_function: (delay) => {
+          retryCount++;
+          // Stop retrying after max retries
+          if (retryCount > maxRetries) {
+            console.log(`[SYNC] ${dbName}: Max retries (${maxRetries}) reached, stopping sync`);
+            // Cancel the sync by returning a very long delay
+            // This effectively stops retries without breaking PouchDB
+            return 999999999;
+          }
           // Exponential backoff for retries, max 30 seconds
-          return Math.min(delay * 2, 30000);
+          const newDelay = Math.min(delay * 2, 30000);
+          console.log(`[SYNC] ${dbName}: Retry ${retryCount}/${maxRetries}, next attempt in ${newDelay}ms`);
+          return newDelay;
         },
         // Don't use filter - validate in handleSyncChange instead
       })
@@ -293,6 +307,14 @@ export class SyncManager {
       })
       .on("error", (err) => {
         console.error(`Sync error in ${dbName}:`, err);
+        
+        // Check if we've exceeded max retries
+        if (retryCount > maxRetries) {
+          console.log(`[SYNC] ${dbName}: Stopping sync due to persistent errors`);
+          // Cancel and remove the sync handle
+          this.stopDatabase(dbName);
+        }
+        
         this.updateStatus(dbName, {
           isSyncing: false,
           error: (err as Error)?.message || String(err),

@@ -89,9 +89,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Auto-start sync when user and shop are loaded and CouchDB is enabled
   useEffect(() => {
+    let isMounted = true;
+    let syncAttempted = false; // Prevent multiple sync attempts
+
     const startAutoSync = async () => {
       // Only start if user and shop are available
       if (!currentUser || !shop) return;
+
+      // Prevent duplicate sync attempts
+      if (syncAttempted) return;
+      syncAttempted = true;
 
       try {
         // Check if CouchDB is enabled
@@ -102,6 +109,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // CouchDB not configured, skip auto-sync
           return;
         }
+
+        // Test connectivity before attempting sync
+        const { testCouchDBConnection } = await import("@/lib/couchdb");
+        const connectionTest = await testCouchDBConnection(
+          config.url,
+          config.syncUsername || config.username,
+          config.syncPassword || config.password
+        );
+
+        if (!connectionTest.success) {
+          console.log("CouchDB not reachable, skipping auto-sync:", connectionTest.error);
+          return;
+        }
+
+        if (!isMounted) return;
 
         // Initialize sync manager
         const { getSyncManager } = await import("@/lib/syncManager");
@@ -116,6 +138,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        if (!isMounted) return;
+
         // Check if first sync has been completed
         const { hasFirstSyncCompleted } = await import("@/lib/couchdbConfig");
         const firstSyncDone = await hasFirstSyncCompleted(shop.shopId);
@@ -125,13 +149,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await syncManager.syncAll();
 
         // Mark first sync as completed if this was the first time
-        if (!firstSyncDone) {
+        if (!firstSyncDone && isMounted) {
           const { markFirstSyncCompleted } = await import(
             "@/lib/couchdbConfig"
           );
           setTimeout(async () => {
-            await markFirstSyncCompleted(shop.shopId);
-            console.log("Auto-sync started and first sync marked as completed");
+            if (isMounted) {
+              await markFirstSyncCompleted(shop.shopId);
+              console.log("Auto-sync started and first sync marked as completed");
+            }
           }, 5000);
         } else {
           console.log("Auto-sync resumed for existing session");
@@ -146,7 +172,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Small delay to ensure everything is loaded
     const timeoutId = setTimeout(startAutoSync, 1000);
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
   }, [currentUser, shop]);
 
   const loginWithLicense = useCallback(
