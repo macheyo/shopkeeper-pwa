@@ -53,11 +53,10 @@ export default function ClientProviders({
       } finally {
         setIsLoadingAnimation(false);
       }
-      console.log("Animation data loaded:", isLoadingAnimation);
     };
 
     loadAnimationData();
-  }, [isLoadingAnimation]);
+  }, []); // Run once on mount
 
   return (
     <MantineProvider defaultColorScheme="auto">
