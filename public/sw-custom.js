@@ -1,5 +1,5 @@
 // Custom service worker for PWA
-const CACHE_NAME = "shopkeeper-pwa-v2";
+const CACHE_NAME = "shopkeeper-pwa-v3";
 
 // Assets to cache
 const urlsToCache = [
@@ -47,10 +47,11 @@ self.addEventListener("activate", (event) => {
 // Fetch event - serve from cache or network
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  const swUrl = new URL(self.location.href);
 
-  // Skip service worker for CouchDB requests - let them go directly to network
-  // This prevents the service worker from interfering with database sync
-  if (url.hostname === "localhost" && url.port === "5984") {
+  // Skip service worker for requests to different origins (different host OR port)
+  // This handles CouchDB on :5984, other services on :8080, etc.
+  if (url.origin !== swUrl.origin) {
     // Don't intercept - let the request pass through to network
     return;
   }
@@ -63,12 +64,6 @@ self.addEventListener("fetch", (event) => {
 
   // Skip service worker for all API routes (they shouldn't be cached)
   if (url.pathname.startsWith("/api/")) {
-    return;
-  }
-
-  // Skip service worker for other external API requests
-  if (url.hostname !== self.location.hostname && url.hostname !== "localhost") {
-    // Don't intercept external requests
     return;
   }
 
@@ -110,18 +105,25 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch((error) => {
-          console.log("[Service Worker] Fetch failed:", event.request.url, error.message);
+          console.log(
+            "[Service Worker] Fetch failed:",
+            event.request.url,
+            error.message
+          );
           // If fetch fails, return the offline page for navigate requests
           if (event.request.mode === "navigate") {
             return caches.match("/offline.html");
           }
           // For non-navigate requests, return a simple error response instead of throwing
           // This prevents unhandled promise rejections
-          return new Response(JSON.stringify({ error: "Network request failed" }), {
-            status: 503,
-            statusText: "Service Unavailable",
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: "Network request failed" }),
+            {
+              status: 503,
+              statusText: "Service Unavailable",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
         });
     })
   );
