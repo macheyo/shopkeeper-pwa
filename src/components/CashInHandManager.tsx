@@ -67,10 +67,12 @@ export function CashInHandManager() {
             $lte: dateRangeInfo.endDate.toISOString(),
           },
         },
-        sort: [{ timestamp: "asc" }],
       });
 
-      const cashCounts = result.docs as CashInHand[];
+      // Sort by timestamp ascending
+      const cashCounts = (result.docs as CashInHand[]).sort(
+        (a, b) => a.timestamp.localeCompare(b.timestamp)
+      );
 
       if (cashCounts.length > 0) {
         // First count in period is opening balance

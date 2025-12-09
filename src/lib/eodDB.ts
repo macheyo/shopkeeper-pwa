@@ -54,12 +54,14 @@ export async function getLatestEODRecordForUser(
         },
         shopId
       ),
-      sort: [{ date: "desc" }],
-      limit: 1,
     });
 
     if (result.docs.length > 0) {
-      return result.docs[0] as EODCashRecord;
+      // Sort by date descending and return the most recent
+      const sorted = (result.docs as EODCashRecord[]).sort(
+        (a, b) => b.date.localeCompare(a.date)
+      );
+      return sorted[0];
     }
     return null;
   } catch (error) {
@@ -101,10 +103,16 @@ export async function getEODRecords(
 
     const result = await eodDB.find({
       selector: addShopIdFilter(selector, shopId),
-      sort: [{ date: "desc" }, { userId: "asc" }],
     });
 
-    return result.docs as EODCashRecord[];
+    // Sort by date descending, then userId ascending
+    const sorted = (result.docs as EODCashRecord[]).sort((a, b) => {
+      const dateCompare = b.date.localeCompare(a.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.userId.localeCompare(b.userId);
+    });
+
+    return sorted;
   } catch (error) {
     console.error("Error getting EOD records:", error);
     throw error;
@@ -193,10 +201,14 @@ export async function getCashSurrendersForEOD(
         type: "cash_surrender",
         eodRecordId: eodRecordId,
       },
-      sort: [{ timestamp: "desc" }],
     });
 
-    return result.docs as CashSurrender[];
+    // Sort by timestamp descending
+    const sorted = (result.docs as CashSurrender[]).sort(
+      (a, b) => b.timestamp.localeCompare(a.timestamp)
+    );
+
+    return sorted;
   } catch (error) {
     console.error("Error getting cash surrenders:", error);
     throw error;
