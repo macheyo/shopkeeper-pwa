@@ -1,50 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * CouchDB Proxy API Route
- * Proxies CouchDB requests server-side to avoid mixed content issues
- * Browser makes HTTPS request to this API, server makes HTTP request to CouchDB
- *
- * Usage: /api/couchdb-proxy/{database}/{path}
- * Example: /api/couchdb-proxy/shop_xxx_products/_all_docs
+ * CouchDB Proxy API Route - Root Handler
+ * Handles requests to /api/couchdb-proxy (without path)
+ * This is used by PouchDB to get CouchDB server info
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const resolvedParams = await params;
-  return handleProxyRequest(request, resolvedParams, "GET");
-}
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const resolvedParams = await params;
-  return handleProxyRequest(request, resolvedParams, "POST");
-}
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const resolvedParams = await params;
-  return handleProxyRequest(request, resolvedParams, "PUT");
-}
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const resolvedParams = await params;
-  return handleProxyRequest(request, resolvedParams, "DELETE");
-}
-
-async function handleProxyRequest(
-  request: NextRequest,
-  params: { path: string[] },
-  method: string
-) {
+async function handleRootProxyRequest(request: NextRequest, method: string) {
   try {
     // Get CouchDB URL from environment variable
     const couchdbUrl =
@@ -67,28 +29,19 @@ async function handleProxyRequest(
         password = process.env.NEXT_PUBLIC_COUCHDB_PASSWORD || "secret";
       }
     } else {
-      // Fallback to env vars or query params
-      username =
-        request.nextUrl.searchParams.get("username") ||
-        process.env.NEXT_PUBLIC_COUCHDB_USERNAME ||
-        "admin";
-      password =
-        request.nextUrl.searchParams.get("password") ||
-        process.env.NEXT_PUBLIC_COUCHDB_PASSWORD ||
-        "secret";
+      // Fallback to env vars
+      username = process.env.NEXT_PUBLIC_COUCHDB_USERNAME || "admin";
+      password = process.env.NEXT_PUBLIC_COUCHDB_PASSWORD || "secret";
     }
 
     const authHeader = request.headers.get("authorization");
 
-    // Build CouchDB path from route params
-    // Format: [database, ...rest-of-path] or just [database]
-    // Example: ["shop_xxx_products", "_all_docs"] -> shop_xxx_products/_all_docs
-    const couchdbPath = params.path.join("/");
-    const targetUrl = `${cleanUrl}/${couchdbPath}`;
+    // Target is CouchDB root
+    const targetUrl = cleanUrl;
 
-    console.log(`[CouchDB Proxy] ${method} ${couchdbPath} -> ${targetUrl}`);
+    console.log(`[CouchDB Proxy] ${method} (root) -> ${targetUrl}`);
 
-    // Forward query string (except auth params)
+    // Forward query string
     const searchParams = new URLSearchParams();
     request.nextUrl.searchParams.forEach((value, key) => {
       if (key !== "username" && key !== "password") {
@@ -152,6 +105,22 @@ async function handleProxyRequest(
   }
 }
 
+export async function GET(request: NextRequest) {
+  return handleRootProxyRequest(request, "GET");
+}
+
+export async function POST(request: NextRequest) {
+  return handleRootProxyRequest(request, "POST");
+}
+
+export async function PUT(request: NextRequest) {
+  return handleRootProxyRequest(request, "PUT");
+}
+
+export async function DELETE(request: NextRequest) {
+  return handleRootProxyRequest(request, "DELETE");
+}
+
 // Handle OPTIONS for CORS preflight
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -159,7 +128,8 @@ export async function OPTIONS() {
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Headers":
+        "Content-Type, Authorization, X-CouchDB-Credentials",
     },
   });
 }

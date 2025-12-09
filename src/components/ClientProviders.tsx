@@ -28,13 +28,10 @@ export default function ClientProviders({
   const [animationData, setAnimationData] = useState<LottieAnimation | null>(
     null
   );
-  const [isLoadingAnimation, setIsLoadingAnimation] = useState(true);
 
   useEffect(() => {
     const loadAnimationData = async () => {
       try {
-        setIsLoadingAnimation(true);
-
         // Fetch the JSON file from public directory
         const response = await fetch("/animations/money-loader.json");
         if (!response.ok) {
@@ -50,8 +47,6 @@ export default function ClientProviders({
         setAnimationData(data as LottieAnimation);
       } catch (error) {
         console.error("Error loading animation data:", error);
-      } finally {
-        setIsLoadingAnimation(false);
       }
     };
 
